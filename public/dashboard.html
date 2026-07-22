@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Account — RECIO EXCHANGE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --blue:#0D4DC7; --red:#E5372E; --green:#22C55E; --amber:#D97706; --bg:#F5F7FA; --ink:#0F172A; --gray:#64748B; --line:#E2E8F0; }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; min-height:100vh; }
+  a{ color:inherit; }
+  button{ font-family:inherit; cursor:pointer; }
+  header{ background:#fff; border-bottom:1px solid var(--line); padding:14px 0; }
+  .wrap{ max-width:900px; margin:0 auto; padding:0 20px; }
+  .nav-row{ display:flex; justify-content:space-between; align-items:center; }
+  .logo img{ height:24px; }
+  .logout-btn{ font-size:12.5px; font-weight:700; padding:9px 16px; border:1.5px solid var(--line); border-radius:8px; background:#fff; }
+  .logout-btn:hover{ background:#F1F4F8; }
+
+  main{ padding:28px 0 60px; }
+  .balance-card{ background:linear-gradient(135deg, var(--blue), #123E93); color:#fff; border-radius:18px; padding:30px; margin-bottom:20px; }
+  .balance-label{ font-size:12px; letter-spacing:0.06em; text-transform:uppercase; opacity:0.75; margin-bottom:8px; }
+  .balance-amount{ font-family:'Manrope',sans-serif; font-size:36px; font-weight:800; margin-bottom:22px; }
+  .action-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .action-btn{ flex:1; min-width:120px; text-align:center; padding:13px; border-radius:10px; font-size:13px; font-weight:700; background:rgba(255,255,255,0.14); color:#fff; border:1px solid rgba(255,255,255,0.25); }
+  .action-btn:hover{ background:rgba(255,255,255,0.22); }
+  .action-btn.primary{ background:#fff; color:var(--blue); }
+
+  .status-banner{ padding:12px 16px; border-radius:10px; font-size:12.5px; font-weight:600; margin-bottom:20px; display:none; }
+  .status-banner.show{ display:block; }
+
+  h2.section-title{ font-family:'Manrope',sans-serif; font-size:17px; margin-bottom:14px; }
+  .trade-list{ display:flex; flex-direction:column; gap:2px; background:var(--line); border-radius:12px; overflow:hidden; }
+  .trade-item{ background:#fff; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; gap:12px; }
+  .trade-item .left{ display:flex; flex-direction:column; gap:3px; }
+  .trade-item .title{ font-weight:700; font-size:13.5px; }
+  .trade-item .sub{ font-size:11.5px; color:var(--gray); }
+  .trade-item .right{ text-align:right; display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
+  .trade-item .amount{ font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:13px; }
+  .badge{ font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:20px; }
+  .badge-checking{ background:#F1F5F9; color:#475569; }
+  .badge-seen{ background:#E0F2FE; color:#075985; }
+  .badge-confirmed{ background:#FEF3C7; color:#92400E; }
+  .badge-approved{ background:#DCFCE7; color:#166534; }
+  .badge-failed{ background:#FEE2E2; color:#991B1B; }
+  .fail-reason{ font-size:11px; color:#991B1B; max-width:220px; text-align:right; }
+  .empty-note{ text-align:center; padding:44px 12px; color:var(--gray); font-size:13px; background:#fff; border-radius:12px; }
+
+  .modal-overlay{ position:fixed; inset:0; background:rgba(15,23,42,0.5); display:none; align-items:center; justify-content:center; z-index:200; padding:20px; }
+  .modal-overlay.open{ display:flex; }
+  .modal{ background:#fff; border-radius:16px; padding:28px; max-width:420px; width:100%; max-height:80vh; overflow-y:auto; }
+  .modal h3{ font-family:'Manrope',sans-serif; font-size:17px; margin-bottom:16px; }
+  .modal p{ font-size:13.5px; color:var(--gray); line-height:1.6; white-space:pre-wrap; }
+  .modal-close{ margin-top:20px; padding:11px 20px; background:var(--blue); color:#fff; border:none; border-radius:9px; font-weight:700; font-size:13px; width:100%; }
+  .info-row{ display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:13.5px; }
+  .info-row:last-of-type{ border-bottom:none; }
+  .info-row span:first-child{ color:var(--gray); }
+  .info-row span:last-child{ font-weight:600; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="wrap nav-row">
+      <a href="/" class="logo"><img src="/logo.png" alt="Recio"></a>
+      <button class="logout-btn" id="logoutBtn">Log Out</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="balance-card">
+      <div class="balance-label">Balance</div>
+      <div class="balance-amount" id="balanceAmount">₦0.00</div>
+      <div class="action-row">
+        <a href="/account-center.html" class="action-btn primary">Get Account</a>
+        <button class="action-btn" id="withdrawBtn">Withdraw</button>
+        <button class="action-btn" id="banksBtn">My Bank</button>
+        <button class="action-btn" id="rulesBtn">Rules</button>
+      </div>
+    </div>
+
+    <h2 class="section-title">Your Trades</h2>
+    <div id="tradesWrap">
+      <div class="empty-note">Loading…</div>
+    </div>
+
+    <h2 class="section-title" style="margin-top:28px;">Your Withdrawals</h2>
+    <div id="withdrawalsWrap">
+      <div class="empty-note">Loading…</div>
+    </div>
+  </main>
+
+  <div class="modal-overlay" id="banksModal">
+    <div class="modal">
+      <h3>Your Bank Details</h3>
+      <div class="info-row"><span>Name</span><span id="mName">—</span></div>
+      <div class="info-row"><span>Bank</span><span id="mBank">—</span></div>
+      <div class="info-row"><span>Account Number</span><span id="mAccount">—</span></div>
+      <p style="margin-top:14px;">This is where your approved payments are sent. It can't be changed — message us on Telegram <a href="https://t.me/RECIOEXCHANGE1" target="_blank" rel="noopener" style="color:var(--blue); text-decoration:underline; font-weight:700;">@RECIOEXCHANGE1</a> if it's incorrect.</p>
+      <button class="modal-close" data-close="banksModal">Close</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="rulesModal">
+    <div class="modal">
+      <h3>Rules</h3>
+      <p id="rulesText">Loading…</p>
+      <button class="modal-close" data-close="rulesModal">Close</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="withdrawModal">
+    <div class="modal">
+      <h3>Request a Withdrawal</h3>
+      <div class="msg" id="withdrawMsg" style="display:none; font-size:12.5px; padding:10px 12px; border-radius:8px; margin-bottom:14px; background:#FEECEC; color:#B91C1C;"></div>
+      <div class="info-row"><span>Available Balance</span><span id="wBalance">₦0.00</span></div>
+      <div class="info-row"><span>Pays out to</span><span id="wPayout">—</span></div>
+      <label style="font-size:11.5px; letter-spacing:0.03em; text-transform:uppercase; color:var(--gray); font-weight:700; display:block; margin:16px 0 6px;">Amount to Withdraw (₦)</label>
+      <input type="number" id="withdrawAmount" style="width:100%; padding:12px 14px; border:1.5px solid var(--line); border-radius:9px; font-size:14px;" min="1">
+      <button class="modal-close" id="submitWithdrawBtn" style="margin-top:16px;">Submit Request</button>
+      <button class="modal-close" data-close="withdrawModal" style="margin-top:10px; background:#F1F4F8; color:var(--ink);">Cancel</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  function formatNaira(n){ return "₦" + Number(n).toLocaleString("en-NG", {minimumFractionDigits:2}); }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
+  function formatDate(iso){ return new Date(iso).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }); }
+
+  var meData = null;
+  fetch("/api/me").then(function(r){ return r.json(); }).then(function(data){
+    if(!data.loggedIn){ window.location.href="/login.html"; return; }
+    if(data.status !== "approved"){ window.location.href="/pending.html"; return; }
+    meData = data;
+    document.getElementById("balanceAmount").textContent = formatNaira(data.balance);
+    document.getElementById("mName").textContent = data.name;
+    document.getElementById("mBank").textContent = data.bankName;
+    document.getElementById("mAccount").textContent = data.accountNumber;
+  });
+
+  document.getElementById("logoutBtn").addEventListener("click", function(){
+    fetch("/api/logout", { method:"POST" }).then(function(){ window.location.href="/"; });
+  });
+
+  document.getElementById("banksBtn").addEventListener("click", function(){ document.getElementById("banksModal").classList.add("open"); });
+  document.getElementById("rulesBtn").addEventListener("click", function(){
+    document.getElementById("rulesModal").classList.add("open");
+    fetch("/api/rules").then(function(r){ return r.json(); }).then(function(d){
+      document.getElementById("rulesText").textContent = d.rulesText || "No rules posted yet.";
+    });
+  });
+  document.querySelectorAll("[data-close]").forEach(function(btn){
+    btn.addEventListener("click", function(){ document.getElementById(btn.getAttribute("data-close")).classList.remove("open"); });
+  });
+
+  document.getElementById("withdrawBtn").addEventListener("click", function(){
+    document.getElementById("withdrawMsg").style.display = "none";
+    document.getElementById("withdrawAmount").value = "";
+    document.getElementById("wBalance").textContent = formatNaira(meData ? meData.balance : 0);
+    document.getElementById("wPayout").textContent = meData ? (meData.bankName + " — " + meData.accountNumber) : "—";
+    document.getElementById("withdrawModal").classList.add("open");
+  });
+  document.getElementById("submitWithdrawBtn").addEventListener("click", function(){
+    var msgEl = document.getElementById("withdrawMsg");
+    var amount = Number(document.getElementById("withdrawAmount").value);
+    if(!amount || amount <= 0){ msgEl.textContent = "Enter a valid amount."; msgEl.style.display = "block"; return; }
+    if(meData && amount > meData.balance){ msgEl.textContent = "You can't withdraw more than your balance."; msgEl.style.display = "block"; return; }
+    fetch("/api/withdrawals", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ amount: amount }) })
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, data:d}; }); })
+      .then(function(res){
+        if(!res.ok){ msgEl.textContent = res.data.error || "Could not submit request."; msgEl.style.display = "block"; return; }
+        document.getElementById("withdrawModal").classList.remove("open");
+        window.location.reload();
+      });
+  });
+
+  var statusMeta = {
+    checking: { label:"Checking", cls:"badge-checking" },
+    seen: { label:"Seen", cls:"badge-seen" },
+    confirmed: { label:"Confirmed", cls:"badge-confirmed" },
+    approved: { label:"Approved", cls:"badge-approved" },
+    failed: { label:"Failed", cls:"badge-failed" }
+  };
+
+  fetch("/api/trades").then(function(r){ return r.json(); }).then(function(data){
+    var trades = data.trades || [];
+    var wrap = document.getElementById("tradesWrap");
+    if(trades.length === 0){ wrap.innerHTML = '<div class="empty-note">No trades yet — get an account and send your first payment.</div>'; return; }
+    wrap.innerHTML = '<div class="trade-list">' + trades.map(function(t){
+      var s = statusMeta[t.status] || statusMeta.checking;
+      var reason = (t.status === "failed" && t.failReason) ? '<div class="fail-reason">' + escapeHtml(t.failReason) + '</div>' : '';
+      return '<div class="trade-item">' +
+        '<div class="left"><div class="title">' + escapeHtml(t.accountTitleUsed || "Account") + '</div>' +
+        '<div class="sub">' + formatDate(t.createdAt) + '</div></div>' +
+        '<div class="right"><div class="amount">' + formatNaira(t.intendedAmount) + '</div>' +
+        '<span class="badge ' + s.cls + '">' + s.label + '</span>' + reason + '</div></div>';
+    }).join("") + '</div>';
+  });
+
+  var withdrawStatusMeta = {
+    pending: { label:"Pending", cls:"badge-checking" },
+    paid: { label:"Paid", cls:"badge-approved" },
+    rejected: { label:"Rejected", cls:"badge-failed" }
+  };
+  fetch("/api/withdrawals").then(function(r){ return r.json(); }).then(function(data){
+    var withdrawals = data.withdrawals || [];
+    var wrap = document.getElementById("withdrawalsWrap");
+    if(withdrawals.length === 0){ wrap.innerHTML = '<div class="empty-note">No withdrawal requests yet.</div>'; return; }
+    wrap.innerHTML = '<div class="trade-list">' + withdrawals.map(function(w){
+      var s = withdrawStatusMeta[w.status] || withdrawStatusMeta.pending;
+      var reason = (w.status === "rejected" && w.reason) ? '<div class="fail-reason">' + escapeHtml(w.reason) + '</div>' : '';
+      return '<div class="trade-item">' +
+        '<div class="left"><div class="title">To ' + escapeHtml(w.payoutBank) + ' — ' + escapeHtml(w.payoutAccount) + '</div>' +
+        '<div class="sub">' + formatDate(w.createdAt) + '</div></div>' +
+        '<div class="right"><div class="amount">' + formatNaira(w.amount) + '</div>' +
+        '<span class="badge ' + s.cls + '">' + s.label + '</span>' + reason + '</div></div>';
+    }).join("") + '</div>';
+  });
+})();
+</script>
+</body>
+</html>

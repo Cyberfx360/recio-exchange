@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff — RECIO EXCHANGE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --blue:#0D4DC7; --red:#E5372E; --bg:#F5F7FA; --ink:#0F172A; --gray:#64748B; --line:#E2E8F0; }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .logo{ display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:4px; }
+  .logo img{ height:30px; }
+  .staff-tag{ text-align:center; font-size:11px; font-weight:800; letter-spacing:0.1em; color:var(--gray); margin-bottom:22px; }
+  .card{ width:100%; max-width:400px; background:#fff; border:1px solid var(--line); border-radius:16px; padding:32px; box-shadow:0 4px 20px rgba(15,23,42,0.05); }
+  .tabs{ display:flex; margin-bottom:22px; background:#F1F4F8; border-radius:10px; padding:4px; }
+  .tab{ flex:1; text-align:center; padding:10px; font-size:12.5px; font-weight:700; border-radius:8px; background:transparent; color:var(--gray); cursor:pointer; border:none; font-family:inherit; }
+  .tab.active{ background:#fff; color:var(--ink); box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  form{ display:none; flex-direction:column; gap:13px; }
+  form.active{ display:flex; }
+  label{ font-size:11.5px; letter-spacing:0.03em; text-transform:uppercase; color:var(--gray); font-weight:700; }
+  input{ width:100%; padding:12px 14px; margin-top:6px; border:1.5px solid var(--line); border-radius:9px; font-size:14px; }
+  input:focus{ outline:none; border-color:var(--blue); }
+  .field{ display:flex; flex-direction:column; }
+  button[type="submit"]{ margin-top:6px; padding:14px; background:var(--blue); color:#fff; border:none; border-radius:10px; font-weight:700; font-size:13.5px; cursor:pointer; font-family:inherit; }
+  .msg{ font-size:12.5px; padding:10px 12px; margin-bottom:16px; border-radius:8px; display:none; }
+  .msg.show{ display:block; }
+  .msg.error{ background:#FEECEC; color:#B91C1C; }
+  .back-link{ display:block; text-align:center; margin-top:20px; font-size:12.5px; color:var(--gray); text-decoration:underline; }
+</style>
+</head>
+<body>
+  <div style="width:100%; max-width:400px;">
+    <div class="logo"><img src="/logo.png" alt="Recio"></div>
+    <p class="staff-tag">STAFF PORTAL</p>
+    <div class="card">
+      <div class="msg" id="msg"></div>
+      <div class="tabs">
+        <button class="tab active" id="tabLogin">Log In</button>
+        <button class="tab" id="tabRegister">Register</button>
+      </div>
+
+      <form id="loginForm" class="active">
+        <div class="field"><label for="loginPhone">Phone Number</label><input type="tel" id="loginPhone" required></div>
+        <div class="field"><label for="loginPassword">Password</label><input type="password" id="loginPassword" required></div>
+        <button type="submit">Log In</button>
+      </form>
+
+      <form id="registerForm">
+        <div class="field"><label for="regName">Full Name</label><input type="text" id="regName" required></div>
+        <div class="field"><label for="regPhone">Phone Number</label><input type="tel" id="regPhone" required></div>
+        <div class="field"><label for="regPassword">Password</label><input type="password" id="regPassword" required minlength="6"></div>
+        <button type="submit">Register</button>
+      </form>
+    </div>
+    <a href="/" class="back-link">← Back to RECIO EXCHANGE</a>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  var tabLogin=document.getElementById("tabLogin"), tabRegister=document.getElementById("tabRegister");
+  var loginForm=document.getElementById("loginForm"), registerForm=document.getElementById("registerForm");
+  var msg=document.getElementById("msg");
+
+  function showTab(which){
+    var isLogin = which==="login";
+    tabLogin.classList.toggle("active", isLogin); tabRegister.classList.toggle("active", !isLogin);
+    loginForm.classList.toggle("active", isLogin); registerForm.classList.toggle("active", !isLogin);
+    hideMsg();
+  }
+  tabLogin.addEventListener("click", function(){ showTab("login"); });
+  tabRegister.addEventListener("click", function(){ showTab("register"); });
+
+  function showMsg(text,type){ msg.textContent=text; msg.className="msg show "+type; }
+  function hideMsg(){ msg.className="msg"; }
+
+  function afterAuth(status){
+    if(status === "approved") window.location.href = "/staff.html";
+    else window.location.href = "/pending.html?staff=1";
+  }
+
+  loginForm.addEventListener("submit", function(e){
+    e.preventDefault(); hideMsg();
+    fetch("/api/staff/login", { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ phone: document.getElementById("loginPhone").value.trim(), password: document.getElementById("loginPassword").value })
+    }).then(function(r){ return r.json().then(function(data){ return {ok:r.ok,data:data}; }); })
+      .then(function(res){ if(!res.ok){ showMsg(res.data.error||"Could not log in.","error"); return; } afterAuth(res.data.status); })
+      .catch(function(){ showMsg("Something went wrong. Try again.","error"); });
+  });
+
+  registerForm.addEventListener("submit", function(e){
+    e.preventDefault(); hideMsg();
+    fetch("/api/staff/register", { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        name: document.getElementById("regName").value.trim(),
+        phone: document.getElementById("regPhone").value.trim(),
+        password: document.getElementById("regPassword").value
+      })
+    }).then(function(r){ return r.json().then(function(data){ return {ok:r.ok,data:data}; }); })
+      .then(function(res){ if(!res.ok){ showMsg(res.data.error||"Could not register.","error"); return; } afterAuth(res.data.status); })
+      .catch(function(){ showMsg("Something went wrong. Try again.","error"); });
+  });
+})();
+</script>
+</body>
+</html>

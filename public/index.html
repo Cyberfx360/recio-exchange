@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RECIO EXCHANGE — Send, Deposit, Get Paid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --blue:#0D4DC7; --blue-dark:#0A3D9E; --red:#E5372E; --green:#22C55E; --green-dark:#16A34A;
+    --bg:#F5F7FA; --ink:#0F172A; --gray:#64748B; --line:#E2E8F0; --card:#FFFFFF;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:'Inter', sans-serif; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3,.display{ font-family:'Manrope', sans-serif; font-weight:800; }
+  .mono{ font-family:'IBM Plex Mono', monospace; }
+  a{ color:inherit; text-decoration:none; }
+  button{ font-family:inherit; cursor:pointer; border:none; background:none; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 28px; }
+  @media(max-width:640px){ .wrap{ padding:0 18px; } }
+
+  header{ background:#fff; border-bottom:1px solid var(--line); position:sticky; top:0; z-index:50; }
+  .nav-row{ display:flex; align-items:center; justify-content:space-between; padding:16px 0; }
+  .logo{ display:flex; align-items:center; gap:8px; font-family:'Manrope',sans-serif; font-weight:800; font-size:20px; color:var(--blue); }
+  .logo img{ height:28px; display:block; }
+  nav.primary-nav ul{ list-style:none; display:flex; gap:28px; }
+  nav.primary-nav a{ font-size:13.5px; font-weight:600; color:var(--ink); }
+  nav.primary-nav a:hover{ color:var(--blue); }
+  @media(max-width:760px){ nav.primary-nav{ display:none; } }
+  .nav-actions{ display:flex; align-items:center; gap:10px; }
+  .btn{ display:inline-flex; align-items:center; gap:6px; padding:11px 20px; font-size:13px; font-weight:700; border-radius:8px; }
+  .btn-blue{ background:var(--blue); color:#fff; }
+  .btn-blue:hover{ background:var(--blue-dark); }
+  .btn-red{ background:var(--red); color:#fff; }
+  .btn-red:hover{ opacity:0.9; }
+  .btn-green{ background:var(--green); color:#fff; }
+  .btn-green:hover{ background:var(--green-dark); }
+  .btn-outline{ background:#fff; color:var(--ink); border:1.5px solid var(--line); }
+  #userChip{ font-size:12.5px; font-weight:700; padding:9px 14px; border-radius:8px; background:#EAF1FF; color:var(--blue); display:none; }
+
+  .hero{ padding:56px 0 48px; }
+  .hero-grid{ display:grid; grid-template-columns:1.1fr 0.9fr; gap:40px; align-items:center; }
+  @media(max-width:900px){ .hero-grid{ grid-template-columns:1fr; } }
+  .hero h1{ font-size:clamp(32px,5vw,50px); line-height:1.08; margin-bottom:16px; color:var(--ink); }
+  .hero p.lead{ font-size:15.5px; line-height:1.65; color:var(--gray); max-width:480px; margin-bottom:26px; }
+  .hero-ctas{ display:flex; gap:12px; flex-wrap:wrap; }
+
+  .info-card{ background:var(--blue); color:#fff; border-radius:16px; padding:26px; }
+  .info-card h3{ font-size:15px; margin-bottom:14px; }
+  .info-card ul{ list-style:none; display:flex; flex-direction:column; gap:11px; }
+  .info-card li{ font-size:13.5px; display:flex; gap:10px; align-items:flex-start; line-height:1.5; color:rgba(255,255,255,0.9); }
+  .info-card li::before{ content:"✓"; font-weight:800; color:#B7F5CB; flex-shrink:0; }
+
+  .board-section{ padding:16px 0 60px; }
+  .board-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:20px; flex-wrap:wrap; margin-bottom:20px; }
+  .board-head h2{ font-size:clamp(24px,3.6vw,32px); color:var(--ink); }
+  .board-head p{ font-size:13px; color:var(--gray); margin-top:6px; }
+  .search-wrap{ position:relative; min-width:240px; flex:1; max-width:340px; }
+  .search-wrap input{
+    width:100%; padding:12px 16px 12px 40px; border:1.5px solid var(--line); border-radius:10px; background:#fff;
+    font-size:13.5px; color:var(--ink);
+  }
+  .search-wrap input:focus{ outline:none; border-color:var(--blue); }
+  .search-wrap svg{ position:absolute; left:13px; top:50%; transform:translateY(-50%); width:16px; height:16px; stroke:var(--gray); }
+
+  .board-table-wrap{ background:#fff; border:1px solid var(--line); border-radius:14px; overflow:hidden; }
+  table{ width:100%; border-collapse:collapse; }
+  thead th{ text-align:left; font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color:var(--gray); padding:14px 18px; border-bottom:1px solid var(--line); background:#FAFBFC; }
+  tbody td{ padding:13px 18px; font-size:13.5px; border-bottom:1px solid var(--line); }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:#FAFBFC; }
+  td.title-cell{ font-weight:700; }
+  td.rate-cell{ font-family:'IBM Plex Mono',monospace; font-weight:600; color:var(--blue); }
+  .board-empty{ text-align:center; padding:50px 20px; color:var(--gray); font-size:13px; }
+
+  .how{ padding:0 0 64px; }
+  .how-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
+  @media(max-width:760px){ .how-grid{ grid-template-columns:1fr; } }
+  .how-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px; }
+  .how-card .step{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--blue); font-weight:700; margin-bottom:10px; }
+  .how-card h3{ font-size:15.5px; margin-bottom:8px; }
+  .how-card p{ font-size:13px; color:var(--gray); line-height:1.55; }
+
+  footer{ background:var(--ink); color:#fff; padding:40px 0 22px; }
+  .footer-grid{ display:flex; justify-content:space-between; flex-wrap:wrap; gap:20px; padding-bottom:24px; border-bottom:1px solid rgba(255,255,255,0.12); }
+  .footer-grid .logo{ color:#fff; }
+  .footer-grid p{ font-size:12.5px; color:rgba(255,255,255,0.6); max-width:320px; margin-top:10px; line-height:1.6; }
+  .footer-bottom{ padding-top:16px; font-size:11.5px; color:rgba(255,255,255,0.45); display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+
+  /* Chat widget */
+  #telegramLauncher{ position:fixed; bottom:88px; right:22px; z-index:100; width:48px; height:48px; border-radius:50%; background:#26A5E4; color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 18px rgba(0,0,0,0.2); }
+  #telegramLauncher svg{ width:24px; height:24px; }
+  #chatLauncher{ position:fixed; bottom:22px; right:22px; z-index:100; width:56px; height:56px; border-radius:50%; background:var(--green); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 6px 18px rgba(0,0,0,0.25); }
+  #chatLauncher svg{ width:24px; height:24px; }
+  #chatPanel{ position:fixed; bottom:90px; right:22px; z-index:100; width:min(360px,90vw); height:min(500px,70vh); background:#fff; border-radius:14px; border:1px solid var(--line); display:none; flex-direction:column; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,0.18); }
+  #chatPanel.open{ display:flex; }
+  .chat-head{ background:var(--blue); color:#fff; padding:14px 16px; display:flex; justify-content:space-between; align-items:center; }
+  .chat-head h4{ font-size:13px; font-weight:700; }
+  .chat-close{ color:#fff; font-size:20px; line-height:1; }
+  .chat-body{ flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .chat-msg{ max-width:80%; padding:9px 12px; font-size:13px; line-height:1.4; border-radius:10px; }
+  .chat-msg.user{ align-self:flex-end; background:var(--blue); color:#fff; }
+  .chat-msg.admin{ align-self:flex-start; background:#EEF1F5; color:var(--ink); }
+  .chat-msg img{ max-width:100%; border-radius:8px; margin-top:4px; }
+  .chat-empty{ text-align:center; color:var(--gray); font-size:12.5px; padding:30px 10px; }
+  .chat-gate{ text-align:center; padding:40px 16px; }
+  .chat-gate p{ font-size:13px; color:var(--gray); margin-bottom:16px; line-height:1.5; }
+  .chat-input-row{ border-top:1px solid var(--line); display:flex; align-items:center; padding:8px; gap:6px; }
+  .chat-input-row input[type="text"]{ flex:1; border:none; background:transparent; font-size:13px; padding:8px; }
+  .chat-input-row input[type="text"]:focus{ outline:none; }
+  .chat-icon-btn{ width:34px; height:34px; display:flex; align-items:center; justify-content:center; color:var(--ink); border-radius:8px; }
+  .chat-icon-btn:hover{ background:#F1F4F8; }
+  .chat-icon-btn svg{ width:18px; height:18px; }
+  #imagePreviewWrap{ display:none; padding:8px 10px 0; align-items:center; }
+  #imagePreviewWrap img{ height:48px; border-radius:6px; border:1px solid var(--line); }
+  #removeImage{ font-size:11px; color:var(--red); margin-left:8px; text-decoration:underline; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav-row">
+    <a href="#top" class="logo"><img src="/logo.png" alt="Recio"></a>
+    <nav class="primary-nav">
+      <ul>
+        <li><a href="#rates">Rates</a></li>
+        <li><a href="#how">How It Works</a></li>
+        <li><a href="/staff-login.html">Staff</a></li>
+      </ul>
+    </nav>
+    <div class="nav-actions">
+      <span id="userChip"></span>
+      <a href="/login.html" class="btn btn-outline" id="loginBtn">Log In</a>
+      <a href="/login.html?tab=register" class="btn btn-red" id="signupBtn">Sign Up</a>
+      <button class="btn btn-blue" id="logoutBtn" style="display:none;">Log Out</button>
+    </div>
+  </div>
+</header>
+
+<section class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <h1>Let's Transact <br>And Share Money.</h1>
+      <p class="lead">Send money into one of our accounts, upload your receipt, and we manually verify and credit your balance — fast, transparent, no middlemen.</p>
+      <div class="hero-ctas">
+        <a href="/login.html" class="btn btn-blue">Log In</a>
+        <a href="/login.html?tab=register" class="btn btn-red">Sign Up</a>
+        <button class="btn btn-green" id="heroChatBtn">Chat With Us</button>
+      </div>
+    </div>
+    <div class="info-card">
+      <h3>How every deposit is handled</h3>
+      <ul>
+        <li>Tell us the amount you want to send</li>
+        <li>We give you an account to pay into</li>
+        <li>You upload your payment receipt</li>
+        <li>We manually verify it — every time</li>
+        <li>Your balance updates once approved</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="board-section" id="rates">
+  <div class="wrap">
+    <div class="board-head">
+      <div>
+        <h2>Today's Rate Board</h2>
+        <p>Rates are updated regularly — check back often.</p>
+      </div>
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input type="text" id="rateSearch" placeholder="Search rates...">
+      </div>
+    </div>
+    <div class="board-table-wrap">
+      <table>
+        <thead>
+          <tr><th>Title</th><th>Lowest</th><th>Rate</th><th>Higher</th><th>Rate</th></tr>
+        </thead>
+        <tbody id="boardBody">
+          <tr><td colspan="5" class="board-empty">Loading rates…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="how" id="how">
+  <div class="wrap how-grid">
+    <div class="how-card">
+      <div class="step mono">STEP 01</div>
+      <h3>Sign up &amp; get approved</h3>
+      <p>Create your account with your payout bank details. We approve every new account before it can be used.</p>
+    </div>
+    <div class="how-card">
+      <div class="step mono">STEP 02</div>
+      <h3>Get your account</h3>
+      <p>Tell us how much you're sending and we'll show you an account to pay into, at the rate for that amount.</p>
+    </div>
+    <div class="how-card">
+      <div class="step mono">STEP 03</div>
+      <h3>Upload &amp; get credited</h3>
+      <p>Send the payment, upload your receipt, and once we verify it your balance is updated.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap footer-grid">
+    <div>
+      <a href="#top" class="logo"><img src="/logo.png" alt="Recio" style="filter:brightness(0) invert(1);"></a>
+      <p>Send, deposit, and get paid — every transaction manually verified for your safety.</p>
+    </div>
+    <div>
+      <p style="max-width:none;">Have questions? Use the chat button in the corner, or message us on Telegram <a href="https://t.me/RECIOEXCHANGE1" target="_blank" rel="noopener" style="color:#fff; text-decoration:underline; font-weight:700;">@RECIOEXCHANGE1</a> — we usually reply fast.</p>
+    </div>
+  </div>
+  <div class="wrap footer-bottom">
+    <span>© 2026 RECIO EXCHANGE. All rights reserved.</span>
+    <span>Rates subject to change without notice.</span>
+  </div>
+</footer>
+
+<a id="telegramLauncher" href="https://t.me/RECIOEXCHANGE1" target="_blank" rel="noopener" aria-label="Message us on Telegram">
+  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.05 2.94a1.5 1.5 0 0 0-1.53-.22L2.4 9.86a1.4 1.4 0 0 0 .1 2.63l4.4 1.42 1.7 5.46c.14.46.5.8.98.88a1.1 1.1 0 0 0 1.05-.37l2.42-2.7 4.4 3.25c.4.3.9.4 1.37.28.48-.13.86-.5 1-.97l3.4-15.7a1.5 1.5 0 0 0-.52-1.6zM8.9 13.36l8.9-6.68c.2-.15.44.1.26.28l-7.4 7.1a1.4 1.4 0 0 0-.4.75l-.3 2.1-1.05-3.55z"/></svg>
+</a>
+<button id="chatLauncher" aria-label="Open chat">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+</button>
+<div id="chatPanel">
+  <div class="chat-head">
+    <h4>Chat with RECIO EXCHANGE</h4>
+    <button class="chat-close" id="closeChat">×</button>
+  </div>
+  <div class="chat-body" id="chatBody"></div>
+  <div id="imagePreviewWrap"><img id="imagePreview" alt=""><a href="#" id="removeImage">Remove</a></div>
+  <div class="chat-input-row" id="chatInputRow">
+    <button class="chat-icon-btn" id="attachBtn" aria-label="Attach photo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+    </button>
+    <input type="file" id="fileInput" accept="image/*" style="display:none;">
+    <input type="text" id="chatText" placeholder="Type a message…">
+    <button class="chat-icon-btn" id="sendBtn" aria-label="Send">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  function formatNaira(n){ return "₦" + Number(n).toLocaleString("en-NG"); }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
+
+  var currentUser = null;
+  function refreshMe(){
+    return fetch("/api/me").then(function(r){ return r.json(); }).then(function(data){
+      currentUser = data.loggedIn ? data : null;
+      var loginBtn=document.getElementById("loginBtn"), signupBtn=document.getElementById("signupBtn"),
+          logoutBtn=document.getElementById("logoutBtn"), chip=document.getElementById("userChip");
+      if(currentUser){
+        loginBtn.style.display="none"; signupBtn.style.display="none";
+        logoutBtn.style.display="inline-flex"; chip.style.display="inline-flex";
+        chip.textContent = "Hi, " + currentUser.name.split(" ")[0];
+      } else {
+        loginBtn.style.display="inline-flex"; signupBtn.style.display="inline-flex";
+        logoutBtn.style.display="none"; chip.style.display="none";
+      }
+      renderChatGateOrThread();
+    });
+  }
+  document.getElementById("logoutBtn").addEventListener("click", function(){
+    fetch("/api/logout", { method:"POST" }).then(function(){ window.location.reload(); });
+  });
+
+  // ---------- Rate board ----------
+  var allRates = [];
+  var boardBody = document.getElementById("boardBody");
+  function renderBoard(list){
+    if(list.length === 0){ boardBody.innerHTML = '<tr><td colspan="5" class="board-empty">No rates match your search.</td></tr>'; return; }
+    boardBody.innerHTML = list.map(function(r){
+      return "<tr><td class=\"title-cell\">" + escapeHtml(r.title) + "</td>" +
+        "<td>" + formatNaira(r.lowestAmount) + "</td><td class=\"rate-cell\">" + formatNaira(r.lowestRate) + "</td>" +
+        "<td>" + formatNaira(r.higherAmount) + "</td><td class=\"rate-cell\">" + formatNaira(r.higherRate) + "</td></tr>";
+    }).join("");
+  }
+  fetch("/api/rates").then(function(r){ return r.json(); }).then(function(data){
+    allRates = data.rates || [];
+    if(allRates.length === 0){ boardBody.innerHTML = '<tr><td colspan="5" class="board-empty">No rates posted yet — check back soon.</td></tr>'; }
+    else renderBoard(allRates);
+  }).catch(function(){ boardBody.innerHTML = '<tr><td colspan="5" class="board-empty">Could not load rates right now.</td></tr>'; });
+
+  document.getElementById("rateSearch").addEventListener("input", function(e){
+    var q = e.target.value.trim().toLowerCase();
+    renderBoard(allRates.filter(function(r){ return r.title.toLowerCase().indexOf(q) !== -1; }));
+  });
+
+  // ---------- Chat widget ----------
+  var chatPanel=document.getElementById("chatPanel"), chatBody=document.getElementById("chatBody"),
+      chatText=document.getElementById("chatText"), chatInputRow=document.getElementById("chatInputRow");
+  var pendingImage=null, pollTimer=null;
+
+  function openChat(){
+    chatPanel.classList.add("open");
+    refreshMe().then(function(){ if(currentUser){ loadMessages(); startPolling(); } });
+  }
+  document.getElementById("chatLauncher").addEventListener("click", openChat);
+  document.getElementById("heroChatBtn").addEventListener("click", openChat);
+  document.getElementById("closeChat").addEventListener("click", function(){ chatPanel.classList.remove("open"); stopPolling(); });
+
+  function renderChatGateOrThread(){
+    if(!currentUser){
+      chatInputRow.style.display="none";
+      chatBody.innerHTML = '<div class="chat-gate"><p>Please log in or create an account to chat with us.</p><a href="/login.html" class="btn btn-blue">Log In / Sign Up</a></div>';
+      stopPolling();
+    } else { chatInputRow.style.display="flex"; }
+  }
+  function renderMessages(messages){
+    if(messages.length === 0){ chatBody.innerHTML = '<div class="chat-empty">Say hello — ask us anything.</div>'; return; }
+    var atBottom = chatBody.scrollTop + chatBody.clientHeight >= chatBody.scrollHeight - 30;
+    chatBody.innerHTML = messages.map(function(m){
+      var img = m.imageData ? '<img src="' + m.imageData + '" alt="Sent image">' : '';
+      var txt = m.text ? '<div>' + escapeHtml(m.text) + '</div>' : '';
+      return '<div class="chat-msg ' + (m.sender==='user'?'user':'admin') + '">' + txt + img + '</div>';
+    }).join("");
+    if(atBottom) chatBody.scrollTop = chatBody.scrollHeight;
+  }
+  function loadMessages(){ fetch("/api/chat/messages").then(function(r){return r.json();}).then(function(d){ renderMessages(d.messages||[]); }); }
+  function startPolling(){ stopPolling(); pollTimer=setInterval(loadMessages,4000); }
+  function stopPolling(){ if(pollTimer) clearInterval(pollTimer); pollTimer=null; }
+
+  document.getElementById("attachBtn").addEventListener("click", function(){ document.getElementById("fileInput").click(); });
+  document.getElementById("fileInput").addEventListener("change", function(e){
+    var file=e.target.files[0]; if(!file) return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var img=new Image();
+      img.onload=function(){
+        var canvas=document.createElement("canvas"); var maxW=800; var scale=Math.min(1,maxW/img.width);
+        canvas.width=img.width*scale; canvas.height=img.height*scale;
+        canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+        pendingImage=canvas.toDataURL("image/jpeg",0.7);
+        document.getElementById("imagePreview").src=pendingImage;
+        document.getElementById("imagePreviewWrap").style.display="flex";
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  document.getElementById("removeImage").addEventListener("click", function(e){
+    e.preventDefault(); pendingImage=null; document.getElementById("fileInput").value="";
+    document.getElementById("imagePreviewWrap").style.display="none";
+  });
+  function sendMessage(){
+    var text=chatText.value.trim(); if(!text && !pendingImage) return;
+    fetch("/api/chat/send", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({text:text,imageData:pendingImage}) })
+      .then(function(r){return r.json();}).then(function(){
+        chatText.value=""; pendingImage=null; document.getElementById("fileInput").value="";
+        document.getElementById("imagePreviewWrap").style.display="none"; loadMessages();
+      });
+  }
+  document.getElementById("sendBtn").addEventListener("click", sendMessage);
+  chatText.addEventListener("keydown", function(e){ if(e.key==="Enter") sendMessage(); });
+
+  refreshMe();
+})();
+</script>
+</body>
+</html>

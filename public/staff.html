@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Staff Dashboard — RECIO EXCHANGE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --blue:#0D4DC7; --red:#E5372E; --green:#22C55E; --amber:#D97706; --bg:#F5F7FA; --ink:#0F172A; --gray:#64748B; --line:#E2E8F0; }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; min-height:100vh; }
+  a{ color:inherit; text-decoration:none; }
+  button{ font-family:inherit; cursor:pointer; }
+  header{ background:#fff; border-bottom:1px solid var(--line); padding:14px 0; }
+  .wrap{ max-width:1000px; margin:0 auto; padding:0 20px; }
+  .nav-row{ display:flex; justify-content:space-between; align-items:center; }
+  .logo img{ height:24px; }
+  .staff-badge{ font-size:11px; font-weight:800; letter-spacing:0.06em; color:var(--blue); background:#EAF1FF; padding:5px 10px; border-radius:6px; margin-left:8px; }
+  .logout-btn{ font-size:12.5px; font-weight:700; padding:9px 16px; border:1.5px solid var(--line); border-radius:8px; background:#fff; }
+
+  .tabs-row{ display:flex; background:#fff; border-bottom:1px solid var(--line); }
+  .main-tab{ padding:14px 22px; font-size:13px; font-weight:700; color:var(--gray); border-bottom:2px solid transparent; }
+  .main-tab.active{ color:var(--blue); border-color:var(--blue); }
+  main{ padding:26px 0 60px; }
+  .view{ display:none; } .view.active{ display:block; }
+  h1{ font-family:'Manrope',sans-serif; font-size:22px; margin-bottom:18px; }
+
+  /* Accounts */
+  .account-form{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:22px; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .account-form .full{ grid-column:1/-1; }
+  .account-form label{ font-size:10.5px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px; }
+  .account-form input{ width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:13.5px; }
+  .account-form .actions{ grid-column:1/-1; display:flex; gap:10px; }
+  .btn-submit{ padding:12px 22px; background:var(--blue); color:#fff; border:none; border-radius:9px; font-weight:700; font-size:12.5px; }
+  .btn-cancel{ padding:12px 22px; background:#F1F4F8; color:var(--ink); border:none; border-radius:9px; font-weight:700; font-size:12.5px; }
+  .upload-mini{ border:2px dashed var(--line); border-radius:9px; padding:12px; text-align:center; font-size:12px; color:var(--gray); cursor:pointer; }
+  .upload-mini img{ max-height:60px; }
+
+  .account-list{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+  @media(max-width:700px){ .account-list{ grid-template-columns:1fr; } }
+  .account-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .account-card h3{ font-size:15px; margin-bottom:4px; }
+  .account-card .num{ font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--gray); margin-bottom:10px; }
+  .account-card .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11.5px; color:var(--gray); margin-bottom:12px; }
+  .account-card .grid2 b{ color:var(--ink); }
+  .account-actions{ display:flex; gap:8px; }
+  .icon-btn{ font-size:11px; font-weight:700; padding:7px 12px; border:1.5px solid var(--line); border-radius:8px; background:#fff; }
+  .icon-btn.delete:hover{ background:#FEE2E2; border-color:var(--red); color:var(--red); }
+  .icon-btn.edit:hover{ background:#EAF1FF; border-color:var(--blue); color:var(--blue); }
+
+  /* Receipts */
+  .receipt-list{ display:flex; flex-direction:column; gap:10px; }
+  .receipt-item{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 18px; }
+  .receipt-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:10px; }
+  .receipt-top .title{ font-weight:700; font-size:14px; }
+  .receipt-top .sub{ font-size:11.5px; color:var(--gray); }
+  .badge{ font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:20px; }
+  .badge-checking{ background:#F1F5F9; color:#475569; }
+  .badge-seen{ background:#E0F2FE; color:#075985; }
+  .badge-confirmed{ background:#FEF3C7; color:#92400E; }
+  .badge-approved{ background:#DCFCE7; color:#166534; }
+  .badge-failed{ background:#FEE2E2; color:#991B1B; }
+  .receipt-body{ display:flex; gap:14px; flex-wrap:wrap; }
+  .receipt-img-wrap{ flex-shrink:0; }
+  .receipt-img-wrap img{ width:110px; height:110px; object-fit:cover; border-radius:10px; border:1px solid var(--line); cursor:pointer; }
+  .download-link{ display:block; text-align:center; font-size:11px; margin-top:6px; color:var(--blue); text-decoration:underline; }
+  .receipt-actions{ flex:1; min-width:220px; display:flex; flex-direction:column; gap:8px; justify-content:center; }
+  .action-row{ display:flex; gap:8px; }
+  .action-row button{ flex:1; padding:10px; border-radius:9px; font-weight:700; font-size:12px; border:none; }
+  .btn-confirm{ background:#FEF3C7; color:#92400E; }
+  .btn-approve{ background:var(--green); color:#fff; }
+  .btn-fail{ background:#FEE2E2; color:#991B1B; }
+  .fail-reason-box{ font-size:12px; color:#991B1B; background:#FEF2F2; padding:8px 10px; border-radius:8px; }
+  .empty-note{ text-align:center; padding:50px 12px; color:var(--gray); font-size:13px; background:#fff; border-radius:12px; }
+
+  .modal-overlay{ position:fixed; inset:0; background:rgba(15,23,42,0.5); display:none; align-items:center; justify-content:center; z-index:200; padding:20px; }
+  .modal-overlay.open{ display:flex; }
+  .modal{ background:#fff; border-radius:16px; padding:26px; max-width:420px; width:100%; max-height:88vh; overflow-y:auto; }
+  .modal h3{ font-family:'Manrope',sans-serif; font-size:16px; margin-bottom:14px; }
+  .modal textarea{ width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:13.5px; min-height:80px; font-family:inherit; margin-bottom:14px; }
+  .modal img.full{ max-width:100%; border-radius:10px; margin-bottom:14px; }
+  .modal-actions{ display:flex; gap:10px; }
+  .modal-actions button{ flex:1; padding:11px; border-radius:9px; font-weight:700; font-size:12.5px; border:none; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="wrap nav-row">
+      <a href="/" class="logo"><img src="/logo.png" alt="Recio"><span class="staff-badge">STAFF</span></a>
+      <button class="logout-btn" id="logoutBtn">Log Out</button>
+    </div>
+  </header>
+  <div class="tabs-row wrap" style="padding:0 20px;">
+    <button class="main-tab active" data-view="accountsView">Check Account</button>
+    <button class="main-tab" data-view="receiptsView">Check Receipt</button>
+  </div>
+
+  <main class="wrap">
+    <div class="view active" id="accountsView">
+      <h1>Your Accounts</h1>
+      <div class="account-form" id="accountForm">
+        <input type="hidden" id="editingId">
+        <div><label>Title (e.g. Country / Label)</label><input type="text" id="aTitle" placeholder="MEXICO"></div>
+        <div><label>Bank Name</label><input type="text" id="aBank" placeholder="GTBank"></div>
+        <div class="full">
+          <label>Account Number</label>
+          <input type="text" id="aNumber" placeholder="e.g. 0123456789 or a wallet/username">
+        </div>
+        <div><label>Minimum Accepted</label><input type="number" id="aMin" placeholder="500"></div>
+        <div><label>Limit (Maximum Accepted)</label><input type="number" id="aMax" placeholder="3000000"></div>
+        <div class="full" style="background:#F1F4F8; border-radius:9px; padding:10px 14px; font-size:12px; color:var(--gray);">
+          Rates are set by the admin, not by staff — once you add this account, an admin will assign its rate.
+        </div>
+        <div class="full">
+          <label>Image (optional — logo or QR)</label>
+          <div class="upload-mini" id="aImageBox">Click to upload</div>
+          <input type="file" id="aImageFile" accept="image/*" style="display:none;">
+        </div>
+        <div class="actions">
+          <button class="btn-submit" id="saveAccountBtn">Add Account</button>
+          <button class="btn-cancel" id="cancelAccountBtn" style="display:none;">Cancel Edit</button>
+        </div>
+      </div>
+      <div class="account-list" id="accountList"></div>
+    </div>
+
+    <div class="view" id="receiptsView">
+      <h1>Receipts</h1>
+      <div class="receipt-list" id="receiptList"></div>
+    </div>
+  </main>
+
+  <div class="modal-overlay" id="failModal">
+    <div class="modal">
+      <h3>Reason for failure</h3>
+      <textarea id="failReasonInput" placeholder="e.g. Amount does not match, payment not received..."></textarea>
+      <div class="modal-actions">
+        <button class="btn-cancel" data-close="failModal" style="flex:1; padding:11px; border-radius:9px; border:none; font-weight:700; background:#F1F4F8;">Cancel</button>
+        <button class="btn-fail" id="confirmFailBtn" style="flex:1;">Mark Failed</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="imgModal">
+    <div class="modal">
+      <h3>Receipt</h3>
+      <img class="full" id="fullImg" src="" alt="Receipt">
+      <a id="downloadFullImg" download="receipt.jpg" class="download-link" style="margin-bottom:14px; display:block;">Download to device</a>
+      <button data-close="imgModal" style="width:100%; padding:11px; border-radius:9px; border:none; font-weight:700; background:var(--blue); color:#fff;">Close</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  function formatNaira(n){ return "₦" + Number(n).toLocaleString("en-NG"); }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
+  function formatDate(iso){ return new Date(iso).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }); }
+
+  fetch("/api/staff/me").then(function(r){ return r.json(); }).then(function(data){
+    if(!data.loggedIn){ window.location.href="/staff-login.html"; return; }
+    if(data.status !== "approved"){ window.location.href="/pending.html?staff=1"; return; }
+  });
+  document.getElementById("logoutBtn").addEventListener("click", function(){
+    fetch("/api/staff/logout", { method:"POST" }).then(function(){ window.location.href="/staff-login.html"; });
+  });
+
+  document.querySelectorAll(".main-tab").forEach(function(tab){
+    tab.addEventListener("click", function(){
+      document.querySelectorAll(".main-tab").forEach(function(t){ t.classList.remove("active"); });
+      tab.classList.add("active");
+      document.querySelectorAll(".view").forEach(function(v){ v.classList.remove("active"); });
+      document.getElementById(tab.getAttribute("data-view")).classList.add("active");
+      if(tab.getAttribute("data-view") === "receiptsView") loadReceipts();
+    });
+  });
+
+  // ============================================================
+  // ACCOUNTS
+  // ============================================================
+  var editingId=document.getElementById("editingId");
+  var pendingAccountImage = null;
+
+  document.getElementById("aImageBox").addEventListener("click", function(){ document.getElementById("aImageFile").click(); });
+  document.getElementById("aImageFile").addEventListener("change", function(e){
+    var file=e.target.files[0]; if(!file) return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var img=new Image();
+      img.onload=function(){
+        var canvas=document.createElement("canvas"); var maxW=500; var scale=Math.min(1,maxW/img.width);
+        canvas.width=img.width*scale; canvas.height=img.height*scale;
+        canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+        pendingAccountImage = canvas.toDataURL("image/jpeg",0.8);
+        document.getElementById("aImageBox").innerHTML = '<img src="' + pendingAccountImage + '">';
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function loadAccounts(){
+    fetch("/api/staff/accounts").then(function(r){ return r.json(); }).then(function(data){
+      renderAccounts(data.accounts || []);
+    });
+  }
+  function renderAccounts(accounts){
+    var list = document.getElementById("accountList");
+    if(accounts.length === 0){ list.innerHTML = '<div class="empty-note">You haven\'t added any accounts yet.</div>'; return; }
+    list.innerHTML = accounts.map(function(a){
+      return '<div class="account-card">' +
+        '<h3>' + escapeHtml(a.title) + '</h3>' +
+        '<div class="num">' + escapeHtml(a.accountNumber) + ' — ' + escapeHtml(a.bankName) + '</div>' +
+        '<div class="grid2">' +
+          '<div>Lowest: <b>' + formatNaira(a.lowestAmount) + '</b></div><div>Rate: <b>' + formatNaira(a.lowestRate) + '</b></div>' +
+          '<div>Higher: <b>' + formatNaira(a.higherAmount) + '</b></div><div>Rate: <b>' + formatNaira(a.higherRate) + '</b></div>' +
+          '<div>Min: <b>' + formatNaira(a.minAmount) + '</b></div><div>Limit: <b>' + formatNaira(a.maxAmount) + '</b></div>' +
+        '</div>' +
+        '<div class="account-actions">' +
+          '<button class="icon-btn edit" data-id="' + a.id + '">Edit</button>' +
+          '<button class="icon-btn delete" data-id="' + a.id + '">Delete</button>' +
+        '</div></div>';
+    }).join("");
+    list.querySelectorAll(".edit").forEach(function(btn){
+      btn.addEventListener("click", function(){ startEditAccount(accounts.find(function(a){ return a.id === btn.getAttribute("data-id"); })); });
+    });
+    list.querySelectorAll(".delete").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        if(!confirm("Delete this account? This can't be undone.")) return;
+        fetch("/api/staff/accounts/" + btn.getAttribute("data-id"), { method:"DELETE" }).then(function(){ loadAccounts(); });
+      });
+    });
+  }
+  function startEditAccount(a){
+    editingId.value = a.id;
+    document.getElementById("aTitle").value = a.title;
+    document.getElementById("aBank").value = a.bankName;
+    document.getElementById("aNumber").value = a.accountNumber;
+    document.getElementById("aMin").value = a.minAmount;
+    document.getElementById("aMax").value = a.maxAmount;
+    pendingAccountImage = a.imageData || null;
+    document.getElementById("aImageBox").innerHTML = a.imageData ? '<img src="' + a.imageData + '">' : 'Click to upload';
+    document.getElementById("saveAccountBtn").textContent = "Save Changes";
+    document.getElementById("cancelAccountBtn").style.display = "inline-block";
+    window.scrollTo({ top:0, behavior:"smooth" });
+  }
+  function resetAccountForm(){
+    editingId.value = "";
+    ["aTitle","aBank","aNumber","aMin","aMax"].forEach(function(id){ document.getElementById(id).value=""; });
+    pendingAccountImage = null;
+    document.getElementById("aImageBox").innerHTML = "Click to upload";
+    document.getElementById("saveAccountBtn").textContent = "Add Account";
+    document.getElementById("cancelAccountBtn").style.display = "none";
+  }
+  document.getElementById("cancelAccountBtn").addEventListener("click", resetAccountForm);
+
+  document.getElementById("saveAccountBtn").addEventListener("click", function(){
+    var payload = {
+      title: document.getElementById("aTitle").value.trim(),
+      bankName: document.getElementById("aBank").value.trim(),
+      accountNumber: document.getElementById("aNumber").value.trim(),
+      minAmount: document.getElementById("aMin").value,
+      maxAmount: document.getElementById("aMax").value,
+      imageData: pendingAccountImage
+    };
+    if(!payload.title || !payload.bankName || !payload.accountNumber){ alert("Title, bank and account number are required."); return; }
+    var id = editingId.value;
+    var req = id
+      ? fetch("/api/staff/accounts/" + id, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) })
+      : fetch("/api/staff/accounts", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+    req.then(function(r){ return r.json(); }).then(function(){ resetAccountForm(); loadAccounts(); });
+  });
+
+  // ============================================================
+  // RECEIPTS
+  // ============================================================
+  var statusMeta = {
+    checking: { label:"Checking", cls:"badge-checking" }, seen: { label:"Seen", cls:"badge-seen" },
+    confirmed: { label:"Confirmed", cls:"badge-confirmed" }, approved: { label:"Approved", cls:"badge-approved" },
+    failed: { label:"Failed", cls:"badge-failed" }
+  };
+  function loadReceipts(){
+    fetch("/api/staff/trades").then(function(r){ return r.json(); }).then(function(data){
+      renderReceipts(data.trades || []);
+    });
+  }
+  function renderReceipts(trades){
+    var list = document.getElementById("receiptList");
+    if(trades.length === 0){ list.innerHTML = '<div class="empty-note">No receipts yet for your accounts.</div>'; return; }
+    list.innerHTML = trades.map(function(t){
+      var s = statusMeta[t.status] || statusMeta.checking;
+      var reason = (t.status === "failed" && t.failReason) ? '<div class="fail-reason-box">Reason: ' + escapeHtml(t.failReason) + '</div>' : '';
+      var actions = '';
+      if(t.status !== "approved"){
+        actions = '<div class="action-row">' +
+          '<button class="btn-confirm" data-id="' + t.id + '" data-action="confirmed">Confirm</button>' +
+          '<button class="btn-approve" data-id="' + t.id + '" data-action="approved">Approve</button>' +
+          '<button class="btn-fail" data-id="' + t.id + '" data-action="failed">Failed</button>' +
+        '</div>';
+      } else {
+        actions = '<div class="fail-reason-box" style="background:#F0FDF4; color:#166534;">Approved — balance updated.</div>';
+      }
+      return '<div class="receipt-item">' +
+        '<div class="receipt-top"><div><div class="title">' + escapeHtml(t.accountTitleUsed) + ' — ' + formatNaira(t.intendedAmount) + '</div>' +
+        '<div class="sub">' + formatDate(t.createdAt) + '</div></div><span class="badge ' + s.cls + '">' + s.label + '</span></div>' +
+        '<div class="receipt-body">' +
+          '<div class="receipt-img-wrap"><img src="' + t.receiptImage + '" data-full="' + t.receiptImage + '" alt="Receipt"><a href="' + t.receiptImage + '" download="receipt.jpg" class="download-link">Download</a></div>' +
+          '<div class="receipt-actions">' + actions + reason + '</div>' +
+        '</div></div>';
+    }).join("");
+
+    list.querySelectorAll(".receipt-img-wrap img").forEach(function(img){
+      img.addEventListener("click", function(){
+        document.getElementById("fullImg").src = img.getAttribute("data-full");
+        document.getElementById("downloadFullImg").href = img.getAttribute("data-full");
+        document.getElementById("imgModal").classList.add("open");
+      });
+    });
+
+    list.querySelectorAll("[data-action]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var id = btn.getAttribute("data-id"), action = btn.getAttribute("data-action");
+        if(action === "failed"){ openFailModal(id, "staff"); return; }
+        markTrade(id, action, null, "staff");
+      });
+    });
+  }
+  function markTrade(id, status, reason, who){
+    var url = who === "admin" ? "/api/admin/trades/" + id + "/mark" : "/api/staff/trades/" + id + "/mark";
+    fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ status:status, reason:reason }) })
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,data:d}; }); })
+      .then(function(res){
+        if(!res.ok){ alert(res.data.error || "Could not update."); return; }
+        loadReceipts();
+      });
+  }
+  var failTargetId = null;
+  function openFailModal(id){ failTargetId = id; document.getElementById("failReasonInput").value=""; document.getElementById("failModal").classList.add("open"); }
+  document.getElementById("confirmFailBtn").addEventListener("click", function(){
+    var reason = document.getElementById("failReasonInput").value.trim();
+    if(!reason){ alert("Please provide a reason."); return; }
+    document.getElementById("failModal").classList.remove("open");
+    markTrade(failTargetId, "failed", reason, "staff");
+  });
+  document.querySelectorAll("[data-close]").forEach(function(btn){
+    btn.addEventListener("click", function(){ document.getElementById(btn.getAttribute("data-close")).classList.remove("open"); });
+  });
+
+  loadAccounts();
+})();
+</script>
+</body>
+</html>

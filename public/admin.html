@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — RECIO EXCHANGE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --blue:#0D4DC7; --red:#E5372E; --green:#22C55E; --amber:#D97706; --bg:#F5F7FA; --ink:#0F172A; --gray:#64748B; --line:#E2E8F0; }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; min-height:100vh; }
+  a{ color:inherit; text-decoration:none; }
+  button{ font-family:inherit; cursor:pointer; }
+
+  #gate{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .gate-card{ width:100%; max-width:360px; background:#fff; border:1px solid var(--line); border-radius:16px; padding:32px; text-align:center; }
+  .gate-card img{ height:30px; margin-bottom:6px; }
+  .gate-card p{ font-size:12px; color:var(--gray); margin-bottom:20px; }
+  .gate-card input{ width:100%; padding:12px 14px; margin-bottom:14px; border:1.5px solid var(--line); border-radius:9px; font-size:14px; }
+  .gate-card button{ width:100%; padding:13px; background:var(--blue); color:#fff; border:none; border-radius:9px; font-weight:700; font-size:13px; }
+  .gate-error{ font-size:12px; color:var(--red); margin-top:12px; display:none; }
+  .gate-error.show{ display:block; }
+
+  #dashboard{ display:none; }
+  header{ background:#fff; border-bottom:1px solid var(--line); padding:14px 0; }
+  .wrap{ max-width:1150px; margin:0 auto; padding:0 20px; }
+  .nav-row{ display:flex; justify-content:space-between; align-items:center; }
+  .logo img{ height:24px; }
+  .admin-badge{ font-size:11px; font-weight:800; letter-spacing:0.06em; color:#fff; background:var(--ink); padding:5px 10px; border-radius:6px; margin-left:8px; }
+  .logout-btn{ font-size:12.5px; font-weight:700; padding:9px 16px; border:1.5px solid var(--line); border-radius:8px; background:#fff; }
+
+  .tabs-row{ display:flex; background:#fff; border-bottom:1px solid var(--line); overflow-x:auto; }
+  .main-tab{ padding:14px 20px; font-size:12.5px; font-weight:700; color:var(--gray); border-bottom:2px solid transparent; white-space:nowrap; }
+  .main-tab.active{ color:var(--blue); border-color:var(--blue); }
+  main{ padding:26px 0 60px; }
+  .view{ display:none; } .view.active{ display:block; }
+  h1{ font-family:'Manrope',sans-serif; font-size:22px; margin-bottom:18px; }
+
+  table.data-table{ width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  table.data-table th{ text-align:left; font-size:10.5px; letter-spacing:0.05em; text-transform:uppercase; color:var(--gray); padding:12px 14px; border-bottom:1px solid var(--line); background:#FAFBFC; }
+  table.data-table td{ padding:12px 14px; font-size:13px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.data-table tr:last-child td{ border-bottom:none; }
+  .pill{ font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:20px; }
+  .pill-pending{ background:#FEF3C7; color:#92400E; }
+  .pill-approved{ background:#DCFCE7; color:#166534; }
+  .pill-rejected{ background:#FEE2E2; color:#991B1B; }
+  .mini-btn{ font-size:11px; font-weight:700; padding:6px 10px; border-radius:7px; border:1.5px solid var(--line); background:#fff; margin-right:5px; margin-bottom:4px; }
+  .mini-btn.approve:hover{ background:#DCFCE7; border-color:var(--green); color:#166534; }
+  .mini-btn.reject:hover, .mini-btn.delete:hover{ background:#FEE2E2; border-color:var(--red); color:var(--red); }
+  .empty-note{ text-align:center; padding:50px 12px; color:var(--gray); font-size:13px; background:#fff; border-radius:12px; }
+
+  /* Accounts (admin, any staff) */
+  .account-form{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:22px; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .account-form .full{ grid-column:1/-1; }
+  .account-form label{ font-size:10.5px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px; }
+  .account-form input, .account-form select{ width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:13.5px; }
+  .account-form .actions{ grid-column:1/-1; display:flex; gap:10px; }
+  .btn-submit{ padding:12px 22px; background:var(--blue); color:#fff; border:none; border-radius:9px; font-weight:700; font-size:12.5px; }
+  .btn-cancel{ padding:12px 22px; background:#F1F4F8; color:var(--ink); border:none; border-radius:9px; font-weight:700; font-size:12.5px; }
+  .account-list{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+  @media(max-width:760px){ .account-list{ grid-template-columns:1fr; } }
+  .account-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .account-card h3{ font-size:15px; margin-bottom:4px; }
+  .account-card .num{ font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--gray); margin-bottom:6px; }
+  .account-card .owner{ font-size:11px; color:var(--blue); margin-bottom:10px; }
+  .account-card .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:11.5px; color:var(--gray); margin-bottom:12px; }
+  .account-card .grid2 b{ color:var(--ink); }
+  .account-actions{ display:flex; gap:8px; }
+  .icon-btn{ font-size:11px; font-weight:700; padding:7px 12px; border:1.5px solid var(--line); border-radius:8px; background:#fff; }
+  .icon-btn.delete:hover{ background:#FEE2E2; border-color:var(--red); color:var(--red); }
+  .icon-btn.edit:hover{ background:#EAF1FF; border-color:var(--blue); color:var(--blue); }
+
+  /* Trades (audit) */
+  .receipt-list{ display:flex; flex-direction:column; gap:10px; }
+  .receipt-item{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 18px; }
+  .receipt-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:10px; }
+  .receipt-top .title{ font-weight:700; font-size:14px; }
+  .receipt-top .sub{ font-size:11.5px; color:var(--gray); }
+  .badge{ font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:20px; }
+  .badge-checking{ background:#F1F5F9; color:#475569; }
+  .badge-seen{ background:#E0F2FE; color:#075985; }
+  .badge-confirmed{ background:#FEF3C7; color:#92400E; }
+  .badge-approved{ background:#DCFCE7; color:#166534; }
+  .badge-failed{ background:#FEE2E2; color:#991B1B; }
+  .audit-grid{ display:grid; grid-template-columns:1fr 1fr; gap:4px 16px; font-size:11.5px; color:var(--gray); margin-bottom:10px; padding:10px; background:#FAFBFC; border-radius:9px; }
+  .audit-grid b{ color:var(--ink); }
+  .receipt-body{ display:flex; gap:14px; flex-wrap:wrap; }
+  .receipt-img-wrap img{ width:100px; height:100px; object-fit:cover; border-radius:10px; border:1px solid var(--line); cursor:pointer; }
+  .download-link{ display:block; text-align:center; font-size:11px; margin-top:6px; color:var(--blue); text-decoration:underline; }
+  .receipt-actions{ flex:1; min-width:220px; display:flex; flex-direction:column; gap:8px; justify-content:center; }
+  .action-row{ display:flex; gap:8px; }
+  .action-row button{ flex:1; padding:10px; border-radius:9px; font-weight:700; font-size:12px; border:none; }
+  .btn-confirm{ background:#FEF3C7; color:#92400E; }
+  .btn-approve{ background:var(--green); color:#fff; }
+  .btn-fail{ background:#FEE2E2; color:#991B1B; }
+  .btn-undo{ background:#F1F5F9; color:#475569; }
+  .fail-reason-box{ font-size:12px; color:#991B1B; background:#FEF2F2; padding:8px 10px; border-radius:8px; }
+
+  /* Rules & Settings */
+  .settings-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px; max-width:520px; margin-bottom:20px; }
+  .settings-card label{ font-size:10.5px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px; }
+  .settings-card textarea{ width:100%; min-height:110px; padding:12px 14px; border:1.5px solid var(--line); border-radius:9px; font-size:13.5px; font-family:inherit; margin-bottom:16px; }
+  .settings-card input{ width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:13.5px; margin-bottom:14px; }
+
+  /* Messages */
+  .messages-shell{ display:grid; grid-template-columns:280px 1fr; border:1px solid var(--line); border-radius:14px; overflow:hidden; min-height:500px; background:#fff; }
+  .thread-list{ border-right:1px solid var(--line); overflow-y:auto; max-height:600px; }
+  .thread-item{ padding:14px 16px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .thread-item:hover{ background:#FAFBFC; }
+  .thread-item.active{ background:#EAF1FF; }
+  .thread-item h4{ font-size:13px; margin-bottom:3px; }
+  .thread-item .preview{ font-size:11.5px; color:var(--gray); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .thread-empty{ text-align:center; padding:40px 14px; color:var(--gray); font-size:12.5px; }
+  .thread-view{ display:flex; flex-direction:column; }
+  .thread-head{ padding:14px 18px; border-bottom:1px solid var(--line); }
+  .thread-head h3{ font-size:14.5px; }
+  .thread-head span{ font-size:11.5px; color:var(--gray); }
+  .thread-body{ flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; min-height:320px; max-height:420px; }
+  .thread-msg{ max-width:70%; padding:9px 12px; font-size:13px; border-radius:10px; }
+  .thread-msg.admin{ align-self:flex-end; background:var(--blue); color:#fff; }
+  .thread-msg.user{ align-self:flex-start; background:#EEF1F5; color:var(--ink); }
+  .thread-msg img{ max-width:100%; border-radius:8px; margin-top:4px; }
+  .thread-input-row{ border-top:1px solid var(--line); display:flex; align-items:center; padding:10px; gap:8px; }
+  .thread-input-row input[type="text"]{ flex:1; border:none; background:transparent; font-size:13.5px; padding:8px; }
+  .thread-input-row input[type="text"]:focus{ outline:none; }
+  .thread-icon-btn{ width:36px; height:36px; display:flex; align-items:center; justify-content:center; border:1.5px solid var(--line); border-radius:8px; background:#fff; }
+  .no-thread-selected{ display:flex; align-items:center; justify-content:center; height:100%; color:var(--gray); font-size:13px; padding:40px; }
+
+  .modal-overlay{ position:fixed; inset:0; background:rgba(15,23,42,0.5); display:none; align-items:center; justify-content:center; z-index:200; padding:20px; }
+  .modal-overlay.open{ display:flex; }
+  .modal{ background:#fff; border-radius:16px; padding:26px; max-width:440px; width:100%; max-height:88vh; overflow-y:auto; }
+  .modal h3{ font-family:'Manrope',sans-serif; font-size:16px; margin-bottom:14px; }
+  .modal textarea{ width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:13.5px; min-height:80px; font-family:inherit; margin-bottom:14px; }
+  .modal img.full{ max-width:100%; border-radius:10px; margin-bottom:14px; }
+</style>
+</head>
+<body>
+
+  <div id="gate">
+    <div class="gate-card">
+      <img src="/logo.png" alt="Recio">
+      <p>Admin Access</p>
+      <input type="password" id="adminPassword" placeholder="Admin password">
+      <button id="adminLoginBtn">Enter</button>
+      <div class="gate-error" id="gateError">Wrong password. Try again.</div>
+    </div>
+  </div>
+
+  <div id="dashboard">
+    <header>
+      <div class="wrap nav-row">
+        <a href="/" class="logo"><img src="/logo.png" alt="Recio"><span class="admin-badge">ADMIN</span></a>
+        <button class="logout-btn" id="adminLogoutBtn">Log Out</button>
+      </div>
+    </header>
+    <div class="tabs-row wrap" style="padding:0 20px;">
+      <button class="main-tab active" data-view="usersView">Users</button>
+      <button class="main-tab" data-view="staffView">Staff</button>
+      <button class="main-tab" data-view="accountsView">Accounts</button>
+      <button class="main-tab" data-view="tradesView">Trades</button>
+      <button class="main-tab" data-view="withdrawalsView">Withdrawals</button>
+      <button class="main-tab" data-view="rulesView">Rules &amp; Settings</button>
+      <button class="main-tab" data-view="messagesView">Messages</button>
+    </div>
+
+    <main class="wrap">
+      <!-- USERS -->
+      <div class="view active" id="usersView">
+        <h1>Users</h1>
+        <table class="data-table" id="usersTable">
+          <thead><tr><th>Name</th><th>Phone</th><th>Bank</th><th>Account No.</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody><tr><td colspan="7" class="empty-note">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- STAFF -->
+      <div class="view" id="staffView">
+        <h1>Staff</h1>
+        <table class="data-table" id="staffTable">
+          <thead><tr><th>Name</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody><tr><td colspan="4" class="empty-note">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- ACCOUNTS -->
+      <div class="view" id="accountsView">
+        <h1>All Accounts</h1>
+        <div class="account-form" id="accountForm">
+          <input type="hidden" id="editingId">
+          <div><label>Title</label><input type="text" id="aTitle" placeholder="MEXICO"></div>
+          <div><label>Bank Name</label><input type="text" id="aBank"></div>
+          <div class="full">
+            <label>Account Number</label>
+            <input type="text" id="aNumber" placeholder="e.g. 0123456789 or a wallet/username">
+          </div>
+          <div class="full"><label>Assign to Staff (optional)</label><select id="aStaffSelect"><option value="">— Admin-owned —</option></select></div>
+          <div><label>Lowest Amount</label><input type="number" id="aLowAmt"></div>
+          <div><label>Rate at Lowest</label><input type="number" id="aLowRate"></div>
+          <div><label>Higher Amount</label><input type="number" id="aHighAmt"></div>
+          <div><label>Rate at Higher</label><input type="number" id="aHighRate"></div>
+          <div><label>Minimum Accepted</label><input type="number" id="aMin"></div>
+          <div><label>Limit (Maximum Accepted)</label><input type="number" id="aMax"></div>
+          <div class="actions">
+            <button class="btn-submit" id="saveAccountBtn">Add Account</button>
+            <button class="btn-cancel" id="cancelAccountBtn" style="display:none;">Cancel Edit</button>
+          </div>
+        </div>
+        <div class="account-list" id="accountList"></div>
+      </div>
+
+      <!-- TRADES -->
+      <div class="view" id="tradesView">
+        <h1>All Trades</h1>
+        <div class="receipt-list" id="tradesList"></div>
+      </div>
+
+      <!-- WITHDRAWALS -->
+      <div class="view" id="withdrawalsView">
+        <h1>Withdrawal Requests</h1>
+        <table class="data-table" id="withdrawalsTable">
+          <thead><tr><th>Customer</th><th>Phone</th><th>Amount</th><th>Pays Out To</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody><tr><td colspan="7" class="empty-note">Loading…</td></tr></tbody>
+        </table>
+      </div>
+
+      <!-- RULES & SETTINGS -->
+      <div class="view" id="rulesView">
+        <h1>Rules &amp; Settings</h1>
+        <div class="settings-card">
+          <label>Rules Text (shown to customers)</label>
+          <textarea id="rulesText" placeholder="e.g. No scam money allowed..."></textarea>
+          <button class="btn-submit" id="saveRulesBtn">Save Rules</button>
+        </div>
+        <div class="settings-card">
+          <label>Staff Settlement — Bank Name</label>
+          <input type="text" id="settlementBank" placeholder="e.g. GTBank">
+          <label>Staff Settlement — Account Number</label>
+          <input type="text" id="settlementAccount" placeholder="Where staff remit collected funds">
+          <label>Max Deposit Before Blocking (₦)</label>
+          <input type="number" id="maxDeposit" placeholder="3000000">
+          <button class="btn-submit" id="saveSettingsBtn">Save Settings</button>
+        </div>
+      </div>
+
+      <!-- MESSAGES -->
+      <div class="view" id="messagesView">
+        <h1>Messages</h1>
+        <div class="messages-shell">
+          <div class="thread-list" id="threadList"><div class="thread-empty">Loading…</div></div>
+          <div class="thread-view" id="threadView"><div class="no-thread-selected">Select a conversation on the left.</div></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-overlay" id="failModal">
+    <div class="modal">
+      <h3>Reason for failure</h3>
+      <textarea id="failReasonInput" placeholder="e.g. Amount does not match, payment not received..."></textarea>
+      <div style="display:flex; gap:10px;">
+        <button data-close="failModal" style="flex:1; padding:11px; border-radius:9px; border:none; font-weight:700; background:#F1F4F8;">Cancel</button>
+        <button id="confirmFailBtn" style="flex:1; padding:11px; border-radius:9px; border:none; font-weight:700; background:#FEE2E2; color:#991B1B;">Mark Failed</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="imgModal">
+    <div class="modal">
+      <h3>Receipt</h3>
+      <img class="full" id="fullImg" src="" alt="Receipt">
+      <a id="downloadFullImg" download="receipt.jpg" class="download-link" style="margin-bottom:14px; display:block;">Download to device</a>
+      <button data-close="imgModal" style="width:100%; padding:11px; border-radius:9px; border:none; font-weight:700; background:var(--blue); color:#fff;">Close</button>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  function formatNaira(n){ return "₦" + Number(n).toLocaleString("en-NG"); }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
+  function formatDate(iso){ return new Date(iso).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }); }
+  function pill(status){
+    var map = { pending:"pill-pending", approved:"pill-approved", rejected:"pill-rejected" };
+    return '<span class="pill ' + (map[status]||"pill-pending") + '">' + status.toUpperCase() + '</span>';
+  }
+
+  var gate=document.getElementById("gate"), dashboard=document.getElementById("dashboard");
+  var adminPassword=document.getElementById("adminPassword"), gateError=document.getElementById("gateError");
+
+  function login(){
+    gateError.classList.remove("show");
+    fetch("/api/admin/login", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ password: adminPassword.value }) })
+      .then(function(r){
+        if(!r.ok){ gateError.classList.add("show"); return; }
+        gate.style.display="none"; dashboard.style.display="block";
+        loadUsers(); loadStaff(); loadAccounts(); loadTrades(); loadWithdrawals(); loadSettings(); loadThreads();
+      });
+  }
+  document.getElementById("adminLoginBtn").addEventListener("click", login);
+  adminPassword.addEventListener("keydown", function(e){ if(e.key==="Enter") login(); });
+  document.getElementById("adminLogoutBtn").addEventListener("click", function(){
+    fetch("/api/admin/logout", { method:"POST" }).then(function(){ window.location.reload(); });
+  });
+
+  document.querySelectorAll(".main-tab").forEach(function(tab){
+    tab.addEventListener("click", function(){
+      document.querySelectorAll(".main-tab").forEach(function(t){ t.classList.remove("active"); });
+      tab.classList.add("active");
+      document.querySelectorAll(".view").forEach(function(v){ v.classList.remove("active"); });
+      document.getElementById(tab.getAttribute("data-view")).classList.add("active");
+    });
+  });
+
+  // ============================================================
+  // USERS
+  // ============================================================
+  function loadUsers(){
+    fetch("/api/admin/users").then(function(r){ return r.json(); }).then(function(data){
+      var rows = (data.users||[]).map(function(u){
+        var actions = '';
+        if(u.status === "rejected") actions += '<button class="mini-btn approve" data-id="' + u.id + '" data-act="approve-user">Reinstate</button>';
+        else actions += '<button class="mini-btn reject" data-id="' + u.id + '" data-act="reject-user">Suspend</button>';
+        actions += '<button class="mini-btn delete" data-id="' + u.id + '" data-act="delete-user">Delete</button>';
+        return '<tr><td>' + escapeHtml(u.name) + '</td><td>' + escapeHtml(u.phone) + '</td><td>' + escapeHtml(u.bankName) + '</td>' +
+          '<td>' + escapeHtml(u.accountNumber) + '</td><td>' + formatNaira(u.balance) + '</td><td>' + pill(u.status) + '</td><td>' + actions + '</td></tr>';
+      });
+      document.querySelector("#usersTable tbody").innerHTML = rows.length ? rows.join("") : '<tr><td colspan="7" class="empty-note">No users yet.</td></tr>';
+      wireRowActions();
+    });
+  }
+  function wireRowActions(){
+    document.querySelectorAll('[data-act="approve-user"]').forEach(function(b){ b.addEventListener("click", function(){ fetch("/api/admin/users/"+b.getAttribute("data-id")+"/approve",{method:"PUT"}).then(loadUsers); }); });
+    document.querySelectorAll('[data-act="reject-user"]').forEach(function(b){ b.addEventListener("click", function(){ fetch("/api/admin/users/"+b.getAttribute("data-id")+"/reject",{method:"PUT"}).then(loadUsers); }); });
+    document.querySelectorAll('[data-act="delete-user"]').forEach(function(b){ b.addEventListener("click", function(){ if(confirm("Delete this user?")) fetch("/api/admin/users/"+b.getAttribute("data-id"),{method:"DELETE"}).then(loadUsers); }); });
+    document.querySelectorAll('[data-act="approve-staff"]').forEach(function(b){ b.addEventListener("click", function(){ fetch("/api/admin/staff/"+b.getAttribute("data-id")+"/approve",{method:"PUT"}).then(function(){ loadStaff(); loadAccounts(); }); }); });
+    document.querySelectorAll('[data-act="reject-staff"]').forEach(function(b){ b.addEventListener("click", function(){ fetch("/api/admin/staff/"+b.getAttribute("data-id")+"/reject",{method:"PUT"}).then(loadStaff); }); });
+    document.querySelectorAll('[data-act="delete-staff"]').forEach(function(b){ b.addEventListener("click", function(){ if(confirm("Delete this staff member?")) fetch("/api/admin/staff/"+b.getAttribute("data-id"),{method:"DELETE"}).then(function(){ loadStaff(); loadAccounts(); }); }); });
+  }
+
+  // ============================================================
+  // STAFF
+  // ============================================================
+  var staffCache = [];
+  function loadStaff(){
+    fetch("/api/admin/staff").then(function(r){ return r.json(); }).then(function(data){
+      staffCache = data.staff || [];
+      var rows = staffCache.map(function(s){
+        var actions = '';
+        if(s.status !== "approved") actions += '<button class="mini-btn approve" data-id="' + s.id + '" data-act="approve-staff">Approve</button>';
+        if(s.status !== "rejected") actions += '<button class="mini-btn reject" data-id="' + s.id + '" data-act="reject-staff">Reject</button>';
+        actions += '<button class="mini-btn delete" data-id="' + s.id + '" data-act="delete-staff">Delete</button>';
+        return '<tr><td>' + escapeHtml(s.name) + '</td><td>' + escapeHtml(s.phone) + '</td><td>' + pill(s.status) + '</td><td>' + actions + '</td></tr>';
+      });
+      document.querySelector("#staffTable tbody").innerHTML = rows.length ? rows.join("") : '<tr><td colspan="4" class="empty-note">No staff yet.</td></tr>';
+      wireRowActions();
+      var sel = document.getElementById("aStaffSelect");
+      sel.innerHTML = '<option value="">— Admin-owned —</option>' + staffCache.filter(function(s){return s.status==="approved";}).map(function(s){ return '<option value="'+s.id+'">'+escapeHtml(s.name)+'</option>'; }).join("");
+    });
+  }
+
+  // ============================================================
+  // ACCOUNTS
+  // ============================================================
+  var editingId = document.getElementById("editingId");
+  function loadAccounts(){
+    fetch("/api/admin/accounts").then(function(r){ return r.json(); }).then(function(data){
+      renderAccounts(data.accounts || []);
+    });
+  }
+  function staffName(id){
+    if(!id) return "Admin-owned";
+    var s = staffCache.find(function(x){ return x.id === id; });
+    return s ? s.name : "Unknown staff";
+  }
+  function renderAccounts(accounts){
+    var list = document.getElementById("accountList");
+    if(accounts.length === 0){ list.innerHTML = '<div class="empty-note">No accounts yet.</div>'; return; }
+    list.innerHTML = accounts.map(function(a){
+      return '<div class="account-card">' +
+        '<h3>' + escapeHtml(a.title) + '</h3>' +
+        '<div class="num">' + escapeHtml(a.accountNumber) + ' — ' + escapeHtml(a.bankName) + '</div>' +
+        '<div class="owner">Owner: ' + escapeHtml(staffName(a.staffId)) + '</div>' +
+        '<div class="grid2">' +
+          '<div>Lowest: <b>' + formatNaira(a.lowestAmount) + '</b></div><div>Rate: <b>' + formatNaira(a.lowestRate) + '</b></div>' +
+          '<div>Higher: <b>' + formatNaira(a.higherAmount) + '</b></div><div>Rate: <b>' + formatNaira(a.higherRate) + '</b></div>' +
+          '<div>Min: <b>' + formatNaira(a.minAmount) + '</b></div><div>Limit: <b>' + formatNaira(a.maxAmount) + '</b></div>' +
+        '</div>' +
+        '<div class="account-actions">' +
+          '<button class="icon-btn edit" data-id="' + a.id + '">Edit</button>' +
+          '<button class="icon-btn delete" data-id="' + a.id + '">Delete</button>' +
+        '</div></div>';
+    }).join("");
+    list.querySelectorAll(".edit").forEach(function(btn){
+      btn.addEventListener("click", function(){ startEditAccount(accounts.find(function(a){ return a.id === btn.getAttribute("data-id"); })); });
+    });
+    list.querySelectorAll(".delete").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        if(!confirm("Delete this account?")) return;
+        fetch("/api/admin/accounts/" + btn.getAttribute("data-id"), { method:"DELETE" }).then(loadAccounts);
+      });
+    });
+  }
+  function startEditAccount(a){
+    editingId.value = a.id;
+    document.getElementById("aTitle").value = a.title;
+    document.getElementById("aBank").value = a.bankName;
+    document.getElementById("aNumber").value = a.accountNumber;
+    document.getElementById("aStaffSelect").value = a.staffId || "";
+    document.getElementById("aLowAmt").value = a.lowestAmount;
+    document.getElementById("aLowRate").value = a.lowestRate;
+    document.getElementById("aHighAmt").value = a.higherAmount;
+    document.getElementById("aHighRate").value = a.higherRate;
+    document.getElementById("aMin").value = a.minAmount;
+    document.getElementById("aMax").value = a.maxAmount;
+    document.getElementById("saveAccountBtn").textContent = "Save Changes";
+    document.getElementById("cancelAccountBtn").style.display = "inline-block";
+    window.scrollTo({ top:0, behavior:"smooth" });
+  }
+  function resetAccountForm(){
+    editingId.value = "";
+    ["aTitle","aBank","aNumber","aLowAmt","aLowRate","aHighAmt","aHighRate","aMin","aMax"].forEach(function(id){ document.getElementById(id).value=""; });
+    document.getElementById("aStaffSelect").value = "";
+    document.getElementById("saveAccountBtn").textContent = "Add Account";
+    document.getElementById("cancelAccountBtn").style.display = "none";
+  }
+  document.getElementById("cancelAccountBtn").addEventListener("click", resetAccountForm);
+  document.getElementById("saveAccountBtn").addEventListener("click", function(){
+    var payload = {
+      title: document.getElementById("aTitle").value.trim(),
+      bankName: document.getElementById("aBank").value.trim(),
+      accountNumber: document.getElementById("aNumber").value.trim(),
+      staffId: document.getElementById("aStaffSelect").value || null,
+      lowestAmount: document.getElementById("aLowAmt").value,
+      lowestRate: document.getElementById("aLowRate").value,
+      higherAmount: document.getElementById("aHighAmt").value,
+      higherRate: document.getElementById("aHighRate").value,
+      minAmount: document.getElementById("aMin").value,
+      maxAmount: document.getElementById("aMax").value
+    };
+    if(!payload.title || !payload.bankName || !payload.accountNumber){ alert("Title, bank and account number are required."); return; }
+    var id = editingId.value;
+    var req = id
+      ? fetch("/api/admin/accounts/" + id, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) })
+      : fetch("/api/admin/accounts", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) });
+    req.then(function(r){ return r.json(); }).then(function(){ resetAccountForm(); loadAccounts(); });
+  });
+
+  // ============================================================
+  // TRADES (full audit)
+  // ============================================================
+  var statusMeta = {
+    checking: { label:"Checking", cls:"badge-checking" }, seen: { label:"Seen", cls:"badge-seen" },
+    confirmed: { label:"Confirmed", cls:"badge-confirmed" }, approved: { label:"Approved", cls:"badge-approved" },
+    failed: { label:"Failed", cls:"badge-failed" }
+  };
+  function loadTrades(){
+    fetch("/api/admin/trades").then(function(r){ return r.json(); }).then(function(data){
+      renderTrades(data.trades || []);
+    });
+  }
+  function renderTrades(trades){
+    var list = document.getElementById("tradesList");
+    if(trades.length === 0){ list.innerHTML = '<div class="empty-note">No trades yet.</div>'; return; }
+    list.innerHTML = trades.map(function(t){
+      var s = statusMeta[t.status] || statusMeta.checking;
+      var reason = (t.status === "failed" && t.failReason) ? '<div class="fail-reason-box">Reason: ' + escapeHtml(t.failReason) + '</div>' : '';
+      var actions = '<div class="action-row">' +
+        '<button class="btn-confirm" data-id="' + t.id + '" data-action="confirmed">Confirm</button>' +
+        '<button class="btn-approve" data-id="' + t.id + '" data-action="approved">Approve</button>' +
+        '<button class="btn-fail" data-id="' + t.id + '" data-action="failed">Failed</button>' +
+      '</div>';
+      var settlement = t.settlementStatus === "done"
+        ? '<div class="download-link" style="text-decoration:none; color:#166534;">✓ Staff settlement received</div>'
+        : '<div class="download-link" style="text-decoration:none; color:var(--gray);">Staff settlement pending</div>';
+      return '<div class="receipt-item">' +
+        '<div class="receipt-top"><div><div class="title">' + escapeHtml(t.accountTitleUsed) + ' — ' + formatNaira(t.intendedAmount) + '</div>' +
+        '<div class="sub">' + formatDate(t.createdAt) + '</div></div><span class="badge ' + s.cls + '">' + s.label + '</span></div>' +
+        '<div class="audit-grid">' +
+          '<div>Customer: <b>' + escapeHtml(t.userName) + '</b></div><div>Phone: <b>' + escapeHtml(t.userPhone) + '</b></div>' +
+          '<div>Paid into: <b>' + escapeHtml(t.accountNumberUsed) + '</b></div><div>Handled by: <b>' + escapeHtml(t.staffName) + '</b></div>' +
+          '<div>Payout account: <b>' + escapeHtml(t.userPayoutAccount) + '</b></div><div>Payout bank: <b>' + escapeHtml(t.userPayoutBank) + '</b></div>' +
+        '</div>' +
+        settlement +
+        '<div class="receipt-body">' +
+          '<div class="receipt-img-wrap"><img src="' + t.receiptImage + '" data-full="' + t.receiptImage + '" alt="Receipt"><a href="' + t.receiptImage + '" download="receipt.jpg" class="download-link">Download</a></div>' +
+          '<div class="receipt-actions">' + actions + reason + '</div>' +
+        '</div></div>';
+    }).join("");
+
+    list.querySelectorAll(".receipt-img-wrap img").forEach(function(img){
+      img.addEventListener("click", function(){
+        document.getElementById("fullImg").src = img.getAttribute("data-full");
+        document.getElementById("downloadFullImg").href = img.getAttribute("data-full");
+        document.getElementById("imgModal").classList.add("open");
+      });
+    });
+    list.querySelectorAll("[data-action]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        var id = btn.getAttribute("data-id"), action = btn.getAttribute("data-action");
+        if(action === "failed"){ openFailModal(id); return; }
+        markTradeAdmin(id, action, null);
+      });
+    });
+  }
+  function markTradeAdmin(id, status, reason){
+    fetch("/api/admin/trades/" + id + "/mark", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ status:status, reason:reason }) })
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,data:d}; }); })
+      .then(function(res){ if(!res.ok){ alert(res.data.error || "Could not update."); return; } loadTrades(); loadUsers(); });
+  }
+  var failTargetId = null;
+  var failTargetType = "trade"; // "trade" | "withdrawal"
+  function openFailModal(id, type){ failTargetId = id; failTargetType = type || "trade"; document.getElementById("failReasonInput").value=""; document.getElementById("failModal").classList.add("open"); }
+  document.getElementById("confirmFailBtn").addEventListener("click", function(){
+    var reason = document.getElementById("failReasonInput").value.trim();
+    if(!reason){ alert("Please provide a reason."); return; }
+    document.getElementById("failModal").classList.remove("open");
+    if(failTargetType === "withdrawal") markWithdrawal(failTargetId, "rejected", reason);
+    else markTradeAdmin(failTargetId, "failed", reason);
+  });
+  document.querySelectorAll("[data-close]").forEach(function(btn){
+    btn.addEventListener("click", function(){ document.getElementById(btn.getAttribute("data-close")).classList.remove("open"); });
+  });
+
+  // ============================================================
+  // WITHDRAWALS
+  // ============================================================
+  var withdrawalStatusMeta = { pending:"pill-pending", paid:"pill-approved", rejected:"pill-rejected" };
+  function loadWithdrawals(){
+    fetch("/api/admin/withdrawals").then(function(r){ return r.json(); }).then(function(data){
+      renderWithdrawals(data.withdrawals || []);
+    });
+  }
+  function renderWithdrawals(withdrawals){
+    var tbody = document.querySelector("#withdrawalsTable tbody");
+    if(withdrawals.length === 0){ tbody.innerHTML = '<tr><td colspan="7" class="empty-note">No withdrawal requests yet.</td></tr>'; return; }
+    tbody.innerHTML = withdrawals.map(function(w){
+      var cls = withdrawalStatusMeta[w.status] || "pill-pending";
+      var actions = w.status === "pending"
+        ? '<button class="mini-btn approve" data-id="' + w.id + '" data-act="pay-withdrawal">Mark Paid</button>' +
+          '<button class="mini-btn reject" data-id="' + w.id + '" data-act="reject-withdrawal">Reject</button>'
+        : (w.status === "rejected" && w.reason ? '<span style="font-size:11.5px; color:var(--gray);">' + escapeHtml(w.reason) + '</span>' : '—');
+      return '<tr><td>' + escapeHtml(w.userName) + '</td><td>' + escapeHtml(w.userPhone) + '</td><td>' + formatNaira(w.amount) + '</td>' +
+        '<td>' + escapeHtml(w.payoutBank) + ' — ' + escapeHtml(w.payoutAccount) + '</td><td>' + formatDate(w.createdAt) + '</td>' +
+        '<td><span class="pill ' + cls + '">' + w.status.toUpperCase() + '</span></td><td>' + actions + '</td></tr>';
+    }).join("");
+    tbody.querySelectorAll('[data-act="pay-withdrawal"]').forEach(function(b){
+      b.addEventListener("click", function(){ markWithdrawal(b.getAttribute("data-id"), "paid", null); });
+    });
+    tbody.querySelectorAll('[data-act="reject-withdrawal"]').forEach(function(b){
+      b.addEventListener("click", function(){ openFailModal(b.getAttribute("data-id"), "withdrawal"); });
+    });
+  }
+  function markWithdrawal(id, status, reason){
+    fetch("/api/admin/withdrawals/" + id + "/mark", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ status:status, reason:reason }) })
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,data:d}; }); })
+      .then(function(res){ if(!res.ok){ alert(res.data.error || "Could not update."); return; } loadWithdrawals(); loadUsers(); });
+  }
+
+  // ============================================================
+  // RULES & SETTINGS
+  // ============================================================
+  function loadSettings(){
+    fetch("/api/admin/settings").then(function(r){ return r.json(); }).then(function(data){
+      document.getElementById("rulesText").value = data.rulesText || "";
+      document.getElementById("settlementBank").value = data.settlementBank || "";
+      document.getElementById("settlementAccount").value = data.settlementAccount || "";
+      document.getElementById("maxDeposit").value = data.maxDeposit || 3000000;
+    });
+  }
+  document.getElementById("saveRulesBtn").addEventListener("click", function(){
+    fetch("/api/admin/settings", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ rulesText: document.getElementById("rulesText").value }) })
+      .then(function(){ alert("Rules saved."); });
+  });
+  document.getElementById("saveSettingsBtn").addEventListener("click", function(){
+    fetch("/api/admin/settings", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({
+      settlementBank: document.getElementById("settlementBank").value,
+      settlementAccount: document.getElementById("settlementAccount").value,
+      maxDeposit: Number(document.getElementById("maxDeposit").value) || 3000000
+    }) }).then(function(){ alert("Settings saved."); });
+  });
+
+  // ============================================================
+  // MESSAGES
+  // ============================================================
+  var threadList=document.getElementById("threadList"), threadView=document.getElementById("threadView");
+  var activeUserId=null, threadPollTimer=null, pendingImage=null;
+
+  function loadThreads(){
+    fetch("/api/admin/chats").then(function(r){ return r.json(); }).then(function(data){ renderThreadList(data.conversations || []); });
+  }
+  function renderThreadList(conversations){
+    if(conversations.length === 0){ threadList.innerHTML = '<div class="thread-empty">No conversations yet.</div>'; return; }
+    threadList.innerHTML = "";
+    conversations.forEach(function(c){
+      var item = document.createElement("div");
+      item.className = "thread-item" + (c.userId === activeUserId ? " active" : "");
+      var prefix = c.lastSender === "admin" ? "You: " : "";
+      item.innerHTML = '<h4>' + escapeHtml(c.name) + '</h4><div class="preview">' + escapeHtml(prefix + c.lastMessage) + '</div>';
+      item.addEventListener("click", function(){ openThread(c.userId, c.name, c.phone); });
+      threadList.appendChild(item);
+    });
+  }
+  function openThread(userId, name, phone){
+    activeUserId = userId;
+    threadView.innerHTML =
+      '<div class="thread-head"><h3>' + escapeHtml(name) + '</h3><span>' + escapeHtml(phone) + '</span></div>' +
+      '<div class="thread-body" id="threadBody"></div>' +
+      '<div class="thread-input-row">' +
+        '<button class="thread-icon-btn" id="adminAttachBtn">📎</button>' +
+        '<input type="file" id="adminFileInput" accept="image/*" style="display:none;">' +
+        '<input type="text" id="adminChatText" placeholder="Type a reply…">' +
+        '<button class="thread-icon-btn" id="adminSendBtn">➤</button>' +
+      '</div>';
+    wireThreadInput();
+    loadThreadMessages();
+    if(threadPollTimer) clearInterval(threadPollTimer);
+    threadPollTimer = setInterval(loadThreadMessages, 4000);
+  }
+  function loadThreadMessages(){
+    if(!activeUserId) return;
+    fetch("/api/admin/chats/" + activeUserId).then(function(r){ return r.json(); }).then(function(data){
+      var body = document.getElementById("threadBody");
+      if(!body) return;
+      var messages = data.messages || [];
+      body.innerHTML = messages.map(function(m){
+        var img = m.imageData ? '<img src="' + m.imageData + '" alt="">' : '';
+        var txt = m.text ? '<div>' + escapeHtml(m.text) + '</div>' : '';
+        return '<div class="thread-msg ' + m.sender + '">' + txt + img + '</div>';
+      }).join("");
+      body.scrollTop = body.scrollHeight;
+    });
+  }
+  function wireThreadInput(){
+    var attachBtn=document.getElementById("adminAttachBtn"), fileInput=document.getElementById("adminFileInput"),
+        chatText=document.getElementById("adminChatText"), sendBtn=document.getElementById("adminSendBtn");
+    pendingImage = null;
+    attachBtn.addEventListener("click", function(){ fileInput.click(); });
+    fileInput.addEventListener("change", function(e){
+      var file=e.target.files[0]; if(!file) return;
+      var reader=new FileReader();
+      reader.onload=function(ev){
+        var img=new Image();
+        img.onload=function(){
+          var canvas=document.createElement("canvas"); var maxW=800; var scale=Math.min(1,maxW/img.width);
+          canvas.width=img.width*scale; canvas.height=img.height*scale;
+          canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+          pendingImage = canvas.toDataURL("image/jpeg",0.7);
+        };
+        img.src=ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+    function send(){
+      var text = chatText.value.trim();
+      if(!text && !pendingImage) return;
+      fetch("/api/admin/chats/" + activeUserId + "/send", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ text:text, imageData:pendingImage }) })
+        .then(function(r){ return r.json(); }).then(function(){ chatText.value=""; pendingImage=null; fileInput.value=""; loadThreadMessages(); loadThreads(); });
+    }
+    sendBtn.addEventListener("click", send);
+    chatText.addEventListener("keydown", function(e){ if(e.key==="Enter") send(); });
+  }
+})();
+</script>
+</body>
+</html>

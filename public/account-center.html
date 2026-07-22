@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Get Account — RECIO EXCHANGE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --blue:#0D4DC7; --red:#E5372E; --green:#22C55E; --amber:#D97706; --bg:#F5F7FA; --ink:#0F172A; --gray:#64748B; --line:#E2E8F0; }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; min-height:100vh; }
+  a{ color:inherit; text-decoration:none; }
+  button{ font-family:inherit; cursor:pointer; }
+  header{ background:#fff; border-bottom:1px solid var(--line); padding:14px 0; }
+  .wrap{ max-width:900px; margin:0 auto; padding:0 20px; }
+  .nav-row{ display:flex; justify-content:space-between; align-items:center; }
+  .logo img{ height:24px; }
+  .back-btn{ font-size:12.5px; font-weight:700; padding:9px 16px; border:1.5px solid var(--line); border-radius:8px; background:#fff; }
+
+  main{ padding:28px 0 60px; }
+  h1{ font-family:'Manrope',sans-serif; font-size:22px; margin-bottom:6px; }
+  .lead{ font-size:13.5px; color:var(--gray); margin-bottom:24px; }
+
+  .amount-card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:26px; margin-bottom:26px; }
+  .amount-row{ display:flex; gap:10px; flex-wrap:wrap; }
+  .amount-row input{ flex:1; min-width:200px; padding:13px 16px; border:1.5px solid var(--line); border-radius:10px; font-size:15px; }
+  .amount-row input:focus{ outline:none; border-color:var(--blue); }
+  .amount-row button{ padding:13px 24px; background:var(--blue); color:#fff; border:none; border-radius:10px; font-weight:700; font-size:13.5px; }
+  .amount-row button:hover{ opacity:0.92; }
+
+  .blocked-note{ background:#FEE2E2; color:#991B1B; padding:16px 18px; border-radius:12px; font-size:13.5px; line-height:1.6; margin-bottom:24px; display:none; }
+  .blocked-note.show{ display:block; }
+
+  .accounts-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }
+  @media(max-width:700px){ .accounts-grid{ grid-template-columns:1fr; } }
+  .account-card{ background:#fff; border:1px solid var(--line); border-radius:16px; padding:22px; }
+  .account-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .account-head h3{ font-family:'Manrope',sans-serif; font-size:17px; letter-spacing:0.02em; }
+  .tier-tag{ font-size:10.5px; font-weight:700; padding:4px 10px; border-radius:20px; background:#EAF1FF; color:var(--blue); }
+  .account-img{ background:#F1F4F8; border-radius:12px; height:120px; display:flex; align-items:center; justify-content:center; margin-bottom:14px; overflow:hidden; }
+  .account-img img{ max-width:100%; max-height:100%; object-fit:contain; }
+  .account-img.placeholder{ color:var(--gray); font-size:12px; }
+  .account-number-row{ display:flex; align-items:center; justify-content:space-between; background:#F8FAFC; border-radius:10px; padding:12px 14px; margin-bottom:6px; }
+  .account-number-row .num{ font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:15px; }
+  .account-number-row .bank{ font-size:11px; color:var(--gray); }
+  .copy-btn{ width:32px; height:32px; border-radius:8px; background:#EAF1FF; color:var(--blue); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .copy-btn:hover{ background:#DCE8FF; }
+  .copy-btn svg{ width:15px; height:15px; }
+  .copied-note{ font-size:11px; color:var(--green); text-align:center; margin-bottom:10px; height:14px; }
+  .rate-row{ display:flex; justify-content:space-between; font-size:12.5px; color:var(--gray); margin-bottom:16px; padding-top:6px; }
+  .rate-row .val{ font-family:'IBM Plex Mono',monospace; font-weight:700; color:var(--ink); }
+  .send-receipt-btn{ width:100%; padding:12px; background:var(--green); color:#fff; border:none; border-radius:10px; font-weight:700; font-size:13px; }
+  .send-receipt-btn:hover{ opacity:0.92; }
+
+  .empty-note{ text-align:center; padding:50px 12px; color:var(--gray); font-size:13px; background:#fff; border-radius:12px; grid-column:1/-1; }
+
+  .modal-overlay{ position:fixed; inset:0; background:rgba(15,23,42,0.5); display:none; align-items:center; justify-content:center; z-index:200; padding:20px; }
+  .modal-overlay.open{ display:flex; }
+  .modal{ background:#fff; border-radius:16px; padding:26px; max-width:420px; width:100%; max-height:88vh; overflow-y:auto; }
+  .modal h3{ font-family:'Manrope',sans-serif; font-size:17px; margin-bottom:16px; }
+  .modal label{ font-size:11.5px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px; }
+  .modal input[type="number"]{ width:100%; padding:12px 14px; border:1.5px solid var(--line); border-radius:9px; font-size:14px; margin-bottom:16px; }
+  .upload-box{ border:2px dashed var(--line); border-radius:12px; padding:20px; text-align:center; margin-bottom:16px; cursor:pointer; }
+  .upload-box:hover{ border-color:var(--blue); }
+  .upload-box img{ max-width:100%; max-height:160px; border-radius:8px; }
+  .upload-box p{ font-size:12.5px; color:var(--gray); }
+  .modal-actions{ display:flex; gap:10px; }
+  .modal-actions button{ flex:1; padding:12px; border-radius:9px; font-weight:700; font-size:13px; border:none; }
+  .btn-cancel{ background:#F1F4F8; color:var(--ink); }
+  .btn-submit{ background:var(--green); color:#fff; }
+  .modal-msg{ font-size:12px; padding:9px 12px; border-radius:8px; margin-bottom:12px; display:none; }
+  .modal-msg.show{ display:block; }
+  .modal-msg.error{ background:#FEECEC; color:#B91C1C; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="wrap nav-row">
+      <a href="/" class="logo"><img src="/logo.png" alt="Recio"></a>
+      <a href="/dashboard.html" class="back-btn">← Back to Dashboard</a>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>Get an Account</h1>
+    <p class="lead">Tell us how much you want to send — we'll show you an account and rate for that amount.</p>
+
+    <div class="amount-card">
+      <label style="font-size:11.5px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:8px;">Amount you want to send (₦)</label>
+      <div class="amount-row">
+        <input type="number" id="amountInput" placeholder="e.g. 50000" min="1">
+        <button id="checkBtn">Show Accounts</button>
+      </div>
+    </div>
+
+    <div class="blocked-note" id="blockedNote"></div>
+
+    <div class="accounts-grid" id="accountsGrid"></div>
+  </main>
+
+  <div class="modal-overlay" id="receiptModal">
+    <div class="modal">
+      <h3>Send Receipt</h3>
+      <div class="modal-msg" id="modalMsg"></div>
+      <label>Amount Sent (₦)</label>
+      <input type="number" id="confirmAmount">
+      <label>Payment Receipt / Screenshot</label>
+      <div class="upload-box" id="uploadBox">
+        <input type="file" id="receiptFile" accept="image/*" style="display:none;">
+        <p id="uploadHint">Click to upload a photo or screenshot of your payment</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" data-close="receiptModal">Cancel</button>
+        <button class="btn-submit" id="submitReceiptBtn">Submit</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  function formatNaira(n){ return "₦" + Number(n).toLocaleString("en-NG"); }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
+
+  fetch("/api/me").then(function(r){ return r.json(); }).then(function(data){
+    if(!data.loggedIn){ window.location.href="/login.html"; return; }
+    if(data.status !== "approved"){ window.location.href="/pending.html"; return; }
+  });
+
+  var grid = document.getElementById("accountsGrid");
+  var blockedNote = document.getElementById("blockedNote");
+  var currentAccountId = null;
+
+  document.getElementById("checkBtn").addEventListener("click", loadAccounts);
+  document.getElementById("amountInput").addEventListener("keydown", function(e){ if(e.key==="Enter") loadAccounts(); });
+
+  function loadAccounts(){
+    var amount = Number(document.getElementById("amountInput").value);
+    if(!amount || amount <= 0){ grid.innerHTML=""; blockedNote.classList.remove("show"); return; }
+    grid.innerHTML = '<div class="empty-note">Loading accounts…</div>';
+    blockedNote.classList.remove("show");
+    fetch("/api/accounts?amount=" + amount).then(function(r){ return r.json(); }).then(function(data){
+      if(data.blocked){
+        grid.innerHTML = "";
+        blockedNote.textContent = "We can't provide an account for amounts above " + formatNaira(data.maxDeposit) + " directly through the site. Please chat with us to arrange this.";
+        blockedNote.classList.add("show");
+        return;
+      }
+      var accounts = data.accounts || [];
+      if(accounts.length === 0){
+        grid.innerHTML = '<div class="empty-note">No accounts currently accept that amount — try a different amount or chat with us.</div>';
+        return;
+      }
+      grid.innerHTML = accounts.map(function(a){
+        var img = a.imageData
+          ? '<div class="account-img"><img src="' + a.imageData + '" alt=""></div>'
+          : '<div class="account-img placeholder">No image</div>';
+        return '<div class="account-card">' +
+          '<div class="account-head"><h3>' + escapeHtml(a.title) + '</h3><span class="tier-tag">' + escapeHtml(a.tierLabel) + '</span></div>' +
+          img +
+          '<div class="account-number-row"><div><div class="num">' + escapeHtml(a.accountNumber) + '</div><div class="bank">' + escapeHtml(a.bankName) + '</div></div>' +
+          '<button class="copy-btn" data-acc="' + escapeHtml(a.accountNumber) + '" aria-label="Copy account number">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>' +
+          '</button></div>' +
+          '<div class="copied-note" data-copynote></div>' +
+          '<div class="rate-row"><span>Rate</span><span class="val">' + formatNaira(a.rate) + '</span></div>' +
+          '<button class="send-receipt-btn" data-id="' + a.id + '">Send Receipt</button>' +
+        '</div>';
+      }).join("");
+
+      grid.querySelectorAll(".copy-btn").forEach(function(btn){
+        btn.addEventListener("click", function(){
+          navigator.clipboard.writeText(btn.getAttribute("data-acc")).then(function(){
+            var note = btn.closest(".account-card").querySelector("[data-copynote]");
+            note.textContent = "Copied!";
+            setTimeout(function(){ note.textContent = ""; }, 1500);
+          });
+        });
+      });
+      grid.querySelectorAll(".send-receipt-btn").forEach(function(btn){
+        btn.addEventListener("click", function(){ openReceiptModal(btn.getAttribute("data-id"), amount); });
+      });
+    });
+  }
+
+  var pendingReceiptImage = null;
+  function openReceiptModal(accountId, amount){
+    currentAccountId = accountId;
+    pendingReceiptImage = null;
+    document.getElementById("confirmAmount").value = amount;
+    document.getElementById("uploadHint").textContent = "Click to upload a photo or screenshot of your payment";
+    document.getElementById("uploadBox").innerHTML = '<input type="file" id="receiptFile" accept="image/*" style="display:none;"><p id="uploadHint">Click to upload a photo or screenshot of your payment</p>';
+    wireUpload();
+    document.getElementById("modalMsg").className = "modal-msg";
+    document.getElementById("receiptModal").classList.add("open");
+  }
+  function wireUpload(){
+    var box = document.getElementById("uploadBox");
+    box.addEventListener("click", function(){ document.getElementById("receiptFile").click(); });
+    document.getElementById("receiptFile").addEventListener("change", function(e){
+      var file = e.target.files[0]; if(!file) return;
+      var reader = new FileReader();
+      reader.onload = function(ev){
+        var img = new Image();
+        img.onload = function(){
+          var canvas = document.createElement("canvas");
+          var maxW = 1000; var scale = Math.min(1, maxW/img.width);
+          canvas.width = img.width*scale; canvas.height = img.height*scale;
+          canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+          pendingReceiptImage = canvas.toDataURL("image/jpeg", 0.75);
+          box.innerHTML = '<img src="' + pendingReceiptImage + '" alt="Receipt preview">';
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+  document.querySelectorAll("[data-close]").forEach(function(btn){
+    btn.addEventListener("click", function(){ document.getElementById(btn.getAttribute("data-close")).classList.remove("open"); });
+  });
+
+  document.getElementById("submitReceiptBtn").addEventListener("click", function(){
+    var amount = Number(document.getElementById("confirmAmount").value);
+    var msgEl = document.getElementById("modalMsg");
+    if(!amount || amount <= 0){ msgEl.textContent="Enter a valid amount."; msgEl.className="modal-msg show error"; return; }
+    if(!pendingReceiptImage){ msgEl.textContent="Please upload your payment receipt."; msgEl.className="modal-msg show error"; return; }
+    fetch("/api/trades", { method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ accountId: currentAccountId, intendedAmount: amount, receiptImage: pendingReceiptImage })
+    }).then(function(r){ return r.json().then(function(d){ return {ok:r.ok, data:d}; }); })
+      .then(function(res){
+        if(!res.ok){ msgEl.textContent = res.data.error || "Could not submit."; msgEl.className="modal-msg show error"; return; }
+        window.location.href = "/dashboard.html";
+      });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Awaiting Approval — RECIO EXCHANGE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --blue:#0D4DC7; --amber:#D97706; --bg:#F5F7FA; --ink:#0F172A; --gray:#64748B; --line:#E2E8F0; }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{ background:var(--bg); color:var(--ink); font-family:'Inter',sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .card{ width:100%; max-width:440px; background:#fff; border:1px solid var(--line); border-radius:16px; padding:38px 32px; text-align:center; }
+  .logo img{ height:30px; margin-bottom:22px; }
+  .icon{ width:56px; height:56px; border-radius:50%; background:#FEF3C7; color:var(--amber); display:flex; align-items:center; justify-content:center; margin:0 auto 18px; font-size:26px; }
+  h1{ font-family:'Manrope',sans-serif; font-size:20px; margin-bottom:10px; }
+  p{ font-size:13.5px; color:var(--gray); line-height:1.6; margin-bottom:22px; }
+  .status-badge{ display:inline-block; font-size:12px; font-weight:700; padding:6px 14px; border-radius:20px; margin-bottom:22px; }
+  .status-pending{ background:#FEF3C7; color:#92400E; }
+  .status-rejected{ background:#FEE2E2; color:#991B1B; }
+  .btn{ display:inline-block; padding:12px 22px; background:var(--blue); color:#fff; border-radius:9px; font-weight:700; font-size:13px; border:none; cursor:pointer; }
+  .link{ display:block; margin-top:16px; font-size:12.5px; color:var(--gray); text-decoration:underline; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo"><img src="/logo.png" alt="Recio"></div>
+    <div class="icon" id="icon">⏳</div>
+    <h1 id="heading">Waiting on approval</h1>
+    <div class="status-badge status-pending" id="badge">PENDING</div>
+    <p id="message">Your staff account has been created. An admin needs to approve it before you can continue — this usually doesn't take long. Check back soon.</p>
+    <button class="btn" id="refreshBtn">Check Status</button>
+    <a href="https://t.me/RECIOEXCHANGE1" target="_blank" rel="noopener" class="link" style="color:var(--blue); font-weight:700;">Message us on Telegram — @RECIOEXCHANGE1</a>
+    <a href="#" class="link" id="logoutLink">Log out</a>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  var isStaff = window.location.search.indexOf("staff") !== -1;
+  var meUrl = isStaff ? "/api/staff/me" : "/api/me";
+  var logoutUrl = isStaff ? "/api/staff/logout" : "/api/logout";
+  var homeUrl = isStaff ? "/staff.html" : "/dashboard.html";
+  var loginUrl = isStaff ? "/staff-login.html" : "/login.html";
+
+  function check(){
+    fetch(meUrl).then(function(r){ return r.json(); }).then(function(data){
+      if(!data.loggedIn){ window.location.href = loginUrl; return; }
+      if(data.status === "approved"){ window.location.href = homeUrl; return; }
+      var badge=document.getElementById("badge"), heading=document.getElementById("heading"),
+          message=document.getElementById("message"), icon=document.getElementById("icon");
+      if(data.status === "rejected"){
+        badge.textContent="SUSPENDED"; badge.className="status-badge status-rejected";
+        heading.textContent="Account suspended";
+        message.textContent = isStaff
+          ? "Your staff account access was turned off by an admin. If you think this is a mistake, please reach out to us."
+          : "Your account access was turned off by an admin. If you think this is a mistake, please reach out to us.";
+        icon.textContent="✕";
+      } else if(!isStaff){
+        // Customers are approved immediately at signup — if we're here without a status, treat as suspended.
+        badge.textContent="SUSPENDED"; badge.className="status-badge status-rejected";
+        heading.textContent="Account suspended";
+        message.textContent = "Your account access was turned off by an admin. If you think this is a mistake, please reach out to us.";
+        icon.textContent="✕";
+      }
+    });
+  }
+  document.getElementById("refreshBtn").addEventListener("click", check);
+  document.getElementById("logoutLink").addEventListener("click", function(e){
+    e.preventDefault();
+    fetch(logoutUrl, { method:"POST" }).then(function(){ window.location.href = loginUrl; });
+  });
+  check();
+})();
+</script>
+</body>
+</html>
