@@ -188,11 +188,11 @@
         <h1>All Accounts</h1>
         <div class="account-form" id="accountForm">
           <input type="hidden" id="editingId">
-          <div><label>Title</label><input type="text" id="aTitle" placeholder="MEXICO"></div>
+          <div><label>Country</label><select id="aTitle"><option value="">Select country</option></select></div>
           <div><label>Bank Name</label><input type="text" id="aBank"></div>
           <div class="full">
             <label>Account Number</label>
-            <input type="text" id="aNumber" placeholder="e.g. 0123456789 or a wallet/username">
+            <textarea id="aNumber" rows="2" placeholder="e.g. 0123456789 or a wallet/username" style="width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:13.5px; font-family:inherit; resize:vertical;"></textarea>
           </div>
           <div class="full"><label>Assign to Staff (optional)</label><select id="aStaffSelect"><option value="">— Admin-owned —</option></select></div>
           <div><label>Lowest Amount</label><input type="number" id="aLowAmt"></div>
@@ -278,11 +278,48 @@
 (function(){
   "use strict";
   function formatNaira(n){ return "₦" + Number(n).toLocaleString("en-NG"); }
+  function formatNumber(n){ return Number(n).toLocaleString("en-NG"); }
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
   function formatDate(iso){ return new Date(iso).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }); }
   function pill(status){
     var map = { pending:"pill-pending", approved:"pill-approved", rejected:"pill-rejected" };
     return '<span class="pill ' + (map[status]||"pill-pending") + '">' + status.toUpperCase() + '</span>';
+  }
+
+  var COUNTRIES = [
+    { name:"Mexico", flag:"🇲🇽" }, { name:"Ecuador", flag:"🇪🇨" }, { name:"Guatemala", flag:"🇬🇹" },
+    { name:"Venezuela", flag:"🇻🇪" }, { name:"Bolivia", flag:"🇧🇴" }, { name:"Colombia", flag:"🇨🇴" },
+    { name:"Nicaragua", flag:"🇳🇮" }, { name:"Panama", flag:"🇵🇦" }, { name:"Peru", flag:"🇵🇪" },
+    { name:"Costa Rica", flag:"🇨🇷" }, { name:"Chile", flag:"🇨🇱" }, { name:"El Salvador", flag:"🇸🇻" },
+    { name:"Paraguay", flag:"🇵🇾" }, { name:"Argentina", flag:"🇦🇷" }, { name:"Brazil", flag:"🇧🇷" },
+    { name:"Dominican Republic", flag:"🇩🇴" }, { name:"South Africa", flag:"🇿🇦" }, { name:"Spain", flag:"🇪🇸" },
+    { name:"Uruguay", flag:"🇺🇾" }, { name:"Honduras", flag:"🇭🇳" }, { name:"Ukraine", flag:"🇺🇦" },
+    { name:"Russia", flag:"🇷🇺" }, { name:"Morocco", flag:"🇲🇦" }, { name:"UAE", flag:"🇦🇪" },
+    { name:"Myanmar", flag:"🇲🇲" }, { name:"Hong Kong", flag:"🇭🇰" }, { name:"Malaysia", flag:"🇲🇾" },
+    { name:"Thailand", flag:"🇹🇭" }, { name:"Saudi Arabia", flag:"🇸🇦" }, { name:"India", flag:"🇮🇳" },
+    { name:"Portugal", flag:"🇵🇹" }, { name:"Italy", flag:"🇮🇹" }, { name:"Angola", flag:"🇦🇴" },
+    { name:"Kenya", flag:"🇰🇪" }, { name:"Kazakhstan", flag:"🇰🇿" }, { name:"Oman", flag:"🇴🇲" },
+    { name:"Egypt", flag:"🇪🇬" }, { name:"USA", flag:"🇺🇸" }, { name:"Nigeria", flag:"🇳🇬" },
+    { name:"United Kingdom", flag:"🇬🇧" }, { name:"Canada", flag:"🇨🇦" }, { name:"Germany", flag:"🇩🇪" },
+    { name:"France", flag:"🇫🇷" }, { name:"China", flag:"🇨🇳" }, { name:"Indonesia", flag:"🇮🇩" }
+  ];
+  var usedCountryTitles = [];
+
+  function populateCountrySelect(keepCurrent){
+    var sel = document.getElementById("aTitle");
+    var current = keepCurrent || "";
+    sel.innerHTML = '<option value="">Select country</option>' + COUNTRIES.map(function(c){
+      var full = c.flag + " " + c.name;
+      var taken = usedCountryTitles.indexOf(full) !== -1 && full !== current;
+      return '<option value="' + full + '"' + (taken ? ' disabled' : '') + '>' + full + (taken ? ' (already on board)' : '') + '</option>';
+    }).join("");
+    if(current) sel.value = current;
+  }
+  function refreshUsedCountries(keepCurrent){
+    fetch("/api/rates").then(function(r){ return r.json(); }).then(function(data){
+      usedCountryTitles = (data.rates || []).map(function(r){ return r.title; });
+      populateCountrySelect(keepCurrent);
+    });
   }
 
   var gate=document.getElementById("gate"), dashboard=document.getElementById("dashboard");
@@ -294,7 +331,7 @@
       .then(function(r){
         if(!r.ok){ gateError.classList.add("show"); return; }
         gate.style.display="none"; dashboard.style.display="block";
-        loadUsers(); loadStaff(); loadAccounts(); loadTrades(); loadWithdrawals(); loadSettings(); loadThreads();
+        loadUsers(); loadStaff(); loadAccounts(); loadTrades(); loadWithdrawals(); loadSettings(); loadThreads(); refreshUsedCountries();
       });
   }
   document.getElementById("adminLoginBtn").addEventListener("click", login);
@@ -382,8 +419,8 @@
         '<div class="num">' + escapeHtml(a.accountNumber) + ' — ' + escapeHtml(a.bankName) + '</div>' +
         '<div class="owner">Owner: ' + escapeHtml(staffName(a.staffId)) + '</div>' +
         '<div class="grid2">' +
-          '<div>Lowest: <b>' + formatNaira(a.lowestAmount) + '</b></div><div>Rate: <b>' + formatNaira(a.lowestRate) + '</b></div>' +
-          '<div>Higher: <b>' + formatNaira(a.higherAmount) + '</b></div><div>Rate: <b>' + formatNaira(a.higherRate) + '</b></div>' +
+          '<div>Lowest: <b>' + formatNumber(a.lowestAmount) + '</b></div><div>Rate: <b>' + formatNaira(a.lowestRate) + '</b></div>' +
+          '<div>Higher: <b>' + formatNumber(a.higherAmount) + '</b></div><div>Rate: <b>' + formatNaira(a.higherRate) + '</b></div>' +
           '<div>Min: <b>' + formatNaira(a.minAmount) + '</b></div><div>Limit: <b>' + formatNaira(a.maxAmount) + '</b></div>' +
         '</div>' +
         '<div class="account-actions">' +
@@ -403,7 +440,7 @@
   }
   function startEditAccount(a){
     editingId.value = a.id;
-    document.getElementById("aTitle").value = a.title;
+    refreshUsedCountries(a.title);
     document.getElementById("aBank").value = a.bankName;
     document.getElementById("aNumber").value = a.accountNumber;
     document.getElementById("aStaffSelect").value = a.staffId || "";
@@ -419,8 +456,9 @@
   }
   function resetAccountForm(){
     editingId.value = "";
-    ["aTitle","aBank","aNumber","aLowAmt","aLowRate","aHighAmt","aHighRate","aMin","aMax"].forEach(function(id){ document.getElementById(id).value=""; });
+    ["aBank","aNumber","aLowAmt","aLowRate","aHighAmt","aHighRate","aMin","aMax"].forEach(function(id){ document.getElementById(id).value=""; });
     document.getElementById("aStaffSelect").value = "";
+    refreshUsedCountries();
     document.getElementById("saveAccountBtn").textContent = "Add Account";
     document.getElementById("cancelAccountBtn").style.display = "none";
   }

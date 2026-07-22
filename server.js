@@ -201,26 +201,19 @@ app.get('/api/rules', async (req, res) => {
 });
 
 // ============================================================
-// CUSTOMER: request an account for a given amount
+// CUSTOMER: browse accounts (searchable by country/title)
 // ============================================================
 app.get('/api/accounts', requireUser, requireApprovedUser, async (req, res) => {
   try {
-    const amount = Number(req.query.amount);
-    if (!amount || amount <= 0) return res.status(400).json({ error: 'Enter a valid amount.' });
-    const settings = await store.getSettings();
-    if (amount > settings.maxDeposit) {
-      return res.json({ blocked: true, maxDeposit: settings.maxDeposit });
-    }
-    const accounts = await store.listAccountsForAmount(amount);
-    const applyingRate = accounts.map(a => {
-      const useHigher = amount >= a.higherAmount;
-      return {
+    const accounts = await store.listAccountsPublic();
+    res.json({
+      accounts: accounts.map(a => ({
         id: a.id, title: a.title, accountNumber: a.accountNumber, bankName: a.bankName, imageData: a.imageData,
-        rate: useHigher ? a.higherRate : a.lowestRate,
-        tierLabel: useHigher ? 'Higher rate' : 'Standard rate'
-      };
+        minAmount: a.minAmount, maxAmount: a.maxAmount,
+        lowestAmount: a.lowestAmount, lowestRate: a.lowestRate,
+        higherAmount: a.higherAmount, higherRate: a.higherRate
+      }))
     });
-    res.json({ blocked: false, accounts: applyingRate });
   } catch (err) {
     console.error('Accounts error:', err);
     res.status(500).json({ error: 'Could not load accounts.' });
@@ -235,6 +228,10 @@ app.post('/api/trades', requireUser, requireApprovedUser, async (req, res) => {
     const { accountId, intendedAmount, receiptImage } = req.body || {};
     if (!accountId || !intendedAmount || !receiptImage) {
       return res.status(400).json({ error: 'Account, amount and receipt are all required.' });
+    }
+    const settings = await store.getSettings();
+    if (Number(intendedAmount) > settings.maxDeposit) {
+      return res.status(400).json({ error: 'This amount is above what we can process directly through the site — please chat with us instead.' });
     }
     const account = await store.findAccountById(accountId);
     if (!account || !account.active) return res.status(404).json({ error: 'That account is no longer available.' });

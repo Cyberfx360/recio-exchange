@@ -30,7 +30,7 @@
   .account-form{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:22px; display:grid; grid-template-columns:1fr 1fr; gap:14px; }
   .account-form .full{ grid-column:1/-1; }
   .account-form label{ font-size:10.5px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px; }
-  .account-form input{ width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:13.5px; }
+  .account-form input, .account-form select{ width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:13.5px; }
   .account-form .actions{ grid-column:1/-1; display:flex; gap:10px; }
   .btn-submit{ padding:12px 22px; background:var(--blue); color:#fff; border:none; border-radius:9px; font-weight:700; font-size:12.5px; }
   .btn-cancel{ padding:12px 22px; background:#F1F4F8; color:var(--ink); border:none; border-radius:9px; font-weight:700; font-size:12.5px; }
@@ -101,11 +101,11 @@
       <h1>Your Accounts</h1>
       <div class="account-form" id="accountForm">
         <input type="hidden" id="editingId">
-        <div><label>Title (e.g. Country / Label)</label><input type="text" id="aTitle" placeholder="MEXICO"></div>
+        <div><label>Country</label><select id="aTitle"><option value="">Select country</option></select></div>
         <div><label>Bank Name</label><input type="text" id="aBank" placeholder="GTBank"></div>
         <div class="full">
           <label>Account Number</label>
-          <input type="text" id="aNumber" placeholder="e.g. 0123456789 or a wallet/username">
+          <textarea id="aNumber" rows="2" placeholder="e.g. 0123456789 or a wallet/username" style="width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:13.5px; font-family:inherit; resize:vertical;"></textarea>
         </div>
         <div><label>Minimum Accepted</label><input type="number" id="aMin" placeholder="500"></div>
         <div><label>Limit (Maximum Accepted)</label><input type="number" id="aMax" placeholder="3000000"></div>
@@ -155,8 +155,46 @@
 (function(){
   "use strict";
   function formatNaira(n){ return "₦" + Number(n).toLocaleString("en-NG"); }
+  function formatNumber(n){ return Number(n).toLocaleString("en-NG"); }
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
   function formatDate(iso){ return new Date(iso).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }); }
+
+  var COUNTRIES = [
+    { name:"Mexico", flag:"🇲🇽" }, { name:"Ecuador", flag:"🇪🇨" }, { name:"Guatemala", flag:"🇬🇹" },
+    { name:"Venezuela", flag:"🇻🇪" }, { name:"Bolivia", flag:"🇧🇴" }, { name:"Colombia", flag:"🇨🇴" },
+    { name:"Nicaragua", flag:"🇳🇮" }, { name:"Panama", flag:"🇵🇦" }, { name:"Peru", flag:"🇵🇪" },
+    { name:"Costa Rica", flag:"🇨🇷" }, { name:"Chile", flag:"🇨🇱" }, { name:"El Salvador", flag:"🇸🇻" },
+    { name:"Paraguay", flag:"🇵🇾" }, { name:"Argentina", flag:"🇦🇷" }, { name:"Brazil", flag:"🇧🇷" },
+    { name:"Dominican Republic", flag:"🇩🇴" }, { name:"South Africa", flag:"🇿🇦" }, { name:"Spain", flag:"🇪🇸" },
+    { name:"Uruguay", flag:"🇺🇾" }, { name:"Honduras", flag:"🇭🇳" }, { name:"Ukraine", flag:"🇺🇦" },
+    { name:"Russia", flag:"🇷🇺" }, { name:"Morocco", flag:"🇲🇦" }, { name:"UAE", flag:"🇦🇪" },
+    { name:"Myanmar", flag:"🇲🇲" }, { name:"Hong Kong", flag:"🇭🇰" }, { name:"Malaysia", flag:"🇲🇾" },
+    { name:"Thailand", flag:"🇹🇭" }, { name:"Saudi Arabia", flag:"🇸🇦" }, { name:"India", flag:"🇮🇳" },
+    { name:"Portugal", flag:"🇵🇹" }, { name:"Italy", flag:"🇮🇹" }, { name:"Angola", flag:"🇦🇴" },
+    { name:"Kenya", flag:"🇰🇪" }, { name:"Kazakhstan", flag:"🇰🇿" }, { name:"Oman", flag:"🇴🇲" },
+    { name:"Egypt", flag:"🇪🇬" }, { name:"USA", flag:"🇺🇸" }, { name:"Nigeria", flag:"🇳🇬" },
+    { name:"United Kingdom", flag:"🇬🇧" }, { name:"Canada", flag:"🇨🇦" }, { name:"Germany", flag:"🇩🇪" },
+    { name:"France", flag:"🇫🇷" }, { name:"China", flag:"🇨🇳" }, { name:"Indonesia", flag:"🇮🇩" }
+  ];
+  var usedCountryTitles = [];
+
+  function populateCountrySelect(keepCurrent){
+    var sel = document.getElementById("aTitle");
+    var current = keepCurrent || "";
+    sel.innerHTML = '<option value="">Select country</option>' + COUNTRIES.map(function(c){
+      var full = c.flag + " " + c.name;
+      var taken = usedCountryTitles.indexOf(full) !== -1 && full !== current;
+      return '<option value="' + full + '"' + (taken ? ' disabled' : '') + '>' + full + (taken ? ' (already on board)' : '') + '</option>';
+    }).join("");
+    if(current) sel.value = current;
+  }
+  function refreshUsedCountries(keepCurrent){
+    fetch("/api/rates").then(function(r){ return r.json(); }).then(function(data){
+      usedCountryTitles = (data.rates || []).map(function(r){ return r.title; });
+      populateCountrySelect(keepCurrent);
+    });
+  }
+  refreshUsedCountries();
 
   fetch("/api/staff/me").then(function(r){ return r.json(); }).then(function(data){
     if(!data.loggedIn){ window.location.href="/staff-login.html"; return; }
@@ -234,7 +272,7 @@
   }
   function startEditAccount(a){
     editingId.value = a.id;
-    document.getElementById("aTitle").value = a.title;
+    refreshUsedCountries(a.title);
     document.getElementById("aBank").value = a.bankName;
     document.getElementById("aNumber").value = a.accountNumber;
     document.getElementById("aMin").value = a.minAmount;
@@ -247,7 +285,8 @@
   }
   function resetAccountForm(){
     editingId.value = "";
-    ["aTitle","aBank","aNumber","aMin","aMax"].forEach(function(id){ document.getElementById(id).value=""; });
+    ["aBank","aNumber","aMin","aMax"].forEach(function(id){ document.getElementById(id).value=""; });
+    refreshUsedCountries();
     pendingAccountImage = null;
     document.getElementById("aImageBox").innerHTML = "Click to upload";
     document.getElementById("saveAccountBtn").textContent = "Add Account";
@@ -264,7 +303,7 @@
       maxAmount: document.getElementById("aMax").value,
       imageData: pendingAccountImage
     };
-    if(!payload.title || !payload.bankName || !payload.accountNumber){ alert("Title, bank and account number are required."); return; }
+    if(!payload.title || !payload.bankName || !payload.accountNumber){ alert("Country, bank and account number are required."); return; }
     var id = editingId.value;
     var req = id
       ? fetch("/api/staff/accounts/" + id, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) })

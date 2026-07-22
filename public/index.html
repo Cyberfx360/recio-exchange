@@ -252,6 +252,7 @@
 (function(){
   "use strict";
   function formatNaira(n){ return "₦" + Number(n).toLocaleString("en-NG"); }
+  function formatNumber(n){ return Number(n).toLocaleString("en-NG"); }
   function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return { "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]; }); }
 
   var currentUser = null;
@@ -282,8 +283,8 @@
     if(list.length === 0){ boardBody.innerHTML = '<tr><td colspan="5" class="board-empty">No rates match your search.</td></tr>'; return; }
     boardBody.innerHTML = list.map(function(r){
       return "<tr><td class=\"title-cell\">" + escapeHtml(r.title) + "</td>" +
-        "<td>" + formatNaira(r.lowestAmount) + "</td><td class=\"rate-cell\">" + formatNaira(r.lowestRate) + "</td>" +
-        "<td>" + formatNaira(r.higherAmount) + "</td><td class=\"rate-cell\">" + formatNaira(r.higherRate) + "</td></tr>";
+        "<td>" + formatNumber(r.lowestAmount) + "</td><td class=\"rate-cell\">" + formatNaira(r.lowestRate) + "</td>" +
+        "<td>" + formatNumber(r.higherAmount) + "</td><td class=\"rate-cell\">" + formatNaira(r.higherRate) + "</td></tr>";
     }).join("");
   }
   fetch("/api/rates").then(function(r){ return r.json(); }).then(function(data){
