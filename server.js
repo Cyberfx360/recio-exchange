@@ -109,6 +109,18 @@ app.get('/api/me', async (req, res) => {
   }
 });
 
+app.put('/api/me', requireUser, async (req, res) => {
+  try {
+    const { bankName, accountNumber } = req.body || {};
+    if (!bankName || !accountNumber) return res.status(400).json({ error: 'Bank name and account number are required.' });
+    await store.updateUser(req.session.userId, { bankName: String(bankName).trim(), accountNumber: String(accountNumber).trim() });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Update me error:', err);
+    res.status(500).json({ error: 'Could not update your bank details.' });
+  }
+});
+
 // ============================================================
 // STAFF AUTH
 // ============================================================
@@ -355,7 +367,19 @@ app.delete('/api/staff/accounts/:id', requireStaff, requireApprovedStaff, async 
 // STAFF: trades on accounts they provided
 // ============================================================
 app.get('/api/staff/trades', requireStaff, requireApprovedStaff, async (req, res) => {
-  try { res.json({ trades: await store.listTradesForStaff(req.staff.id) }); }
+  try {
+    const trades = await store.listTradesForStaff(req.staff.id);
+    const accounts = await store.listAccountsByStaff(req.staff.id);
+    const enriched = trades.map(t => {
+      const acc = accounts.find(a => a.id === t.accountId);
+      return {
+        ...t,
+        lowestAmount: acc ? acc.lowestAmount : null, lowestRate: acc ? acc.lowestRate : null,
+        higherAmount: acc ? acc.higherAmount : null, higherRate: acc ? acc.higherRate : null
+      };
+    });
+    res.json({ trades: enriched });
+  }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load trades.' }); }
 });
 
@@ -363,11 +387,17 @@ app.post('/api/staff/trades/:id/mark', requireStaff, requireApprovedStaff, async
   try {
     const trade = await store.findTradeById(req.params.id);
     if (!trade || trade.staffId !== req.staff.id) return res.status(403).json({ error: 'You can only act on receipts for accounts you provided.' });
-    const { status, reason } = req.body || {};
+    const { status, reason, creditedAmount } = req.body || {};
     if (!['seen', 'confirmed', 'approved', 'failed'].includes(status)) return res.status(400).json({ error: 'Invalid status.' });
     if (status === 'failed' && !reason) return res.status(400).json({ error: 'A reason is required when marking a payment as failed.' });
-    await store.updateTradeStatus(trade.id, { status, failReason: status === 'failed' ? reason : trade.failReason });
-    if (status === 'approved') await store.addToBalance(trade.userId, trade.intendedAmount);
+    if (status === 'approved' && (!creditedAmount || Number(creditedAmount) <= 0)) {
+      return res.status(400).json({ error: 'Enter the amount to credit to the customer\'s balance (based on the rate), not just the amount they sent.' });
+    }
+    await store.updateTradeStatus(trade.id, {
+      status, failReason: status === 'failed' ? reason : trade.failReason,
+      creditedAmount: status === 'approved' ? Number(creditedAmount) : trade.creditedAmount
+    });
+    if (status === 'approved') await store.addToBalance(trade.userId, Number(creditedAmount));
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update trade.' }); }
 });
@@ -472,12 +502,18 @@ app.get('/api/admin/trades', requireAdmin, async (req, res) => {
     const trades = await store.listAllTrades();
     const users = await store.listUsers();
     const staffList = await store.listStaff();
-    const enriched = trades.map(t => ({
-      ...t,
-      userName: (users.find(u => u.id === t.userId) || {}).name || 'Unknown',
-      userPhone: (users.find(u => u.id === t.userId) || {}).phone || '',
-      staffName: (staffList.find(s => s.id === t.staffId) || {}).name || 'Unassigned'
-    }));
+    const accounts = await store.listAllAccounts();
+    const enriched = trades.map(t => {
+      const acc = accounts.find(a => a.id === t.accountId);
+      return {
+        ...t,
+        userName: (users.find(u => u.id === t.userId) || {}).name || 'Unknown',
+        userPhone: (users.find(u => u.id === t.userId) || {}).phone || '',
+        staffName: (staffList.find(s => s.id === t.staffId) || {}).name || 'Unassigned',
+        lowestAmount: acc ? acc.lowestAmount : null, lowestRate: acc ? acc.lowestRate : null,
+        higherAmount: acc ? acc.higherAmount : null, higherRate: acc ? acc.higherRate : null
+      };
+    });
     res.json({ trades: enriched });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load trades.' }); }
 });
@@ -486,20 +522,26 @@ app.post('/api/admin/trades/:id/mark', requireAdmin, async (req, res) => {
   try {
     const trade = await store.findTradeById(req.params.id);
     if (!trade) return res.status(404).json({ error: 'Trade not found.' });
-    const { status, reason } = req.body || {};
+    const { status, reason, creditedAmount } = req.body || {};
     if (!['seen', 'confirmed', 'approved', 'failed'].includes(status)) return res.status(400).json({ error: 'Invalid status.' });
     if (status === 'failed' && !reason) return res.status(400).json({ error: 'A reason is required when marking a payment as failed.' });
+    if (status === 'approved' && (!creditedAmount || Number(creditedAmount) <= 0)) {
+      return res.status(400).json({ error: 'Enter the amount to credit to the customer\'s balance (based on the rate), not just the amount they sent.' });
+    }
 
     const wasApproved = trade.status === 'approved';
-    await store.updateTradeStatus(trade.id, { status, failReason: status === 'failed' ? reason : trade.failReason });
+    await store.updateTradeStatus(trade.id, {
+      status, failReason: status === 'failed' ? reason : trade.failReason,
+      creditedAmount: status === 'approved' ? Number(creditedAmount) : trade.creditedAmount
+    });
 
-    // Admin can undo an approved trade back to failed — reverse the balance credit.
+    // Admin can undo an approved trade back to failed — reverse the exact amount that was credited.
     if (wasApproved && status === 'failed') {
-      await store.addToBalance(trade.userId, -trade.intendedAmount);
+      await store.addToBalance(trade.userId, -trade.creditedAmount);
     }
     // Admin approving directly (not previously approved) also credits balance.
     if (!wasApproved && status === 'approved') {
-      await store.addToBalance(trade.userId, trade.intendedAmount);
+      await store.addToBalance(trade.userId, Number(creditedAmount));
     }
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update trade.' }); }

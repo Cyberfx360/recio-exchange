@@ -142,6 +142,19 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="approveModal">
+    <div class="modal">
+      <h3>Approve &amp; Credit Balance</h3>
+      <div id="approveHint" style="font-size:12px; color:var(--gray); background:#F8FAFC; border-radius:9px; padding:10px 12px; margin-bottom:14px;"></div>
+      <label style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px;">Amount to Credit (₦) — based on the rate, not the amount sent</label>
+      <input type="number" id="creditedAmountInput" placeholder="e.g. 26000" style="width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:14px; margin-bottom:16px;">
+      <div class="modal-actions">
+        <button class="btn-cancel" data-close="approveModal" style="flex:1; padding:11px; border-radius:9px; border:none; font-weight:700; background:#F1F4F8;">Cancel</button>
+        <button class="btn-approve" id="confirmApproveBtn" style="flex:1;">Approve</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="imgModal">
     <div class="modal">
       <h3>Receipt</h3>
@@ -315,9 +328,11 @@
     confirmed: { label:"Confirmed", cls:"badge-confirmed" }, approved: { label:"Approved", cls:"badge-approved" },
     failed: { label:"Failed", cls:"badge-failed" }
   };
+  var lastTrades = [];
   function loadReceipts(){
     fetch("/api/staff/trades").then(function(r){ return r.json(); }).then(function(data){
-      renderReceipts(data.trades || []);
+      lastTrades = data.trades || [];
+      renderReceipts(lastTrades);
     });
   }
   function renderReceipts(trades){
@@ -334,7 +349,7 @@
           '<button class="btn-fail" data-id="' + t.id + '" data-action="failed">Failed</button>' +
         '</div>';
       } else {
-        actions = '<div class="fail-reason-box" style="background:#F0FDF4; color:#166534;">Approved — balance updated.</div>';
+        actions = '<div class="fail-reason-box" style="background:#F0FDF4; color:#166534;">Approved — ' + formatNaira(t.creditedAmount || 0) + ' credited to balance.</div>';
       }
       return '<div class="receipt-item">' +
         '<div class="receipt-top"><div><div class="title">' + escapeHtml(t.accountTitleUsed) + ' — ' + formatNaira(t.intendedAmount) + '</div>' +
@@ -357,13 +372,15 @@
       btn.addEventListener("click", function(){
         var id = btn.getAttribute("data-id"), action = btn.getAttribute("data-action");
         if(action === "failed"){ openFailModal(id, "staff"); return; }
+        if(action === "approved"){ openApproveModal(id, "staff"); return; }
         markTrade(id, action, null, "staff");
       });
     });
   }
-  function markTrade(id, status, reason, who){
+  function markTrade(id, status, extra, who){
     var url = who === "admin" ? "/api/admin/trades/" + id + "/mark" : "/api/staff/trades/" + id + "/mark";
-    fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ status:status, reason:reason }) })
+    var payload = Object.assign({ status: status }, extra || {});
+    fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) })
       .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,data:d}; }); })
       .then(function(res){
         if(!res.ok){ alert(res.data.error || "Could not update."); return; }
@@ -376,13 +393,34 @@
     var reason = document.getElementById("failReasonInput").value.trim();
     if(!reason){ alert("Please provide a reason."); return; }
     document.getElementById("failModal").classList.remove("open");
-    markTrade(failTargetId, "failed", reason, "staff");
+    markTrade(failTargetId, "failed", { reason: reason }, "staff");
+  });
+
+  var approveTargetId = null;
+  function openApproveModal(id){
+    approveTargetId = id;
+    var t = lastTrades.find(function(x){ return x.id === id; });
+    var hint = "Customer said they sent " + formatNaira(t ? t.intendedAmount : 0) + ".";
+    if(t && t.lowestAmount !== null){
+      hint += " Rate reference — " + formatNaira(t.lowestAmount) + ": " + formatNaira(t.lowestRate) +
+        " · " + formatNaira(t.higherAmount) + ": " + formatNaira(t.higherRate) + ".";
+    }
+    document.getElementById("approveHint").textContent = hint;
+    document.getElementById("creditedAmountInput").value = "";
+    document.getElementById("approveModal").classList.add("open");
+  }
+  document.getElementById("confirmApproveBtn").addEventListener("click", function(){
+    var amount = Number(document.getElementById("creditedAmountInput").value);
+    if(!amount || amount <= 0){ alert("Enter a valid amount to credit."); return; }
+    document.getElementById("approveModal").classList.remove("open");
+    markTrade(approveTargetId, "approved", { creditedAmount: amount }, "staff");
   });
   document.querySelectorAll("[data-close]").forEach(function(btn){
     btn.addEventListener("click", function(){ document.getElementById(btn.getAttribute("data-close")).classList.remove("open"); });
   });
 
   loadAccounts();
+  setInterval(function(){ loadAccounts(); loadReceipts(); }, 8000);
 })();
 </script>
 </body>

@@ -75,6 +75,9 @@
   .board-empty{ text-align:center; padding:50px 20px; color:var(--gray); font-size:13px; }
 
   .how{ padding:0 0 64px; }
+  .updates{ padding:0 0 56px; }
+  .updates-inner{ background:#EAF1FF; border-radius:16px; padding:28px 32px; display:flex; justify-content:space-between; align-items:center; gap:20px; flex-wrap:wrap; }
+  @media(max-width:640px){ .updates-inner{ flex-direction:column; align-items:flex-start; } }
   .how-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:20px; }
   @media(max-width:760px){ .how-grid{ grid-template-columns:1fr; } }
   .how-card{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:22px; }
@@ -204,6 +207,19 @@
       <h3>Upload &amp; get credited</h3>
       <p>Send the payment, upload your receipt, and once we verify it your balance is updated.</p>
     </div>
+  </div>
+</section>
+
+<section class="updates" id="updates">
+  <div class="wrap updates-inner">
+    <div>
+      <h2 style="font-family:'Manrope',sans-serif; font-size:clamp(20px,3vw,26px); margin-bottom:8px;">Account Status Updates</h2>
+      <p style="font-size:13.5px; color:var(--gray); max-width:480px;">
+        Accounts can go active or inactive from time to time. Until our app is ready to send push
+        notifications, join our Telegram channel to get notified the moment an account's status changes.
+      </p>
+    </div>
+    <a href="https://t.me/RECIOEXCHANGE" target="_blank" rel="noopener" class="btn btn-blue" style="white-space:nowrap;">Join Updates Channel</a>
   </div>
 </section>
 

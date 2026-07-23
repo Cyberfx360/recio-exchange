@@ -59,7 +59,7 @@ async function updateUser(id, fields) {
   const patch = {};
   if (fields.name !== undefined) patch.name = fields.name;
   if (fields.bankName !== undefined) patch.bank_name = fields.bankName;
-  // accountNumber intentionally NOT editable after signup, per business rule
+  if (fields.accountNumber !== undefined) patch.account_number = fields.accountNumber;
   const { error } = await supabase.from('users').update(patch).eq('id', id);
   if (error) throw error;
 }
@@ -187,7 +187,8 @@ async function deleteAccount(id) {
 function tradeRow(r) {
   return {
     id: r.id, userId: r.user_id, accountId: r.account_id, staffId: r.staff_id,
-    intendedAmount: Number(r.intended_amount), receiptImage: r.receipt_image,
+    intendedAmount: Number(r.intended_amount), creditedAmount: r.credited_amount === null ? null : Number(r.credited_amount),
+    receiptImage: r.receipt_image,
     status: r.status, failReason: r.fail_reason,
     accountNumberUsed: r.account_number_used, accountTitleUsed: r.account_title_used,
     userPayoutAccount: r.user_payout_account, userPayoutBank: r.user_payout_bank,
@@ -230,6 +231,7 @@ async function listAllTrades() {
 async function updateTradeStatus(id, opts) {
   const patch = { status: opts.status, updated_at: new Date().toISOString() };
   if (opts.failReason !== undefined) patch.fail_reason = opts.failReason;
+  if (opts.creditedAmount !== undefined) patch.credited_amount = opts.creditedAmount;
   const { error } = await supabase.from('trades').update(patch).eq('id', id);
   if (error) throw error;
 }

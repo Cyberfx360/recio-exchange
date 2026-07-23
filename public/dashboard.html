@@ -95,10 +95,16 @@
     <div class="modal">
       <h3>Your Bank Details</h3>
       <div class="info-row"><span>Name</span><span id="mName">—</span></div>
-      <div class="info-row"><span>Bank</span><span id="mBank">—</span></div>
-      <div class="info-row"><span>Account Number</span><span id="mAccount">—</span></div>
-      <p style="margin-top:14px;">This is where your approved payments are sent. It can't be changed — message us on Telegram <a href="https://t.me/RECIOEXCHANGE1" target="_blank" rel="noopener" style="color:var(--blue); text-decoration:underline; font-weight:700;">@RECIOEXCHANGE1</a> if it's incorrect.</p>
-      <button class="modal-close" data-close="banksModal">Close</button>
+      <div style="margin-top:14px;">
+        <label style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px;">Bank Name</label>
+        <input type="text" id="mBankInput" style="width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:14px; margin-bottom:14px;">
+        <label style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px;">Account Number</label>
+        <input type="text" id="mAccountInput" style="width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:14px;">
+      </div>
+      <div id="bankEditMsg" style="display:none; font-size:12px; padding:9px 12px; border-radius:8px; margin-top:12px; background:#FEECEC; color:#B91C1C;"></div>
+      <p style="margin-top:14px;">This is where your approved payments are sent — make sure it's correct. Questions? Message us on Telegram <a href="https://t.me/RECIOEXCHANGE1" target="_blank" rel="noopener" style="color:var(--blue); text-decoration:underline; font-weight:700;">@RECIOEXCHANGE1</a>.</p>
+      <button class="modal-close" id="saveBankBtn" style="margin-top:14px;">Save Changes</button>
+      <button class="modal-close" data-close="banksModal" style="margin-top:10px; background:#F1F4F8; color:var(--ink);">Close</button>
     </div>
   </div>
 
@@ -137,15 +143,31 @@
     meData = data;
     document.getElementById("balanceAmount").textContent = formatNaira(data.balance);
     document.getElementById("mName").textContent = data.name;
-    document.getElementById("mBank").textContent = data.bankName;
-    document.getElementById("mAccount").textContent = data.accountNumber;
   });
 
   document.getElementById("logoutBtn").addEventListener("click", function(){
     fetch("/api/logout", { method:"POST" }).then(function(){ window.location.href="/"; });
   });
 
-  document.getElementById("banksBtn").addEventListener("click", function(){ document.getElementById("banksModal").classList.add("open"); });
+  document.getElementById("banksBtn").addEventListener("click", function(){
+    document.getElementById("bankEditMsg").style.display = "none";
+    document.getElementById("mBankInput").value = meData ? meData.bankName : "";
+    document.getElementById("mAccountInput").value = meData ? meData.accountNumber : "";
+    document.getElementById("banksModal").classList.add("open");
+  });
+  document.getElementById("saveBankBtn").addEventListener("click", function(){
+    var bankName = document.getElementById("mBankInput").value.trim();
+    var accountNumber = document.getElementById("mAccountInput").value.trim();
+    var msgEl = document.getElementById("bankEditMsg");
+    if(!bankName || !accountNumber){ msgEl.textContent = "Both fields are required."; msgEl.style.display = "block"; return; }
+    fetch("/api/me", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ bankName: bankName, accountNumber: accountNumber }) })
+      .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, data:d}; }); })
+      .then(function(res){
+        if(!res.ok){ msgEl.textContent = res.data.error || "Could not save."; msgEl.style.display = "block"; return; }
+        meData.bankName = bankName; meData.accountNumber = accountNumber;
+        document.getElementById("banksModal").classList.remove("open");
+      });
+  });
   document.getElementById("rulesBtn").addEventListener("click", function(){
     document.getElementById("rulesModal").classList.add("open");
     fetch("/api/rules").then(function(r){ return r.json(); }).then(function(d){

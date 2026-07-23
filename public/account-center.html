@@ -82,11 +82,11 @@
 
   <main class="wrap">
     <h1>Get an Account</h1>
-    <p class="lead">Search for a country to see its account, minimum, limit, and rate.</p>
+    <p class="lead">Search by country or bank to see the account, minimum, limit, and rate.</p>
 
     <div class="search-wrap">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-      <input type="text" id="accountSearch" placeholder="Search country...">
+      <input type="text" id="accountSearch" placeholder="Search country or bank...">
     </div>
 
     <div class="accounts-grid" id="accountsGrid">
@@ -140,7 +140,9 @@
 
   function renderAccounts(){
     var q = accountSearch.value.trim().toLowerCase();
-    var filtered = q ? allAccounts.filter(function(a){ return a.title.toLowerCase().indexOf(q) !== -1; }) : allAccounts;
+    var filtered = q ? allAccounts.filter(function(a){
+      return a.title.toLowerCase().indexOf(q) !== -1 || a.bankName.toLowerCase().indexOf(q) !== -1;
+    }) : allAccounts;
     if(filtered.length === 0){
       grid.innerHTML = '<div class="empty-note">' + (allAccounts.length === 0 ? "No accounts available right now — check back soon or chat with us." : "No accounts match your search.") + '</div>';
       return;

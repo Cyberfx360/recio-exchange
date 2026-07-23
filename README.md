@@ -1,5 +1,12 @@
 # RECIO EXCHANGE — Manual Deposit Verification Platform
 
+> **Already live with data in Supabase?** This update needs one small database change —
+> run this single line in your Supabase SQL Editor before deploying the new code:
+> ```sql
+> alter table trades add column if not exists credited_amount numeric;
+> ```
+> That's it — no other schema changes, nothing else to touch in Supabase.
+
 Customers send money into an account you provide, upload a receipt, and your team manually
 verifies and credits their balance. Three roles: **Customer**, **Staff**, **Admin**.
 
@@ -74,6 +81,7 @@ create table trades (
   account_id uuid references accounts(id),
   staff_id uuid references staff(id),
   intended_amount numeric not null,
+  credited_amount numeric,                     -- the actual amount credited to balance, entered manually based on the rate
   receipt_image text not null,
   status text not null default 'checking',   -- checking / seen / confirmed / approved / failed
   fail_reason text,

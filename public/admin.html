@@ -265,6 +265,19 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="approveModal">
+    <div class="modal">
+      <h3>Approve &amp; Credit Balance</h3>
+      <div id="approveHint" style="font-size:12px; color:var(--gray); background:#F8FAFC; border-radius:9px; padding:10px 12px; margin-bottom:14px;"></div>
+      <label style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px;">Amount to Credit (₦) — based on the rate, not the amount sent</label>
+      <input type="number" id="creditedAmountInput" placeholder="e.g. 26000" style="width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:14px; margin-bottom:16px;">
+      <div style="display:flex; gap:10px;">
+        <button data-close="approveModal" style="flex:1; padding:11px; border-radius:9px; border:none; font-weight:700; background:#F1F4F8;">Cancel</button>
+        <button id="confirmApproveBtn" style="flex:1; padding:11px; border-radius:9px; border:none; font-weight:700; background:var(--green); color:#fff;">Approve</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="imgModal">
     <div class="modal">
       <h3>Receipt</h3>
@@ -328,7 +341,15 @@
         if(!r.ok){ gateError.classList.add("show"); return; }
         gate.style.display="none"; dashboard.style.display="block";
         loadUsers(); loadStaff(); loadAccounts(); loadTrades(); loadWithdrawals(); loadSettings(); loadThreads(); refreshUsedCountries();
+        startAutoRefresh();
       });
+  }
+  var autoRefreshTimer = null;
+  function startAutoRefresh(){
+    if(autoRefreshTimer) clearInterval(autoRefreshTimer);
+    autoRefreshTimer = setInterval(function(){
+      loadUsers(); loadStaff(); loadAccounts(); loadTrades(); loadWithdrawals(); loadThreads();
+    }, 8000);
   }
   document.getElementById("adminLoginBtn").addEventListener("click", login);
   adminPassword.addEventListener("keydown", function(e){ if(e.key==="Enter") login(); });
@@ -488,9 +509,11 @@
     confirmed: { label:"Confirmed", cls:"badge-confirmed" }, approved: { label:"Approved", cls:"badge-approved" },
     failed: { label:"Failed", cls:"badge-failed" }
   };
+  var lastTrades = [];
   function loadTrades(){
     fetch("/api/admin/trades").then(function(r){ return r.json(); }).then(function(data){
-      renderTrades(data.trades || []);
+      lastTrades = data.trades || [];
+      renderTrades(lastTrades);
     });
   }
   function renderTrades(trades){
@@ -501,21 +524,22 @@
       var reason = (t.status === "failed" && t.failReason) ? '<div class="fail-reason-box">Reason: ' + escapeHtml(t.failReason) + '</div>' : '';
       var actions = '<div class="action-row">' +
         '<button class="btn-confirm" data-id="' + t.id + '" data-action="confirmed">Confirm</button>' +
-        '<button class="btn-approve" data-id="' + t.id + '" data-action="approved">Approve</button>' +
+        '<button class="btn-approve" data-id="' + t.id + '" data-action="approved">' + (t.status === "approved" ? "Re-approve" : "Approve") + '</button>' +
         '<button class="btn-fail" data-id="' + t.id + '" data-action="failed">Failed</button>' +
       '</div>';
       var settlement = t.settlementStatus === "done"
         ? '<div class="download-link" style="text-decoration:none; color:#166534;">✓ Staff settlement received</div>'
         : '<div class="download-link" style="text-decoration:none; color:var(--gray);">Staff settlement pending</div>';
+      var creditedNote = t.status === "approved" ? '<div class="fail-reason-box" style="background:#F0FDF4; color:#166534;">' + formatNaira(t.creditedAmount || 0) + ' credited to balance.</div>' : '';
       return '<div class="receipt-item">' +
-        '<div class="receipt-top"><div><div class="title">' + escapeHtml(t.accountTitleUsed) + ' — ' + formatNaira(t.intendedAmount) + '</div>' +
+        '<div class="receipt-top"><div><div class="title">' + escapeHtml(t.accountTitleUsed) + ' — sent ' + formatNaira(t.intendedAmount) + '</div>' +
         '<div class="sub">' + formatDate(t.createdAt) + '</div></div><span class="badge ' + s.cls + '">' + s.label + '</span></div>' +
         '<div class="audit-grid">' +
           '<div>Customer: <b>' + escapeHtml(t.userName) + '</b></div><div>Phone: <b>' + escapeHtml(t.userPhone) + '</b></div>' +
           '<div>Paid into: <b>' + escapeHtml(t.accountNumberUsed) + '</b></div><div>Handled by: <b>' + escapeHtml(t.staffName) + '</b></div>' +
           '<div>Payout account: <b>' + escapeHtml(t.userPayoutAccount) + '</b></div><div>Payout bank: <b>' + escapeHtml(t.userPayoutBank) + '</b></div>' +
         '</div>' +
-        settlement +
+        settlement + creditedNote +
         '<div class="receipt-body">' +
           '<div class="receipt-img-wrap"><img src="' + t.receiptImage + '" data-full="' + t.receiptImage + '" alt="Receipt"><a href="' + t.receiptImage + '" download="receipt.jpg" class="download-link">Download</a></div>' +
           '<div class="receipt-actions">' + actions + reason + '</div>' +
@@ -532,16 +556,37 @@
     list.querySelectorAll("[data-action]").forEach(function(btn){
       btn.addEventListener("click", function(){
         var id = btn.getAttribute("data-id"), action = btn.getAttribute("data-action");
-        if(action === "failed"){ openFailModal(id); return; }
+        if(action === "failed"){ openFailModal(id, "trade"); return; }
+        if(action === "approved"){ openApproveModal(id); return; }
         markTradeAdmin(id, action, null);
       });
     });
   }
-  function markTradeAdmin(id, status, reason){
-    fetch("/api/admin/trades/" + id + "/mark", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ status:status, reason:reason }) })
+  function markTradeAdmin(id, status, extra){
+    var payload = Object.assign({ status: status }, extra || {});
+    fetch("/api/admin/trades/" + id + "/mark", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) })
       .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,data:d}; }); })
       .then(function(res){ if(!res.ok){ alert(res.data.error || "Could not update."); return; } loadTrades(); loadUsers(); });
   }
+  var approveTargetId = null;
+  function openApproveModal(id){
+    approveTargetId = id;
+    var t = lastTrades.find(function(x){ return x.id === id; });
+    var hint = "Customer said they sent " + formatNaira(t ? t.intendedAmount : 0) + ".";
+    if(t && t.lowestAmount !== null && t.lowestAmount !== undefined){
+      hint += " Rate reference — " + formatNumber(t.lowestAmount) + ": " + formatNaira(t.lowestRate) +
+        " · " + formatNumber(t.higherAmount) + ": " + formatNaira(t.higherRate) + ".";
+    }
+    document.getElementById("approveHint").textContent = hint;
+    document.getElementById("creditedAmountInput").value = t && t.creditedAmount ? t.creditedAmount : "";
+    document.getElementById("approveModal").classList.add("open");
+  }
+  document.getElementById("confirmApproveBtn").addEventListener("click", function(){
+    var amount = Number(document.getElementById("creditedAmountInput").value);
+    if(!amount || amount <= 0){ alert("Enter a valid amount to credit."); return; }
+    document.getElementById("approveModal").classList.remove("open");
+    markTradeAdmin(approveTargetId, "approved", { creditedAmount: amount });
+  });
   var failTargetId = null;
   var failTargetType = "trade"; // "trade" | "withdrawal"
   function openFailModal(id, type){ failTargetId = id; failTargetType = type || "trade"; document.getElementById("failReasonInput").value=""; document.getElementById("failModal").classList.add("open"); }
@@ -550,7 +595,7 @@
     if(!reason){ alert("Please provide a reason."); return; }
     document.getElementById("failModal").classList.remove("open");
     if(failTargetType === "withdrawal") markWithdrawal(failTargetId, "rejected", reason);
-    else markTradeAdmin(failTargetId, "failed", reason);
+    else markTradeAdmin(failTargetId, "failed", { reason: reason });
   });
   document.querySelectorAll("[data-close]").forEach(function(btn){
     btn.addEventListener("click", function(){ document.getElementById(btn.getAttribute("data-close")).classList.remove("open"); });
