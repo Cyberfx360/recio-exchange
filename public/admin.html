@@ -310,16 +310,12 @@
     var current = keepCurrent || "";
     sel.innerHTML = '<option value="">Select country</option>' + COUNTRIES.map(function(c){
       var full = c.flag + " " + c.name;
-      var taken = usedCountryTitles.indexOf(full) !== -1 && full !== current;
-      return '<option value="' + full + '"' + (taken ? ' disabled' : '') + '>' + full + (taken ? ' (already on board)' : '') + '</option>';
+      return '<option value="' + full + '">' + full + '</option>';
     }).join("");
     if(current) sel.value = current;
   }
   function refreshUsedCountries(keepCurrent){
-    fetch("/api/rates").then(function(r){ return r.json(); }).then(function(data){
-      usedCountryTitles = (data.rates || []).map(function(r){ return r.title; });
-      populateCountrySelect(keepCurrent);
-    });
+    populateCountrySelect(keepCurrent);
   }
 
   var gate=document.getElementById("gate"), dashboard=document.getElementById("dashboard");

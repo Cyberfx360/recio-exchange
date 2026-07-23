@@ -177,8 +177,15 @@ app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; res.j
 app.get('/api/rates', async (req, res) => {
   try {
     const accounts = await store.listAccountsPublic();
+    const seenTitles = new Set();
+    const deduped = [];
+    for (const a of accounts) {
+      if (seenTitles.has(a.title)) continue;
+      seenTitles.add(a.title);
+      deduped.push(a);
+    }
     res.json({
-      rates: accounts.map(a => ({
+      rates: deduped.map(a => ({
         id: a.id, title: a.title,
         lowestAmount: a.lowestAmount, lowestRate: a.lowestRate,
         higherAmount: a.higherAmount, higherRate: a.higherRate
