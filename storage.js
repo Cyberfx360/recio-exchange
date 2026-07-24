@@ -158,7 +158,7 @@ async function createAccount(a) {
     id, staff_id: a.staffId || null, title: a.title, account_number: a.accountNumber, bank_name: a.bankName,
     image_data: a.imageData || null, lowest_amount: a.lowestAmount, lowest_rate: a.lowestRate,
     higher_amount: a.higherAmount, higher_rate: a.higherRate, min_amount: a.minAmount, max_amount: a.maxAmount,
-    active: true
+    active: a.active !== undefined ? a.active : true
   });
   if (error) throw error;
   return findAccountById(id);
@@ -188,8 +188,9 @@ function tradeRow(r) {
   return {
     id: r.id, userId: r.user_id, accountId: r.account_id, staffId: r.staff_id,
     intendedAmount: Number(r.intended_amount), creditedAmount: r.credited_amount === null ? null : Number(r.credited_amount),
+    staffCreditedAmount: r.staff_credited_amount === null ? null : Number(r.staff_credited_amount),
     receiptImage: r.receipt_image,
-    status: r.status, failReason: r.fail_reason,
+    status: r.status, failReason: r.fail_reason, failImage: r.fail_image,
     accountNumberUsed: r.account_number_used, accountTitleUsed: r.account_title_used,
     userPayoutAccount: r.user_payout_account, userPayoutBank: r.user_payout_bank,
     settlementScreenshot: r.settlement_screenshot, settlementStatus: r.settlement_status,
@@ -231,7 +232,11 @@ async function listAllTrades() {
 async function updateTradeStatus(id, opts) {
   const patch = { status: opts.status, updated_at: new Date().toISOString() };
   if (opts.failReason !== undefined) patch.fail_reason = opts.failReason;
+  if (opts.failImage !== undefined) patch.fail_image = opts.failImage;
   if (opts.creditedAmount !== undefined) patch.credited_amount = opts.creditedAmount;
+  if (opts.staffCreditedAmount !== undefined) patch.staff_credited_amount = opts.staffCreditedAmount;
+  if (opts.userPayoutAccount !== undefined) patch.user_payout_account = opts.userPayoutAccount;
+  if (opts.userPayoutBank !== undefined) patch.user_payout_bank = opts.userPayoutBank;
   const { error } = await supabase.from('trades').update(patch).eq('id', id);
   if (error) throw error;
 }
@@ -318,7 +323,7 @@ function withdrawalRow(r) {
   return {
     id: r.id, userId: r.user_id, amount: Number(r.amount),
     payoutAccount: r.payout_account, payoutBank: r.payout_bank,
-    status: r.status, reason: r.reason,
+    status: r.status, reason: r.reason, reasonImage: r.reason_image,
     createdAt: r.created_at, updatedAt: r.updated_at
   };
 }
@@ -350,6 +355,9 @@ async function listAllWithdrawals() {
 async function updateWithdrawalStatus(id, opts) {
   const patch = { status: opts.status, updated_at: new Date().toISOString() };
   if (opts.reason !== undefined) patch.reason = opts.reason;
+  if (opts.reasonImage !== undefined) patch.reason_image = opts.reasonImage;
+  if (opts.payoutAccount !== undefined) patch.payout_account = opts.payoutAccount;
+  if (opts.payoutBank !== undefined) patch.payout_bank = opts.payoutBank;
   const { error } = await supabase.from('withdrawals').update(patch).eq('id', id);
   if (error) throw error;
 }

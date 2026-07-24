@@ -2,7 +2,7 @@
   "name": "recio-exchange-backend",
   "version": "2.0.0",
   "private": true,
-  "description": "RECIO EXCHANGE — manual deposit verification platform with admin, staff and customer roles",
+  "description": "AZAPLUG — manual deposit verification platform with admin, staff and customer roles",
   "scripts": {
     "start": "node server.js"
   },

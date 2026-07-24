@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Staff Dashboard — RECIO EXCHANGE</title>
+<title>Staff Dashboard — AZAPLUG</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -15,7 +15,7 @@
   header{ background:#fff; border-bottom:1px solid var(--line); padding:14px 0; }
   .wrap{ max-width:1000px; margin:0 auto; padding:0 20px; }
   .nav-row{ display:flex; justify-content:space-between; align-items:center; }
-  .logo img{ height:24px; }
+  .logo{ font-family:'Manrope',sans-serif; font-weight:800; font-size:19px; color:var(--blue); letter-spacing:0.02em; }
   .staff-badge{ font-size:11px; font-weight:800; letter-spacing:0.06em; color:var(--blue); background:#EAF1FF; padding:5px 10px; border-radius:6px; margin-left:8px; }
   .logout-btn{ font-size:12.5px; font-weight:700; padding:9px 16px; border:1.5px solid var(--line); border-radius:8px; background:#fff; }
 
@@ -87,7 +87,7 @@
 <body>
   <header>
     <div class="wrap nav-row">
-      <a href="/" class="logo"><img src="/logo.png" alt="Recio"><span class="staff-badge">STAFF</span></a>
+      <a href="/" class="logo">AZAPLUG<span class="staff-badge">STAFF</span></a>
       <button class="logout-btn" id="logoutBtn">Log Out</button>
     </div>
   </header>
@@ -135,6 +135,8 @@
     <div class="modal">
       <h3>Reason for failure</h3>
       <textarea id="failReasonInput" placeholder="e.g. Amount does not match, payment not received..."></textarea>
+      <div class="upload-mini" id="failImageBox" style="border:2px dashed var(--line); border-radius:9px; padding:12px; text-align:center; font-size:12px; color:var(--gray); cursor:pointer; margin-bottom:14px;">Click to attach a photo (optional)</div>
+      <input type="file" id="failImageFile" accept="image/*" style="display:none;">
       <div class="modal-actions">
         <button class="btn-cancel" data-close="failModal" style="flex:1; padding:11px; border-radius:9px; border:none; font-weight:700; background:#F1F4F8;">Cancel</button>
         <button class="btn-fail" id="confirmFailBtn" style="flex:1;">Mark Failed</button>
@@ -144,16 +146,26 @@
 
   <div class="modal-overlay" id="approveModal">
     <div class="modal">
-      <h3>Approve &amp; Credit Balance</h3>
+      <h3>Approve &amp; Propose Amount</h3>
       <div id="approveHint" style="font-size:12px; color:var(--gray); background:#F8FAFC; border-radius:9px; padding:10px 12px; margin-bottom:14px;"></div>
-      <label style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px;">Amount to Credit (₦) — based on the rate, not the amount sent</label>
-      <input type="number" id="creditedAmountInput" placeholder="e.g. 26000" style="width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:14px; margin-bottom:16px;">
+      <label style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px;">Amount You Calculate (₦) — based on the rate, not the amount sent</label>
+      <input type="number" id="creditedAmountInput" placeholder="e.g. 26000" style="width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:14px; margin-bottom:8px;">
+      <p style="font-size:11.5px; color:var(--gray); margin-bottom:16px;">An admin will verify this amount before it's actually credited to the customer's balance.</p>
       <div class="modal-actions">
         <button class="btn-cancel" data-close="approveModal" style="flex:1; padding:11px; border-radius:9px; border:none; font-weight:700; background:#F1F4F8;">Cancel</button>
         <button class="btn-approve" id="confirmApproveBtn" style="flex:1;">Approve</button>
       </div>
     </div>
   </div>
+
+  <div class="modal-overlay" id="tradeDetailModal">
+    <div class="modal" style="max-width:480px;">
+      <h3>Trade Details</h3>
+      <div id="tradeDetailBody"></div>
+      <button data-close="tradeDetailModal" style="width:100%; margin-top:16px; padding:11px; border-radius:9px; border:none; font-weight:700; background:var(--blue); color:#fff;">Close</button>
+    </div>
+  </div>
+
 
   <div class="modal-overlay" id="imgModal">
     <div class="modal">
@@ -340,19 +352,22 @@
     if(trades.length === 0){ list.innerHTML = '<div class="empty-note">No receipts yet for your accounts.</div>'; return; }
     list.innerHTML = trades.map(function(t){
       var s = statusMeta[t.status] || statusMeta.checking;
-      var reason = (t.status === "failed" && t.failReason) ? '<div class="fail-reason-box">Reason: ' + escapeHtml(t.failReason) + '</div>' : '';
+      var reason = (t.status === "failed" && t.failReason) ? '<div class="fail-reason-box">Reason: ' + escapeHtml(t.failReason) + (t.failImage ? ' <a href="#" data-view-fail="' + t.id + '" style="text-decoration:underline;">(view photo)</a>' : '') + '</div>' : '';
       var actions = '';
-      if(t.status !== "approved"){
+      if(t.creditedAmount !== null){
+        actions = '<div class="fail-reason-box" style="background:#F0FDF4; color:#166534;">Verified — ' + formatNaira(t.creditedAmount) + ' credited by admin.</div>';
+      } else if(t.status === "approved"){
+        actions = '<div class="fail-reason-box" style="background:#FEF3C7; color:#92400E;">You proposed ' + formatNaira(t.staffCreditedAmount || 0) + ' — awaiting admin verification.</div>' +
+          '<div class="action-row" style="margin-top:8px;"><button class="btn-fail" data-id="' + t.id + '" data-action="failed">Failed</button></div>';
+      } else {
         actions = '<div class="action-row">' +
           '<button class="btn-confirm" data-id="' + t.id + '" data-action="confirmed">Confirm</button>' +
           '<button class="btn-approve" data-id="' + t.id + '" data-action="approved">Approve</button>' +
           '<button class="btn-fail" data-id="' + t.id + '" data-action="failed">Failed</button>' +
         '</div>';
-      } else {
-        actions = '<div class="fail-reason-box" style="background:#F0FDF4; color:#166534;">Approved — ' + formatNaira(t.creditedAmount || 0) + ' credited to balance.</div>';
       }
       return '<div class="receipt-item">' +
-        '<div class="receipt-top"><div><div class="title">' + escapeHtml(t.accountTitleUsed) + ' — ' + formatNaira(t.intendedAmount) + '</div>' +
+        '<div class="receipt-top"><div><div class="title" style="cursor:pointer;" data-open-detail="' + t.id + '">' + escapeHtml(t.accountTitleUsed) + ' — ' + formatNaira(t.intendedAmount) + '</div>' +
         '<div class="sub">' + formatDate(t.createdAt) + '</div></div><span class="badge ' + s.cls + '">' + s.label + '</span></div>' +
         '<div class="receipt-body">' +
           '<div class="receipt-img-wrap"><img src="' + t.receiptImage + '" data-full="' + t.receiptImage + '" alt="Receipt"><a href="' + t.receiptImage + '" download="receipt.jpg" class="download-link">Download</a></div>' +
@@ -367,20 +382,50 @@
         document.getElementById("imgModal").classList.add("open");
       });
     });
-
+    list.querySelectorAll("[data-view-fail]").forEach(function(a){
+      a.addEventListener("click", function(e){
+        e.preventDefault();
+        var t = lastTrades.find(function(x){ return x.id === a.getAttribute("data-view-fail"); });
+        if(!t || !t.failImage) return;
+        document.getElementById("fullImg").src = t.failImage;
+        document.getElementById("downloadFullImg").href = t.failImage;
+        document.getElementById("imgModal").classList.add("open");
+      });
+    });
+    list.querySelectorAll("[data-open-detail]").forEach(function(el){
+      el.addEventListener("click", function(){ openTradeDetail(el.getAttribute("data-open-detail")); });
+    });
     list.querySelectorAll("[data-action]").forEach(function(btn){
       btn.addEventListener("click", function(){
         var id = btn.getAttribute("data-id"), action = btn.getAttribute("data-action");
-        if(action === "failed"){ openFailModal(id, "staff"); return; }
-        if(action === "approved"){ openApproveModal(id, "staff"); return; }
-        markTrade(id, action, null, "staff");
+        if(action === "failed"){ openFailModal(id); return; }
+        if(action === "approved"){ openApproveModal(id); return; }
+        markTrade(id, action, null);
       });
     });
   }
-  function markTrade(id, status, extra, who){
-    var url = who === "admin" ? "/api/admin/trades/" + id + "/mark" : "/api/staff/trades/" + id + "/mark";
+  function openTradeDetail(id){
+    var t = lastTrades.find(function(x){ return x.id === id; });
+    if(!t) return;
+    var body = document.getElementById("tradeDetailBody");
+    var failBlock = t.status === "failed" ? (
+      '<div style="margin-top:14px;"><b>Failure reason:</b> ' + escapeHtml(t.failReason || "—") + '</div>' +
+      (t.failImage ? '<img src="' + t.failImage + '" style="max-width:100%; border-radius:10px; margin-top:8px;">' : '')
+    ) : '';
+    body.innerHTML =
+      '<img src="' + t.receiptImage + '" style="max-width:100%; border-radius:10px; margin-bottom:14px;">' +
+      '<div style="font-size:13.5px; line-height:1.8;">' +
+        '<div><b>Account:</b> ' + escapeHtml(t.accountTitleUsed) + '</div>' +
+        '<div><b>Amount sent:</b> ' + formatNaira(t.intendedAmount) + '</div>' +
+        '<div><b>Status:</b> ' + t.status + '</div>' +
+        '<div><b>Your proposed amount:</b> ' + (t.staffCreditedAmount !== null ? formatNaira(t.staffCreditedAmount) : "—") + '</div>' +
+        '<div><b>Admin-verified amount:</b> ' + (t.creditedAmount !== null ? formatNaira(t.creditedAmount) : "—") + '</div>' +
+      '</div>' + failBlock;
+    document.getElementById("tradeDetailModal").classList.add("open");
+  }
+  function markTrade(id, status, extra){
     var payload = Object.assign({ status: status }, extra || {});
-    fetch(url, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) })
+    fetch("/api/staff/trades/" + id + "/mark", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload) })
       .then(function(r){ return r.json().then(function(d){ return {ok:r.ok,data:d}; }); })
       .then(function(res){
         if(!res.ok){ alert(res.data.error || "Could not update."); return; }
@@ -388,12 +433,35 @@
       });
   }
   var failTargetId = null;
-  function openFailModal(id){ failTargetId = id; document.getElementById("failReasonInput").value=""; document.getElementById("failModal").classList.add("open"); }
+  var pendingFailImage = null;
+  function openFailModal(id){
+    failTargetId = id; pendingFailImage = null;
+    document.getElementById("failReasonInput").value = "";
+    document.getElementById("failImageBox").innerHTML = "Click to attach a photo (optional)";
+    document.getElementById("failModal").classList.add("open");
+  }
+  document.getElementById("failImageBox").addEventListener("click", function(){ document.getElementById("failImageFile").click(); });
+  document.getElementById("failImageFile").addEventListener("change", function(e){
+    var file=e.target.files[0]; if(!file) return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      var img=new Image();
+      img.onload=function(){
+        var canvas=document.createElement("canvas"); var maxW=800; var scale=Math.min(1,maxW/img.width);
+        canvas.width=img.width*scale; canvas.height=img.height*scale;
+        canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+        pendingFailImage = canvas.toDataURL("image/jpeg",0.75);
+        document.getElementById("failImageBox").innerHTML = '<img src="' + pendingFailImage + '" style="max-height:70px;">';
+      };
+      img.src=ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
   document.getElementById("confirmFailBtn").addEventListener("click", function(){
     var reason = document.getElementById("failReasonInput").value.trim();
     if(!reason){ alert("Please provide a reason."); return; }
     document.getElementById("failModal").classList.remove("open");
-    markTrade(failTargetId, "failed", { reason: reason }, "staff");
+    markTrade(failTargetId, "failed", { reason: reason, reasonImage: pendingFailImage });
   });
 
   var approveTargetId = null;
@@ -411,9 +479,9 @@
   }
   document.getElementById("confirmApproveBtn").addEventListener("click", function(){
     var amount = Number(document.getElementById("creditedAmountInput").value);
-    if(!amount || amount <= 0){ alert("Enter a valid amount to credit."); return; }
+    if(!amount || amount <= 0){ alert("Enter the amount you calculate should be credited."); return; }
     document.getElementById("approveModal").classList.remove("open");
-    markTrade(approveTargetId, "approved", { creditedAmount: amount }, "staff");
+    markTrade(approveTargetId, "approved", { staffCreditedAmount: amount });
   });
   document.querySelectorAll("[data-close]").forEach(function(btn){
     btn.addEventListener("click", function(){ document.getElementById(btn.getAttribute("data-close")).classList.remove("open"); });

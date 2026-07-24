@@ -111,13 +111,15 @@ app.get('/api/me', async (req, res) => {
 
 app.put('/api/me', requireUser, async (req, res) => {
   try {
-    const { bankName, accountNumber } = req.body || {};
-    if (!bankName || !accountNumber) return res.status(400).json({ error: 'Bank name and account number are required.' });
-    await store.updateUser(req.session.userId, { bankName: String(bankName).trim(), accountNumber: String(accountNumber).trim() });
+    const { name, bankName, accountNumber } = req.body || {};
+    if (!name || !bankName || !accountNumber) return res.status(400).json({ error: 'Name, bank name and account number are required.' });
+    await store.updateUser(req.session.userId, {
+      name: String(name).trim(), bankName: String(bankName).trim(), accountNumber: String(accountNumber).trim()
+    });
     res.json({ ok: true });
   } catch (err) {
     console.error('Update me error:', err);
-    res.status(500).json({ error: 'Could not update your bank details.' });
+    res.status(500).json({ error: 'Could not update your details.' });
   }
 });
 
@@ -332,11 +334,13 @@ app.post('/api/staff/accounts', requireStaff, requireApprovedStaff, async (req, 
     const b = req.body || {};
     if (!b.title || !b.accountNumber || !b.bankName) return res.status(400).json({ error: 'Title, account number and bank are required.' });
     // The whole rate tier (amounts + rates) is admin-only — new accounts start at 0 until an admin sets it.
+    // New accounts also start unverified (inactive) — an admin must verify before customers can see them.
     const account = await store.createAccount({
       staffId: req.staff.id, title: b.title, accountNumber: b.accountNumber, bankName: b.bankName,
       imageData: b.imageData || null,
       lowestAmount: 0, lowestRate: 0, higherAmount: 0, higherRate: 0,
-      minAmount: Number(b.minAmount) || 0, maxAmount: Number(b.maxAmount) || 0
+      minAmount: Number(b.minAmount) || 0, maxAmount: Number(b.maxAmount) || 0,
+      active: false
     });
     res.json({ ok: true, account });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not create account.' }); }
@@ -387,17 +391,23 @@ app.post('/api/staff/trades/:id/mark', requireStaff, requireApprovedStaff, async
   try {
     const trade = await store.findTradeById(req.params.id);
     if (!trade || trade.staffId !== req.staff.id) return res.status(403).json({ error: 'You can only act on receipts for accounts you provided.' });
-    const { status, reason, creditedAmount } = req.body || {};
+    const { status, reason, reasonImage, staffCreditedAmount } = req.body || {};
     if (!['seen', 'confirmed', 'approved', 'failed'].includes(status)) return res.status(400).json({ error: 'Invalid status.' });
     if (status === 'failed' && !reason) return res.status(400).json({ error: 'A reason is required when marking a payment as failed.' });
-    if (status === 'approved' && (!creditedAmount || Number(creditedAmount) <= 0)) {
-      return res.status(400).json({ error: 'Enter the amount to credit to the customer\'s balance (based on the rate), not just the amount they sent.' });
+    if (status === 'failed' && trade.creditedAmount !== null) {
+      return res.status(403).json({ error: 'This trade has already been verified and credited by an admin — only an admin can reverse it now.' });
     }
+    if (status === 'approved' && (!staffCreditedAmount || Number(staffCreditedAmount) <= 0)) {
+      return res.status(400).json({ error: 'Enter the amount you calculate should be credited (based on the rate) — an admin will verify it before it\'s applied.' });
+    }
+    // Staff proposes the credited amount here, but it does NOT touch the balance —
+    // an admin has to separately verify and confirm it before it's actually credited.
     await store.updateTradeStatus(trade.id, {
-      status, failReason: status === 'failed' ? reason : trade.failReason,
-      creditedAmount: status === 'approved' ? Number(creditedAmount) : trade.creditedAmount
+      status,
+      failReason: status === 'failed' ? reason : trade.failReason,
+      failImage: status === 'failed' ? (reasonImage || null) : trade.failImage,
+      staffCreditedAmount: status === 'approved' ? Number(staffCreditedAmount) : trade.staffCreditedAmount
     });
-    if (status === 'approved') await store.addToBalance(trade.userId, Number(creditedAmount));
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update trade.' }); }
 });
@@ -522,29 +532,51 @@ app.post('/api/admin/trades/:id/mark', requireAdmin, async (req, res) => {
   try {
     const trade = await store.findTradeById(req.params.id);
     if (!trade) return res.status(404).json({ error: 'Trade not found.' });
-    const { status, reason, creditedAmount } = req.body || {};
+    const { status, reason, reasonImage } = req.body || {};
     if (!['seen', 'confirmed', 'approved', 'failed'].includes(status)) return res.status(400).json({ error: 'Invalid status.' });
     if (status === 'failed' && !reason) return res.status(400).json({ error: 'A reason is required when marking a payment as failed.' });
-    if (status === 'approved' && (!creditedAmount || Number(creditedAmount) <= 0)) {
-      return res.status(400).json({ error: 'Enter the amount to credit to the customer\'s balance (based on the rate), not just the amount they sent.' });
-    }
 
-    const wasApproved = trade.status === 'approved';
+    const wasCredited = trade.creditedAmount !== null;
     await store.updateTradeStatus(trade.id, {
-      status, failReason: status === 'failed' ? reason : trade.failReason,
-      creditedAmount: status === 'approved' ? Number(creditedAmount) : trade.creditedAmount
+      status,
+      failReason: status === 'failed' ? reason : trade.failReason,
+      failImage: status === 'failed' ? (reasonImage || null) : trade.failImage
     });
 
-    // Admin can undo an approved trade back to failed — reverse the exact amount that was credited.
-    if (wasApproved && status === 'failed') {
+    // If this trade had already been verified & credited, and admin is now reversing it to failed,
+    // refund exactly what was credited and clear the credited amount so it can be re-verified fresh later.
+    if (wasCredited && status === 'failed') {
       await store.addToBalance(trade.userId, -trade.creditedAmount);
-    }
-    // Admin approving directly (not previously approved) also credits balance.
-    if (!wasApproved && status === 'approved') {
-      await store.addToBalance(trade.userId, Number(creditedAmount));
+      await store.updateTradeStatus(trade.id, { status: 'failed', creditedAmount: null });
     }
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update trade.' }); }
+});
+
+// Admin-only second step: verify a staff-approved trade and actually credit the balance.
+// This is also the moment the customer's CURRENT payout account/bank gets locked into the
+// trade record permanently — even if the user later changes or deletes their account.
+app.post('/api/admin/trades/:id/credit', requireAdmin, async (req, res) => {
+  try {
+    const trade = await store.findTradeById(req.params.id);
+    if (!trade) return res.status(404).json({ error: 'Trade not found.' });
+    if (trade.status !== 'approved') return res.status(400).json({ error: 'Only staff-approved trades can be verified and credited.' });
+    if (trade.creditedAmount !== null) return res.status(400).json({ error: 'This trade has already been credited.' });
+    const { creditedAmount } = req.body || {};
+    if (!creditedAmount || Number(creditedAmount) <= 0) {
+      return res.status(400).json({ error: 'Enter the final amount to credit to the customer\'s balance.' });
+    }
+
+    const user = await store.findUserById(trade.userId);
+    await store.updateTradeStatus(trade.id, {
+      status: 'approved',
+      creditedAmount: Number(creditedAmount),
+      userPayoutAccount: user ? user.accountNumber : trade.userPayoutAccount,
+      userPayoutBank: user ? user.bankName : trade.userPayoutBank
+    });
+    await store.addToBalance(trade.userId, Number(creditedAmount));
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not credit trade.' }); }
 });
 
 // ============================================================
@@ -568,11 +600,18 @@ app.post('/api/admin/withdrawals/:id/mark', requireAdmin, async (req, res) => {
     const withdrawal = await store.findWithdrawalById(req.params.id);
     if (!withdrawal) return res.status(404).json({ error: 'Withdrawal not found.' });
     if (withdrawal.status !== 'pending') return res.status(400).json({ error: 'This withdrawal has already been handled.' });
-    const { status, reason } = req.body || {};
+    const { status, reason, reasonImage } = req.body || {};
     if (!['paid', 'rejected'].includes(status)) return res.status(400).json({ error: 'Invalid status.' });
     if (status === 'rejected' && !reason) return res.status(400).json({ error: 'A reason is required when rejecting a withdrawal.' });
 
-    await store.updateWithdrawalStatus(withdrawal.id, { status, reason });
+    const patch = { status, reason, reasonImage: status === 'rejected' ? (reasonImage || null) : undefined };
+    // Lock in exactly which account this was paid to, at the moment of payment —
+    // permanent even if the customer later changes or deletes their bank details.
+    if (status === 'paid') {
+      const user = await store.findUserById(withdrawal.userId);
+      if (user) { patch.payoutAccount = user.accountNumber; patch.payoutBank = user.bankName; }
+    }
+    await store.updateWithdrawalStatus(withdrawal.id, patch);
     if (status === 'rejected') await store.addToBalance(withdrawal.userId, withdrawal.amount); // refund the hold
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update withdrawal.' }); }

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>My Account — RECIO EXCHANGE</title>
+<title>My Account — AZAPLUG</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@600;700&display=swap" rel="stylesheet">
 <style>
@@ -15,7 +15,7 @@
   header{ background:#fff; border-bottom:1px solid var(--line); padding:14px 0; }
   .wrap{ max-width:900px; margin:0 auto; padding:0 20px; }
   .nav-row{ display:flex; justify-content:space-between; align-items:center; }
-  .logo img{ height:24px; }
+  .logo{ font-family:'Manrope',sans-serif; font-weight:800; font-size:19px; color:var(--blue); letter-spacing:0.02em; }
   .logout-btn{ font-size:12.5px; font-weight:700; padding:9px 16px; border:1.5px solid var(--line); border-radius:8px; background:#fff; }
   .logout-btn:hover{ background:#F1F4F8; }
 
@@ -63,7 +63,7 @@
 <body>
   <header>
     <div class="wrap nav-row">
-      <a href="/" class="logo"><img src="/logo.png" alt="Recio"></a>
+      <a href="/" class="logo">AZAPLUG</a>
       <button class="logout-btn" id="logoutBtn">Log Out</button>
     </div>
   </header>
@@ -93,9 +93,10 @@
 
   <div class="modal-overlay" id="banksModal">
     <div class="modal">
-      <h3>Your Bank Details</h3>
-      <div class="info-row"><span>Name</span><span id="mName">—</span></div>
-      <div style="margin-top:14px;">
+      <h3>Your Details</h3>
+      <div style="margin-top:4px;">
+        <label style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px;">Full Name</label>
+        <input type="text" id="mNameInput" style="width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:14px; margin-bottom:14px;">
         <label style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px;">Bank Name</label>
         <input type="text" id="mBankInput" style="width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:14px; margin-bottom:14px;">
         <label style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--gray); display:block; margin-bottom:6px;">Account Number</label>
@@ -113,6 +114,14 @@
       <h3>Rules</h3>
       <p id="rulesText">Loading…</p>
       <button class="modal-close" data-close="rulesModal">Close</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="tradeDetailModal">
+    <div class="modal">
+      <h3>Trade Details</h3>
+      <div id="tradeDetailBody"></div>
+      <button class="modal-close" data-close="tradeDetailModal" style="margin-top:16px;">Close</button>
     </div>
   </div>
 
@@ -142,7 +151,6 @@
     if(data.status !== "approved"){ window.location.href="/pending.html"; return; }
     meData = data;
     document.getElementById("balanceAmount").textContent = formatNaira(data.balance);
-    document.getElementById("mName").textContent = data.name;
   });
 
   document.getElementById("logoutBtn").addEventListener("click", function(){
@@ -151,20 +159,22 @@
 
   document.getElementById("banksBtn").addEventListener("click", function(){
     document.getElementById("bankEditMsg").style.display = "none";
+    document.getElementById("mNameInput").value = meData ? meData.name : "";
     document.getElementById("mBankInput").value = meData ? meData.bankName : "";
     document.getElementById("mAccountInput").value = meData ? meData.accountNumber : "";
     document.getElementById("banksModal").classList.add("open");
   });
   document.getElementById("saveBankBtn").addEventListener("click", function(){
+    var name = document.getElementById("mNameInput").value.trim();
     var bankName = document.getElementById("mBankInput").value.trim();
     var accountNumber = document.getElementById("mAccountInput").value.trim();
     var msgEl = document.getElementById("bankEditMsg");
-    if(!bankName || !accountNumber){ msgEl.textContent = "Both fields are required."; msgEl.style.display = "block"; return; }
-    fetch("/api/me", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ bankName: bankName, accountNumber: accountNumber }) })
+    if(!name || !bankName || !accountNumber){ msgEl.textContent = "All fields are required."; msgEl.style.display = "block"; return; }
+    fetch("/api/me", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ name: name, bankName: bankName, accountNumber: accountNumber }) })
       .then(function(r){ return r.json().then(function(d){ return {ok:r.ok, data:d}; }); })
       .then(function(res){
         if(!res.ok){ msgEl.textContent = res.data.error || "Could not save."; msgEl.style.display = "block"; return; }
-        meData.bankName = bankName; meData.accountNumber = accountNumber;
+        meData.name = name; meData.bankName = bankName; meData.accountNumber = accountNumber;
         document.getElementById("banksModal").classList.remove("open");
       });
   });
@@ -207,20 +217,44 @@
     failed: { label:"Failed", cls:"badge-failed" }
   };
 
+  var lastTrades = [];
   fetch("/api/trades").then(function(r){ return r.json(); }).then(function(data){
     var trades = data.trades || [];
+    lastTrades = trades;
     var wrap = document.getElementById("tradesWrap");
     if(trades.length === 0){ wrap.innerHTML = '<div class="empty-note">No trades yet — get an account and send your first payment.</div>'; return; }
     wrap.innerHTML = '<div class="trade-list">' + trades.map(function(t){
       var s = statusMeta[t.status] || statusMeta.checking;
       var reason = (t.status === "failed" && t.failReason) ? '<div class="fail-reason">' + escapeHtml(t.failReason) + '</div>' : '';
-      return '<div class="trade-item">' +
+      return '<div class="trade-item" data-open-trade="' + t.id + '" style="cursor:pointer;">' +
         '<div class="left"><div class="title">' + escapeHtml(t.accountTitleUsed || "Account") + '</div>' +
         '<div class="sub">' + formatDate(t.createdAt) + '</div></div>' +
         '<div class="right"><div class="amount">' + formatNaira(t.intendedAmount) + '</div>' +
         '<span class="badge ' + s.cls + '">' + s.label + '</span>' + reason + '</div></div>';
     }).join("") + '</div>';
+    wrap.querySelectorAll("[data-open-trade]").forEach(function(el){
+      el.addEventListener("click", function(){ openTradeDetail(el.getAttribute("data-open-trade")); });
+    });
   });
+  function openTradeDetail(id){
+    var t = lastTrades.find(function(x){ return x.id === id; });
+    if(!t) return;
+    var body = document.getElementById("tradeDetailBody");
+    var failBlock = t.status === "failed" ? (
+      '<div style="margin-top:14px;"><b>Reason:</b> ' + escapeHtml(t.failReason || "—") + '</div>' +
+      (t.failImage ? '<img src="' + t.failImage + '" style="max-width:100%; border-radius:10px; margin-top:8px;">' : '')
+    ) : '';
+    var creditedLine = t.creditedAmount !== null ? '<div><b>Credited:</b> ' + formatNaira(t.creditedAmount) + '</div>' : '';
+    body.innerHTML =
+      '<img src="' + t.receiptImage + '" style="max-width:100%; border-radius:10px; margin-bottom:14px;">' +
+      '<div style="font-size:13.5px; line-height:1.8;">' +
+        '<div><b>Account:</b> ' + escapeHtml(t.accountTitleUsed) + '</div>' +
+        '<div><b>Amount sent:</b> ' + formatNaira(t.intendedAmount) + '</div>' +
+        '<div><b>Status:</b> ' + t.status + '</div>' +
+        creditedLine +
+      '</div>' + failBlock;
+    document.getElementById("tradeDetailModal").classList.add("open");
+  }
 
   var withdrawStatusMeta = {
     pending: { label:"Pending", cls:"badge-checking" },
