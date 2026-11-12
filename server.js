@@ -353,6 +353,8 @@ app.put('/api/staff/accounts/:id', requireStaff, requireApprovedStaff, async (re
     // Rate tier fields are admin-only — strip them out even if a staff client tries to send them.
     const b = { ...(req.body || {}) };
     delete b.lowestAmount; delete b.lowestRate; delete b.higherAmount; delete b.higherRate;
+    // Verification and ownership are admin-only too — staff cannot verify their own account or reassign it.
+    delete b.active; delete b.staffId;
     await store.updateAccount(req.params.id, b);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update account.' }); }
@@ -428,6 +430,41 @@ app.get('/api/staff/settlement-account', requireStaff, requireApprovedStaff, asy
     const settings = await store.getSettings();
     res.json({ settlementAccount: settings.settlementAccount, settlementBank: settings.settlementBank });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load settlement account.' }); }
+});
+
+// ============================================================
+// STAFF: support chat (Chat Manager portal)
+// Any approved staff member can read and answer customer chats.
+// Replies are stored with sender 'admin' so the customer app shows them as agent messages.
+// ============================================================
+app.get('/api/staff/chats', requireStaff, requireApprovedStaff, async (req, res) => {
+  try { res.json({ conversations: await store.listConversations() }); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Could not load conversations.' }); }
+});
+app.get('/api/staff/chats/:userId', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const user = await store.findUserById(req.params.userId);
+    if (!user) return res.status(404).json({ error: 'Customer not found.' });
+    res.json({ user: { id: user.id, name: user.name, phone: user.phone }, messages: await store.messagesForUser(req.params.userId) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load conversation.' }); }
+});
+app.post('/api/staff/chats/:userId/send', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const { text, imageData } = req.body || {};
+    if (!text && !imageData) return res.status(400).json({ error: 'Message is empty.' });
+    const user = await store.findUserById(req.params.userId);
+    if (!user) return res.status(404).json({ error: 'Customer not found.' });
+    const msg = await store.addMessage({ userId: user.id, sender: 'admin', text, imageData });
+    res.json({ ok: true, message: msg });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send message.' }); }
+});
+
+// People a staff member can forward a message to: the admin plus other approved staff (names only).
+app.get('/api/staff/recipients', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const staff = (await store.listStaff()).filter(s => s.status === 'approved' && s.id !== req.staff.id);
+    res.json({ recipients: [{ id: 'admin', name: 'Admin', role: 'Admin' }].concat(staff.map(s => ({ id: s.id, name: s.name, role: 'Staff' }))) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load recipients.' }); }
 });
 
 // ============================================================

@@ -451,7 +451,7 @@ staff:()=>`<section class="scr">${hd('Staff','Active and Pending Recio Agents','
   <div class="row" style="gap:8px;margin-top:12px"><button class="sb o-red" data-act="staffDelete" data-id="${esc(s.id)}">Delete</button>
    ${s.status==='rejected'?'':`<button class="sb orange" data-act="staffReject" data-id="${esc(s.id)}">REJECT</button>`}
    ${s.status==='approved'?'':`<button class="sb blue" data-act="staffApprove" data-id="${esc(s.id)}">${s.status==='rejected'?'Re-Approve':'Approve Staff'}</button>`}</div></article>`}).join(''):'<p class="empty">No staff yet</p>'}</div>
- <div style="text-align:right;margin-top:24px"><a class="fabx" href="/staff-login.html">${I('plus','style="width:16px;height:16px"')}Add Staff</a></div></div></section>`,
+ <div style="text-align:right;margin-top:24px"><a class="fabx" href="/staff-app.html">${I('plus','style="width:16px;height:16px"')}Add Staff</a></div></div></section>`,
 
 staffProfile:()=>{const s=S.staff.find(x=>x.id===S.id);if(!s)return V.staff();const b=sBadge(s),st=staffStats(s),p=s.status==='pending',r=s.status==='rejected';
  return `<section class="scr">${hd('Staff Profile',p?'Pending Review':'Agent ID: #REC-'+esc(String(s.id).slice(0,4).toUpperCase()),'staff')}
