@@ -362,7 +362,39 @@ async function updateWithdrawalStatus(id, opts) {
   if (error) throw error;
 }
 
+// ============================================================
+// ESCALATIONS (chat manager -> admin console)
+// ============================================================
+function escRow(r) {
+  return { id: r.id, userId: r.user_id, staffId: r.staff_id, reason: r.reason, status: r.status,
+    adminFeedback: r.admin_feedback, createdAt: r.created_at, updatedAt: r.updated_at };
+}
+async function findEscalationById(id) {
+  const { data, error } = await supabase.from('escalations').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? escRow(data) : null;
+}
+async function createEscalation(e) {
+  const id = uid();
+  const { error } = await supabase.from('escalations').insert({
+    id, user_id: e.userId, staff_id: e.staffId || null, reason: e.reason, status: 'open'
+  });
+  if (error) throw error;
+  return findEscalationById(id);
+}
+async function listEscalations() {
+  const { data, error } = await supabase.from('escalations').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map(escRow);
+}
+async function resolveEscalation(id, feedback) {
+  const { error } = await supabase.from('escalations')
+    .update({ status: 'resolved', admin_feedback: feedback || null, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) throw error;
+}
+
 module.exports = {
+  createEscalation, findEscalationById, listEscalations, resolveEscalation,
   createUser, findUserByPhone, findUserById, listUsers, setUserStatus, updateUser, deleteUser, addToBalance,
   createStaff, findStaffByPhone, findStaffById, listStaff, setStaffStatus, deleteStaff,
   listAccountsPublic, listAccountsForAmount, listAllAccounts, listAccountsByStaff, findAccountById, createAccount, updateAccount, deleteAccount,

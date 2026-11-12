@@ -459,6 +459,32 @@ app.post('/api/staff/chats/:userId/send', requireStaff, requireApprovedStaff, as
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send message.' }); }
 });
 
+// Escalations: a chat manager hands a customer chat to the admin; it shows in the admin app's Admin Console.
+async function escalationsWithNames() {
+  const [list, users, staffList] = await Promise.all([store.listEscalations(), store.listUsers(), store.listStaff()]);
+  return list.map(e => {
+    const u = users.find(x => x.id === e.userId) || {};
+    return { ...e, userName: u.name || 'Unknown', userPhone: u.phone || '',
+      staffName: (staffList.find(s => s.id === e.staffId) || {}).name || 'Staff' };
+  });
+}
+app.get('/api/staff/escalations', requireStaff, requireApprovedStaff, async (req, res) => {
+  try { res.json({ escalations: await escalationsWithNames() }); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Could not load escalations.' }); }
+});
+app.post('/api/staff/chats/:userId/escalate', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const reason = String((req.body || {}).reason || '').trim();
+    if (!reason) return res.status(400).json({ error: 'Enter the reason for forwarding this chat.' });
+    const user = await store.findUserById(req.params.userId);
+    if (!user) return res.status(404).json({ error: 'Customer not found.' });
+    const open = (await store.listEscalations()).find(e => e.userId === user.id && e.status === 'open');
+    if (open) return res.status(409).json({ error: 'This chat is already with the admin. Wait for their reply.' });
+    const escalation = await store.createEscalation({ userId: user.id, staffId: req.staff.id, reason });
+    res.json({ ok: true, escalation });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not forward this chat.' }); }
+});
+
 // People a staff member can forward a message to: the admin plus other approved staff (names only).
 app.get('/api/staff/recipients', requireStaff, requireApprovedStaff, async (req, res) => {
   try {
@@ -664,6 +690,23 @@ app.get('/api/admin/settings', requireAdmin, async (req, res) => {
 app.put('/api/admin/settings', requireAdmin, async (req, res) => {
   try { await store.updateSettings(req.body || {}); res.json({ ok: true }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not update settings.' }); }
+});
+
+// ============================================================
+// ADMIN: Admin Console — chats escalated by staff
+// ============================================================
+app.get('/api/admin/escalations', requireAdmin, async (req, res) => {
+  try { res.json({ escalations: await escalationsWithNames() }); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Could not load escalations.' }); }
+});
+app.post('/api/admin/escalations/:id/resolve', requireAdmin, async (req, res) => {
+  try {
+    const esc = await store.findEscalationById(req.params.id);
+    if (!esc) return res.status(404).json({ error: 'Escalation not found.' });
+    if (esc.status !== 'open') return res.status(400).json({ error: 'This escalation has already been resolved.' });
+    await store.resolveEscalation(esc.id, String((req.body || {}).feedback || '').trim());
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not resolve this escalation.' }); }
 });
 
 // ============================================================
