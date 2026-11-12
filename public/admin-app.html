@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0D4DC7">
+<title>AZAPLUG Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* ---------- Brand tokens (AZAPLUG Brand Guidelines v1.0) ---------- */
+:root{
+  --blue:#0D4DC7; --blue-dark:#0A3FA6; --slate:#111827; --bg:#F4F7FC;
+  --green:#10B981; --orange:#F59E0B; --red:#EF4444;
+  --muted:#6B7280; --soft:#9CA3AF; --line:#E3E8F1; --card:#fff;
+  --head:'Outfit',system-ui,sans-serif; --body:'Geist','Inter',system-ui,sans-serif; --mono:'Geist Mono',ui-monospace,Menlo,monospace;
+  --r-card:24px; --r-field:12px; --m:24px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:#E6EAF2;font-family:var(--body);color:var(--slate);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+#app{max-width:402px;margin:0 auto;min-height:100dvh;background:var(--bg);position:relative;overflow-x:hidden}
+.screen{min-height:100dvh;padding:28px var(--m) 40px;display:flex;flex-direction:column}
+.screen.tabs{padding-bottom:130px}
+.screen.white{background:#fff}
+.screen.blue{background:var(--blue);color:#fff}
+h1,h2,h3,.h{font-family:var(--head);letter-spacing:-.01em}
+.muted{color:var(--muted)}
+.grow{flex:1}
+.row{display:flex;align-items:center}
+.between{display:flex;align-items:center;justify-content:space-between;gap:12px}
+
+/* ---------- Buttons ---------- */
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:58px;border-radius:999px;background:var(--blue);color:#fff;font-family:var(--head);font-weight:700;font-size:17px;transition:transform .08s,background .15s}
+.btn:active{transform:scale(.985);background:var(--blue-dark)}
+.btn.sq{border-radius:16px;height:56px;box-shadow:0 10px 22px -10px rgba(13,77,199,.55)}
+.btn.white{background:#fff;color:var(--blue)}
+.btn.outline{background:#fff;color:var(--slate);border:1.5px solid #D9DEE8;font-family:var(--body);font-weight:500;font-size:18px}
+.icon-btn{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid var(--line);display:grid;place-items:center;color:var(--blue);flex:none}
+.icon-btn.sqr{border-radius:12px;color:var(--slate)}
+.link{color:var(--blue);font-weight:700}
+
+/* ---------- Fields ---------- */
+label.lb{display:block;font-weight:600;font-size:15px;margin:22px 0 10px}
+.field{display:flex;align-items:center;gap:10px;height:58px;border:1.5px solid #E1E5EC;border-radius:var(--r-field);background:#fff;padding:0 18px}
+.field:focus-within{border-color:var(--blue)}
+.field input,.field select{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:16px;height:100%}
+.field input::placeholder{color:#9CA3AF}
+.field select{appearance:none;-webkit-appearance:none;font-weight:600}
+.field .eye{color:#4B5563}
+.field.sm{height:52px}
+
+/* ---------- Cards / badges ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);padding:20px}
+.badge{display:inline-block;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.b-approved,.b-processing{background:#E4F6EE;color:#0E9F6E}
+.b-checking{background:#FEEFC3;color:#E08A00}
+.b-confirmed,.b-compensation,.b-draft,.b-live{background:#EAF1FE;color:var(--blue)}
+.b-failed{background:#FDE0E0;color:var(--red)}
+.cap{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+
+/* ---------- Top bars ---------- */
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;min-height:44px}
+.top .title{font-family:var(--head);font-weight:700;font-size:20px;position:absolute;left:0;right:0;text-align:center;pointer-events:none}
+.top.left .title{position:static;text-align:left;font-size:24px;margin-left:14px;flex:1}
+.brand{font-family:var(--head);font-weight:800;font-size:22px;color:var(--blue);letter-spacing:0}
+
+/* ---------- Bottom nav ---------- */
+.nav{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);width:calc(min(402px,100vw) - 40px);height:76px;background:var(--blue);border-radius:38px;display:flex;align-items:center;justify-content:space-around;padding:0 10px;box-shadow:0 14px 30px -10px rgba(13,77,199,.6);z-index:20}
+.nav button{white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:6px;color:rgba(255,255,255,.72);font-size:11.5px;font-weight:500;flex:1 1 0;min-width:0}
+.nav button.on{color:#fff;font-weight:700}
+.nav svg.i{width:23px;height:23px}
+.fab{position:fixed;bottom:108px;right:calc(50% - min(201px,50vw) + 22px);width:48px;height:48px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;box-shadow:0 8px 18px -6px rgba(13,77,199,.7);z-index:21}
+.fab.low{bottom:28px}
+
+/* ---------- Segments ---------- */
+.seg{display:flex;background:#fff;border:1px solid var(--line);border-radius:16px;padding:5px;gap:4px}
+.seg button{flex:1;height:40px;border-radius:12px;font-weight:600;font-size:14px;color:var(--muted)}
+.seg button.on{background:var(--blue);color:#fff}
+
+/* ---------- Auth ---------- */
+.logo-dot{width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,.14);display:grid;place-items:center;margin:0 auto}
+.logo-dot svg.i{width:40px;height:40px;stroke-width:1.6}
+.logo-dot.sm{width:64px;height:64px}.logo-dot.sm svg.i{width:26px;height:26px;stroke-width:2}
+.wordmark{font-family:var(--head);font-weight:800;font-size:36px;text-align:center}
+.role{display:flex;align-items:center;gap:16px;width:100%;padding:18px;border-radius:20px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);text-align:left;margin-top:14px;color:#fff}
+.role .ic{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.14);display:grid;place-items:center}
+.role b{font-family:var(--head);font-size:19px;font-weight:700;display:block}
+.role span{font-size:14px;opacity:.8}
+.role.on{background:#fff;color:var(--blue);box-shadow:0 12px 26px -10px rgba(0,0,0,.35)}
+.role.on .ic{background:#EEF2FB}
+.role .chev{margin-left:auto;opacity:.7}
+.auth h1{font-size:32px;font-weight:800;line-height:1.15}
+.auth .sub{color:#4B5563;font-size:16px;margin-top:10px}
+.or{display:flex;align-items:center;gap:20px;color:var(--muted);margin:22px 0}
+.or:before,.or:after{content:"";flex:1;height:1px;background:#E1E5EC}
+.finger{width:180px;height:180px;border-radius:50%;margin:0 auto;display:grid;place-items:center;background:#F5F7FD;border:1px solid #E1E7F5}
+.finger i{width:140px;height:140px;border-radius:50%;display:grid;place-items:center;background:#E7ECF9;border:1px solid #D2DBF2}
+.finger b{width:100px;height:100px;border-radius:50%;display:grid;place-items:center;background:var(--blue);color:#fff;box-shadow:0 10px 22px -6px rgba(13,77,199,.6)}
+.finger svg.i{width:44px;height:44px;stroke-width:1.5}
+
+/* ---------- Home ---------- */
+.balance{background:var(--blue);color:#fff;border-radius:28px;padding:22px 20px 20px;box-shadow:0 16px 30px -14px rgba(13,77,199,.7)}
+.balance small{font-size:13px;opacity:.85}
+.balance .amt{font-family:var(--head);font-weight:800;font-size:36px;line-height:1.2;margin:4px 0 16px}
+.pills{display:flex;gap:8px}
+.pills button{flex:1;height:36px;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.12);color:#fff;font-weight:700;font-size:12.5px;white-space:nowrap;padding:0;min-width:0}
+.pills button:first-child{font-size:11px;flex:1.1}
+.pills button.on{background:#fff;color:var(--blue);border-color:#fff}
+.txn{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:16px;margin-top:10px}
+.txn .nm{font-family:var(--head);font-weight:600;font-size:16.5px}
+.txn .dt{font-size:12px;color:var(--soft);margin-top:2px}
+.txn .rt{margin-left:auto;text-align:right}
+.txn .am{font-family:var(--head);font-weight:700;font-size:16.5px;margin-bottom:4px}
+.flag{width:40px;height:40px;border-radius:50%;background:#EEF1F6;display:grid;place-items:center;font-size:24px;line-height:1;overflow:hidden;flex:none}
+.sec-h{display:flex;align-items:center;justify-content:space-between;margin:24px 0 4px}
+.sec-h h3{font-size:17px;font-weight:600}
+
+/* ---------- Get account ---------- */
+.acct .mono{font-family:var(--mono);font-weight:700;font-size:13px;margin-top:12px}
+.noimg{height:100px;border-radius:14px;background:#EEF2F8;border:1px solid var(--line);display:grid;place-items:center;align-content:center;gap:8px;color:#9AA3B5;font-family:var(--mono);font-size:13px;margin-top:14px}
+.noimg svg.i{width:26px;height:26px}
+.copy{width:42px;height:42px;border-radius:12px;border:1.5px solid var(--slate);background:#fff;color:var(--blue);display:grid;place-items:center;box-shadow:0 2px 0 rgba(17,24,39,.15)}
+.kv{border:1px solid var(--line);border-radius:14px;margin-top:12px;overflow:hidden}
+.kv div{display:flex;justify-content:space-between;padding:7px 14px;font-size:13px;border-top:1px solid #EEF1F6}
+.kv div:first-child{border-top:0}
+.kv b{font-family:var(--mono);font-weight:700}
+.kv span{color:var(--muted)}
+
+/* ---------- Summary rows ---------- */
+.sum div{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:15px}
+.sum span{color:#4B5563}
+.sum b{font-family:var(--head);font-weight:700;font-size:17px}
+.sum.plain b{font-family:var(--body);font-weight:500;font-size:15px}
+.hr,.sum div.hr{height:1px;background:var(--line);margin:8px 0;padding:0}
+.ok-ring{width:104px;height:104px;border-radius:50%;background:#E3EAF8;display:grid;place-items:center;margin:8px auto 18px}
+.ok-ring i{width:80px;height:80px;border-radius:50%;background:#C9D6F3;display:grid;place-items:center}
+.ok-ring b{width:60px;height:60px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center}
+.ok-ring svg.i{width:28px;height:28px}
+.upload{display:grid;place-items:center;align-content:center;gap:10px;height:106px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--soft);cursor:pointer;width:100%}
+.upload span.c{width:36px;height:36px;border-radius:50%;background:#F1F4F9;border:1px solid var(--line);display:grid;place-items:center;color:#4B5563}
+
+/* ---------- Crypto ---------- */
+.toggle2{display:flex;border:1.5px solid var(--line);border-radius:999px;padding:3px;background:#fff}
+.toggle2 button{padding:6px 16px;border-radius:999px;font-weight:700;font-size:14px;color:var(--muted)}
+.toggle2 button.on{background:var(--blue);color:#fff}
+.coin{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff}
+.coin svg.i{width:18px;height:18px}
+.big{font-family:var(--head);font-weight:800;font-size:32px;margin-top:16px}
+.qr{width:200px;height:200px;margin:26px auto 18px;position:relative}
+
+/* ---------- Chat ---------- */
+.chat{padding:0;background:#E8EEF8;min-height:100dvh;display:flex;flex-direction:column}
+.chat-top{background:#fff;display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.avatar{width:44px;height:44px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-family:var(--head);font-weight:700;position:relative;flex:none}
+.avatar:after{content:"";position:absolute;right:0;bottom:0;width:10px;height:10px;border-radius:50%;background:var(--green);border:2px solid #fff}
+.msgs{flex:1;padding:18px 16px 110px;display:flex;flex-direction:column;gap:20px}
+.day{align-self:center;background:#DDE3EE;color:#6B7280;font-size:11px;font-weight:700;padding:5px 12px;border-radius:999px;letter-spacing:.03em}
+.msg{max-width:80%;padding:12px 15px 9px;border-radius:18px;font-size:15px;line-height:1.45;box-shadow:0 1px 2px rgba(17,24,39,.06)}
+.msg.in{background:#fff;align-self:flex-start;border-bottom-left-radius:6px}
+.msg.out{background:var(--blue);color:#fff;align-self:flex-end;border-bottom-right-radius:6px}
+.msg .who{display:block;color:var(--blue);font-weight:700;font-size:13px;margin-bottom:3px}
+.msg time{display:block;text-align:right;font-size:11px;opacity:.65;margin-top:3px}
+.voice{display:flex;align-items:center;gap:10px}
+.voice .pl{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex:none}
+.voice .pl svg.i{width:15px;height:15px;stroke-width:2.5}
+.msg.in .pl{background:var(--blue);color:#fff}.msg.out .pl{background:#fff;color:var(--blue)}
+.wave{display:flex;align-items:center;gap:2px;height:22px}
+.wave i{width:2.5px;border-radius:2px;background:currentColor;opacity:.9}
+.msg.in .wave{color:var(--blue)}
+.shot{height:150px;border-radius:14px;background:linear-gradient(135deg,#C6D8DE,#E9F0F3);display:grid;place-items:center;color:#5B6B7A;font-size:12px;margin-bottom:8px}
+.composer{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(402px,100vw);background:#fff;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
+.composer .inp{flex:1;min-width:0;display:flex;align-items:center;height:42px;border-radius:999px;background:#F1F3F7;padding:0 14px;color:#6B7280}
+.composer input{flex:1;border:0;outline:0;background:transparent;min-width:0}
+.composer .rb{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:#F1F3F7;color:#6B7280;flex:none}
+.composer .rb.send{background:var(--blue);color:#fff;box-shadow:0 6px 14px -4px rgba(13,77,199,.6)}
+
+/* ---------- Profile ---------- */
+.hero{background:var(--blue);color:#fff;border-radius:28px;padding:24px;text-align:center;box-shadow:0 16px 30px -14px rgba(13,77,199,.7)}
+.hero .ph{width:84px;height:84px;border-radius:50%;background:rgba(255,255,255,.18);border:3px solid rgba(255,255,255,.35);display:grid;place-items:center;margin:0 auto 14px;font-family:var(--head);font-weight:700;font-size:30px}
+.info div{display:flex;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+.info span{color:var(--muted)}.info b{font-weight:600;text-align:right;word-break:break-word}
+.pref{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--line)}
+.pref b{font-family:var(--head);font-weight:600;display:block}.pref small{color:var(--muted);font-size:12.5px}
+.sw{width:46px;height:26px;border-radius:999px;background:#D5D9E2;position:relative;transition:.15s;flex:none}
+.sw:after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s}
+.sw.on{background:var(--blue)}.sw.on:after{left:23px}
+.menu{display:flex;align-items:center;gap:14px;width:100%;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-top:12px;font-family:var(--head);font-weight:600;font-size:15.5px;text-align:left}
+.menu .ic{width:36px;height:36px;border-radius:50%;background:#EEF2FB;color:var(--blue);display:grid;place-items:center}
+.menu .chev{margin-left:auto;color:var(--soft)}
+.menu.danger{color:var(--red)}.menu.danger .ic{background:#FDE0E0;color:var(--red)}.menu.danger .chev{color:var(--red)}
+
+/* ---------- Notifications / rules / loan ---------- */
+.note{display:flex;gap:14px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px;margin-top:12px}
+.note.unread{border:1.5px solid var(--blue)}
+.note .ic{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;flex:none}
+.note h4{font-family:var(--head);font-weight:600;font-size:15.5px}
+.note p{font-size:13px;color:var(--muted);margin-top:4px}
+.note .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--blue);margin-left:8px;vertical-align:middle}
+.rules p{font-weight:500;font-size:14.5px;margin-bottom:18px;line-height:1.35}
+.warn{display:flex;gap:14px;align-items:center;background:#FEF9E6;border:1px solid #F8DE8B;border-radius:18px;padding:16px;color:#B45309}
+.warn b{font-family:var(--head);display:block}.warn p{font-size:13px}
+.tile{border-radius:16px;padding:16px;margin-top:14px}
+.banner{display:flex;align-items:center;gap:10px;background:#E6ECF9;color:var(--blue);font-weight:600;border-radius:12px;padding:12px 14px;margin-bottom:22px}
+
+.toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:var(--slate);color:#fff;padding:11px 18px;border-radius:999px;font-size:13.5px;z-index:50;max-width:340px;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.empty{text-align:center;color:var(--soft);padding:40px 0}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.blue :focus-visible{outline-color:#fff}
+.btn:disabled{opacity:.7}
+a.role{display:flex}
+
+/* ---------- Admin ---------- */
+.scr{min-height:100dvh;background:#F7F9FC}
+.hd{display:flex;align-items:center;gap:14px;background:#fff;padding:22px 20px 16px;border-bottom:1px solid var(--line)}
+.hd h1{font-family:var(--head);font-size:21px;font-weight:700;line-height:1.2}
+.hd p{font-size:12.5px;color:#4B5563}
+.hd .bk{width:36px;height:36px;border-radius:50%;background:#EAF1FE;color:var(--blue);display:grid;place-items:center;flex:none}
+.hd .bk svg{width:17px;height:17px;stroke-width:2.5}
+.hd.dark{background:#111827;color:#fff;border:0}.hd.dark p{color:#9CA3AF}.hd.dark .bk{background:rgba(255,255,255,.12);color:#fff}.hd.dark h1{font-size:17px}
+.hd.blue{background:linear-gradient(#0D4DC7,#0A3A9E);color:#fff;border:0}.hd.blue p{color:rgba(255,255,255,.8)}.hd.blue .bk{background:rgba(255,255,255,.18);color:#fff}.hd.blue h1{font-size:18px}
+.bd{padding:18px 20px 44px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.g4{gap:6px;margin-top:14px}.g4 .sb{font-size:10.5px;height:44px}
+.stat{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;text-align:left;display:block;box-shadow:0 2px 6px rgba(17,24,39,.04);min-width:0}
+.stat small{display:block;font-size:13px;color:#4B5563}.stat b{display:block;font-family:var(--head);font-size:24px;font-weight:700;margin:6px 0 4px;line-height:1.2}.stat i{font-style:normal;font-size:12px;color:#4B5563}
+.stat.sm{padding:10px 12px;border-radius:12px}.stat.sm small{font-size:11px}.stat.sm b{font-size:17px;margin:3px 0 2px}.stat.sm i{font-size:10.5px;color:var(--soft)}
+.sh{font-family:var(--head);font-size:16px;font-weight:600;margin:22px 0 12px}
+.qa{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 8px;display:flex;flex-direction:column;align-items:center;gap:10px;font-weight:600;font-size:13.5px;box-shadow:0 2px 6px rgba(17,24,39,.04)}
+.qa span{width:42px;height:42px;border-radius:50%;background:#EEF3FE;color:var(--blue);display:grid;place-items:center}
+.feed{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:8px}
+.feed>i{width:8px;height:8px;border-radius:50%;background:var(--blue);flex:none}
+.feed b{display:block;font-size:14px;font-weight:600}.feed small{font-size:12px;color:#4B5563}.feed em{font-style:normal;font-weight:700;color:var(--blue);font-size:14px;white-space:nowrap}
+.write{display:flex;gap:6px;align-items:center;background:#EAF1FE;border:1px solid #BFD3F8;color:var(--blue);font-weight:700;font-size:14px;padding:7px 14px;border-radius:999px}
+.av{width:40px;height:40px;border-radius:50%;background:#EAF1FE;color:var(--blue);display:grid;place-items:center;font-family:var(--head);font-weight:700;font-size:14px;flex:none}
+.av.sm{width:30px;height:30px;font-size:11px}.av.xl{width:76px;height:76px;font-size:26px;margin:0 auto}.av.red{background:#FDE8E8;color:var(--red)}
+.badge.xs{font-size:10px;padding:3px 8px;border-radius:6px;letter-spacing:.02em}
+.b{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:44px;border-radius:8px;font-weight:600;font-size:14px;margin-top:12px;color:#fff;text-decoration:none}
+.sb{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;height:36px;border-radius:8px;font-weight:700;font-size:12px;color:#fff;text-decoration:none;min-width:0;white-space:nowrap}
+.blue{background:var(--blue)}.blue2{background:#2F66E0}.green{background:var(--green)}.red{background:#E5322D}.red2{background:var(--red)}.orange{background:var(--orange)}.navy{background:#1E3FAE}.dark{background:#111827}.indigo{background:#4F46E5}
+.o-red{background:#fff;border:1.5px solid var(--red);color:var(--red)}.o-orange{background:#fff;border:1.5px solid var(--orange);color:var(--orange)}
+.soft,.s-blue{background:#E8EFFD;color:var(--blue)}.s-red{background:#FDE8E8;color:var(--red)}.s-green{background:#DFF7EC;color:#0E9F6E}.s-yellow{background:#FDF0C4;color:#D97706}
+.ghost{background:#fff;border:1px solid var(--line);color:var(--slate)}
+.b:disabled,.sb:disabled{opacity:.6}
+.in{width:100%;border:1px solid #D9DEE8;border-radius:8px;padding:11px 12px;font-size:14px;background:#fff;display:block;outline:0}.in:focus{border-color:var(--blue)}textarea.in{resize:vertical;line-height:1.5}
+.cl{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#4B5563;margin:14px 0 6px}
+form .g2{margin-top:14px;row-gap:14px}form .g2 .cl{margin-top:0}
+.drop{display:grid;place-items:center;align-content:center;gap:8px;min-height:78px;padding:10px;border:1.5px dashed #C9D1DE;border-radius:8px;background:#fff;color:#6B7280;font-size:12.5px;cursor:pointer}
+.chips{display:flex;gap:8px;margin:12px 0 14px;flex-wrap:wrap}.chips button{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:12px;font-weight:600}
+.chips button.on{background:var(--blue);border-color:var(--blue);color:#fff}.chips i{font-style:normal;background:rgba(17,24,39,.08);padding:1px 6px;border-radius:999px;margin-left:4px;font-size:10.5px}.chips .on i{background:rgba(255,255,255,.25)}
+.met{background:#F7F9FC;border-radius:10px;padding:12px}.met b{font-family:var(--head);font-size:18px;display:block}.met small{font-size:11.5px;color:#4B5563}
+.ci{display:flex;gap:14px;align-items:center;margin-top:14px}.ci svg{color:#4B5563;width:18px;height:18px}.ci span{font-size:14px;font-weight:500}.ci small{display:block;font-size:10.5px;font-weight:600;color:#4B5563}
+.card.sc,.card.rc,.card.uc,.card.acct,.card.rt2{padding:14px;border-radius:14px;margin-bottom:12px}
+.card.wd{display:block;width:100%;padding:12px 14px;border-radius:12px;margin-bottom:10px}
+.th{width:48px;height:48px;border-radius:8px;object-fit:cover;background:#EEF2F8;display:grid;place-items:center;color:var(--soft);flex:none}
+.rc .d{display:block;font-size:12.5px;color:#4B5563}
+.ur{border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:12px 0;padding:8px 0}.ur div{display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:13px}.ur span{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.03em}.ur b{font-weight:500;text-align:right;word-break:break-word}
+.tp>div{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:10px 0;border-bottom:1px solid #EEF1F6;font-size:13.5px}.tp>div:last-child{border-bottom:0}.tp>div>span{color:#4B5563;flex:none}.tp>div>b{text-align:right;font-weight:600;word-break:break-word}
+.tp .cl{display:block;border:0;padding:0}
+.rt2 .g2{margin-top:10px;gap:10px}.rt2 small{display:block;font-size:11px;color:#4B5563}.rt2 .g2 b{display:inline-block;background:#F4F7FC;padding:5px 8px;border-radius:6px;font-size:13px;margin-top:4px}
+.pol{background:#EEF3FE;border-radius:12px;padding:14px;margin-top:6px}.pol b{color:var(--blue);font-size:13.5px}.pol p{font-size:12.5px;color:#374151;margin:8px 0;white-space:pre-wrap}
+.tabb{flex:1;height:36px;border-radius:8px;background:#EEF3FE;color:var(--blue);font-weight:700;font-size:13px}.tabb.on{background:var(--blue);color:#fff}
+.cv{display:flex;gap:12px;width:100%;text-align:left;padding:14px 20px;background:#fff;border-top:1px solid var(--line)}.cv b{font-size:14.5px}.lm{display:block;font-size:13.5px;color:#4B5563;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fbtn{display:flex;gap:6px;align-items:center;background:rgba(255,255,255,.12);color:#fff;font-size:12px;font-weight:600;padding:7px 10px;border-radius:8px}
+.fabx{display:inline-flex;gap:8px;align-items:center;background:var(--blue);color:#fff;font-weight:600;font-size:14px;padding:11px 16px;border-radius:999px;text-decoration:none;box-shadow:0 8px 18px -6px rgba(13,77,199,.6)}
+.pill-w{align-self:center;margin-top:8px;background:rgba(255,255,255,.16);font-size:11.5px;font-weight:700;padding:4px 12px;border-radius:999px}
+.field.glass{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2)}.field.glass input{color:#fff}.field.glass:focus-within{border-color:#fff}
+.field.srch{height:42px;padding:0 14px;color:var(--soft);border-width:1px}.field.srch input{font-size:14px}
+.sheet-bg{position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:60;display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:min(402px,100vw);background:#fff;border-radius:20px 20px 0 0;padding:22px 20px calc(20px + env(safe-area-inset-bottom))}.sheet h3{font-size:18px}.sheet p{color:#4B5563;font-size:14px;margin:8px 0 6px}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="sheet"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ---------- Icons (20px stroke line icons, per brand guide) ---------- */
+const P={
+ home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+ repeat:'<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
+ bars:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+ btc:'<path d="M11.767 19.089c4.924.868 6.14-6.025 1.216-6.894m-1.216 6.894L5.86 18.047m5.908 1.042-.347 1.97m1.563-8.864c4.924.869 6.14-6.025 1.215-6.893m-1.215 6.893-3.94-.694m5.155-6.2L8.29 4.26m5.908 1.042.348-1.97M7.48 20.364l3.126-17.727"/>',
+ user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+ bell:'<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+ chat:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+ cl:'<polyline points="15 18 9 12 15 6"/>', cr:'<polyline points="9 18 15 12 9 6"/>', cd:'<polyline points="6 9 12 15 18 9"/>',
+ al:'<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+ eyeoff:'<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
+ eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+ copy:'<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+ search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+ camera:'<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+ check:'<polyline points="20 6 9 17 4 12"/>',
+ phone:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+ info:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+ clip:'<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+ mic:'<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+ send:'<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+ play:'<polygon points="6 4 20 12 6 20 6 4"/>',
+ imgoff:'<line x1="2" y1="2" x2="22" y2="22"/><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"/><line x1="13.5" y1="13.5" x2="6" y2="21"/><line x1="18" y1="12" x2="21" y2="15"/><path d="M3.59 3.59A2 2 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.05-.22 1.41-.59"/><path d="M21 15V5a2 2 0 0 0-2-2H9"/>',
+ bank:'<line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/>',
+ alertt:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+ alertc:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+ checkc:'<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+ lock:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+ help:'<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+ logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+ share:'<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>',
+ plusc:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
+ brief:'<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+ shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+ shielda:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+ finger:'<path d="M2 12C2 6.5 6.5 2 12 2a10 10 0 0 1 8 4"/><path d="M5 19.5C5.5 18 6 15 6 12c0-.7.12-1.37.34-2"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .13-5.35 0-6"/><path d="M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2"/>',
+ adl:'<line x1="17" y1="7" x2="7" y2="17"/><polyline points="17 17 7 17 7 7"/>',
+ trend:'<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
+ cc:'<path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/>',
+ swap:'<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>'
+};
+const I=(n,s='')=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true" ${s}>${P[n]}</svg>`;
+Object.assign(P,{
+ users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+ pen:'<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+ gear:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+ file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+ dl:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+ up:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+ trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+ cal:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+ filter:'<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+ xc:'<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+ plus:'<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+ dots:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+ cardi:'<rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
+ clock:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'
+});
+
+/* =====================================================================
+   AZAPLUG Admin App — connected to the /api/admin/* routes in server.js
+   Balances are only ever changed by the server (credit, refund, reject).
+   Screens with no backend yet say "Coming soon" instead of showing
+   made-up numbers.
+   ===================================================================== */
+const S={route:'loading',users:[],staff:[],accounts:[],trades:[],wds:[],settings:{},convos:[],chat:[],
+  userTab:'all',rcTab:'pending',wdTab:'pending',wdPage:1,ratesTab:'rates',chatTab:'all',id:null,uid:null,back:'dash',form:null,done:null};
+const $=s=>document.querySelector(s);
+const n0=n=>Number(n||0).toLocaleString('en-NG'), naira=n=>'₦'+n0(n);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safeImg=s=>/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+$/i.test(s||'')?s:'';
+const num=v=>parseFloat(String(v).replace(/[^0-9.]/g,''))||0;
+const ini=n=>(String(n||'?').trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('')||'?').toUpperCase();
+const fd=d=>new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const ft=d=>new Date(d).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+const fdt=d=>fd(d)+' • '+ft(d);
+const today=d=>new Date(d).toDateString()===new Date().toDateString();
+const ago=d=>{const s=(Date.now()-new Date(d))/1000;if(s<60)return 'Just now';if(s<3600)return Math.floor(s/60)+' mins ago';if(s<86400)return Math.floor(s/3600)+' hours ago';if(s<172800)return 'Yesterday';return fd(d)};
+const tid=t=>'#'+String(t.id).slice(0,4).toUpperCase();
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),2600)}
+
+async function api(method,url,body){
+  const r=await fetch(url,{method,credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+  let d={};try{d=await r.json()}catch(e){}
+  if(r.status===401&&S.route!=='login'){go('login')}
+  if(!r.ok)throw new Error(d.error||'Something went wrong. Try again.');
+  return d;
+}
+async function refresh(){
+  const [u,s,a,t,w,st,c]=await Promise.all(['users','staff','accounts','trades','withdrawals','settings','chats'].map(x=>api('GET','/api/admin/'+x)));
+  S.users=u.users||[];S.staff=s.staff||[];S.accounts=a.accounts||[];S.trades=t.trades||[];S.wds=w.withdrawals||[];S.settings=st||{};S.convos=c.conversations||[];
+}
+function compress(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onerror=rej;fr.onload=e=>{const img=new Image();img.onerror=rej;img.onload=()=>{
+  const c=document.createElement('canvas'),k=Math.min(1,1000/img.width);c.width=img.width*k;c.height=img.height*k;
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.75))};img.src=e.target.result};fr.readAsDataURL(file)})}
+
+/* Confirmation sheet for actions that cannot be undone */
+let askResolve=null;
+function ask(title,text,ok,danger){return new Promise(res=>{askResolve=res;
+  $('#sheet').innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h3>${esc(title)}</h3><p>${esc(text)}</p>
+   <button class="b ${danger?'red':'green'}" data-ask="1">${esc(ok)}</button><button class="b ghost" data-ask="0">Cancel</button></div></div>`})}
+
+const pending=t=>['checking','seen','confirmed'].includes(t.status)||(t.status==='approved'&&t.creditedAmount==null);
+const tBadge=t=>t.status==='failed'?['FAILED','b-failed']:t.status==='approved'?(t.creditedAmount==null?['AWAITING CREDIT','b-checking']:['APPROVED','b-approved']):t.status==='confirmed'?['CONFIRMED','b-confirmed']:t.status==='seen'?['SEEN','b-confirmed']:['PENDING','b-checking'];
+const wBadge=w=>w.status==='paid'?['Approved','b-approved']:w.status==='rejected'?['Declined','b-failed']:['Pending','b-checking'];
+const sBadge=s=>s.status==='approved'?['ACTIVE','b-approved']:s.status==='rejected'?['SUSPENDED','b-failed']:['PENDING APPROVAL','b-checking'];
+const staffStats=s=>{const tr=S.trades.filter(t=>t.staffId===s.id),ok=tr.filter(t=>t.status==='approved').length,bad=tr.filter(t=>t.status==='failed').length;
+  return{trades:tr.length,accounts:S.accounts.filter(a=>a.staffId===s.id).length,rate:ok+bad?(ok/(ok+bad)*100).toFixed(1)+'%':'--',failed:bad}};
+const hd=(t,s,b,r,dark)=>`<header class="hd ${dark||''}">${b?`<button class="bk" data-go="${b}" aria-label="Back">${I('al')}</button>`:''}<div class="grow" style="min-width:0"><h1>${t}</h1>${s?`<p>${s}</p>`:''}</div>${r||''}</header>`;
+const av=(n,cls)=>`<span class="av ${cls||''}">${esc(ini(n))}</span>`;
+const search=(ph)=>`<div class="field srch">${I('search','style="width:17px;height:17px"')}<input id="q" placeholder="${ph}" aria-label="${ph}" autocomplete="off"></div>`;
+const blankAcct=()=>({title:'',bankName:'',accountNumber:'',lowestAmount:'',lowestRate:'',higherAmount:'',higherRate:'',minAmount:'',maxAmount:'',imageData:null});
+const acctCard=(a,btns)=>{const img=safeImg(a.imageData);return `<article class="card acct" data-k="${esc((a.title+' '+a.bankName+' '+a.accountNumber).toLowerCase())}">
+  <div class="between"><b>${esc(a.title)}</b><span class="badge ${a.active?'b-approved':'b-checking'}">${a.active?'VERIFIED':'UNVERIFIED'}</span></div>
+  ${img?`<img src="${img}" alt="" style="width:100%;border-radius:14px;margin-top:14px;display:block">`:`<div class="noimg">${I('imgoff')}No image</div>`}
+  <div class="mono" style="white-space:pre-wrap;line-height:2.1;word-break:break-word">${esc(a.accountNumber)}</div>
+  <div style="font-family:var(--mono);font-size:10.5px;color:var(--soft)">:${esc(a.bankName)}</div>
+  <div class="kv"><div><span>Minimum</span><b>${naira(a.minAmount)}</b></div><div><span>Limit</span><b>${naira(a.maxAmount)}</b></div>
+   <div><span style="font-family:var(--mono)">${n0(a.lowestAmount)}</span><b>${naira(a.lowestRate)}</b></div><div><span style="font-family:var(--mono)">${n0(a.higherAmount)}</span><b>${naira(a.higherRate)}</b></div></div>${btns}</article>`};
+const acctForm=(edit)=>{const f=S.form,img=safeImg(f.imageData),fl=(id,l,v,ph,im)=>`<div><label class="cl" for="${id}">${l}</label><input class="in" id="${id}" value="${esc(v)}" placeholder="${ph}" ${im?'inputmode="decimal"':''}></div>`;
+  return `<form data-form="account" novalidate><div class="g2"><div><label class="cl" for="f-title">Country</label><input class="in" id="f-title" list="titles" value="${esc(f.title)}" placeholder="Select country"></div>${fl('f-bank','Bank name',f.bankName,'e.g. azteca')}</div>
+  <datalist id="titles">${[...new Set(S.accounts.map(a=>a.title))].map(t=>`<option value="${esc(t)}">`).join('')}</datalist>
+  <label class="cl" for="f-num">Account number</label><textarea class="in" id="f-num" rows="3" placeholder="e.g. 0123456789 or a wallet/username">${esc(f.accountNumber)}</textarea>
+  <div class="g2">${fl('f-la','Lower amount',f.lowestAmount,'500',1)}${fl('f-lr','Rate at lower',f.lowestRate,'3000000',1)}${fl('f-ha','Higher amount',f.higherAmount,'500',1)}${fl('f-hr','Rate at higher',f.higherRate,'3000000',1)}${fl('f-min','Minimum accepted',f.minAmount,'500',1)}${fl('f-max','Limit (maximum accepted)',f.maxAmount,'3000000',1)}</div>
+  <label class="cl">Image (optional - logo or QR)</label>
+  <label class="drop" id="f-drop">${img?`<img src="${img}" alt="Account image" style="max-height:140px;max-width:100%;border-radius:8px">`:`${I('up')}<span>Click to upload</span>`}<input id="f-img" type="file" accept="image/*" hidden></label>
+  <button class="b blue">${edit?'Save Change':'Add Account'}</button></form>
+  ${edit?`<button class="b red" data-go="${S.back}">Cancel Change</button>`:`<button class="b green" data-go="accountsAll">See All Account</button>`}`};
+
+/* ---------- Screens ---------- */
+const V={
+loading:()=>`<section class="screen blue"><div class="grow"></div><div class="logo-dot">${I('swap')}</div><div class="wordmark" style="margin-top:22px">AZAPLUG</div><div class="grow"></div></section>`,
+
+login:()=>`<section class="screen blue">
+  <div class="logo-dot" style="width:80px;height:80px;margin-top:70px">${I('swap','style="width:32px;height:32px;stroke-width:2"')}</div>
+  <div class="wordmark" style="font-size:30px;margin-top:22px">AZAPLUG</div>
+  <span class="pill-w">USER ADMIN</span>
+  <div style="height:200px"></div>
+  <form data-form="login" novalidate>
+  <label for="lg-pw" style="display:block;font-weight:600;font-size:14px;opacity:.75;margin-bottom:10px">Password</label>
+  <div class="field glass"><input id="lg-pw" type="password" autocomplete="current-password"><button type="button" data-act="show" style="font-size:12px;font-weight:700;opacity:.8">SHOW</button></div>
+  <p style="text-align:right;margin:22px 0 30px"><button type="button" data-act="soon" style="font-size:14px">Forgot Password?</button></p>
+  <button class="btn white" style="font-size:16px">Sign In to Admin Dashboard</button></form>
+  <div class="grow"></div>
+  <p style="text-align:center;font-size:14px;opacity:.9"><a href="/app.html" style="color:#fff">Back to AZAPLUG</a></p></section>`,
+
+dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5).length,act=S.trades.filter(pending),rec=S.trades.filter(t=>['checking','seen'].includes(t.status)).length;
+ const feed=[...S.trades.map(t=>({at:t.updatedAt||t.createdAt,t:`Trade ${tid(t)} ${tBadge(t)[0].toLowerCase().replace(/^./,c=>c.toUpperCase())}`,s:`Handled by Staff: ${esc(t.staffName)}`,r:n0(t.intendedAmount),go:'trade',id:t.id})),
+   ...S.staff.filter(s=>s.status==='pending').map(s=>({at:s.createdAt,t:'New Staff Account Pending',s:`${esc(s.name)} requested access`,r:'Review',go:'staffProfile',id:s.id})),
+   ...S.wds.filter(w=>w.status==='pending').map(w=>({at:w.createdAt,t:'Withdrawal Request',s:esc(w.userName),r:naira(w.amount),go:'wd',id:w.id}))].sort((a,b)=>new Date(b.at)-new Date(a.at)).slice(0,6);
+ const qa=[['staff','users','Manage Staff'],['accounts','users','Accounts'],['users','users','Manage Users'],['chats','help','Help &amp; Support'],['rules','gear','Edit Rules'],['receipts','file','Receipts'],['wds','dl','Withdrawer Request'],['rates','trend','Edit Rates']];
+ return `<section class="scr">${hd('Admin Panel','AzaPlug Executive Control','',`<button class="write" data-act="soon">${I('pen','style="width:15px;height:15px"')}Write</button>`)}
+ <div class="bd"><div class="g2">
+  <div class="stat"><small>Total Users</small><b>${n0(S.users.length)}</b><i style="color:var(--green)">+${week} this week</i></div>
+  <div class="stat"><small>Active Trades</small><b>${act.length}</b><i style="color:var(--blue)">${S.trades.length} all time</i></div>
+  <button class="stat" data-go="receipts"><small>Pending</small><b style="color:var(--orange)">${rec} Receipt${rec===1?'':'s'}</b><i>Needs review</i></button>
+  <div class="stat"><small>Today's Revenue</small><b>—</b><i>Not tracked yet</i></div></div>
+  <h2 class="sh">Quick Actions</h2>
+  <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}</button>`).join('')}</div>
+  <div class="between" style="margin:22px 0 10px"><h2 class="sh" style="margin:0">Recent Activity Feed</h2><button class="link" style="font-size:14px" data-go="receipts">View All</button></div>
+  ${feed.length?feed.map(f=>`<button class="feed" data-go="${f.go}" data-id="${esc(f.id)}"><i></i><span class="grow" style="min-width:0"><b>${f.t}</b><small>${f.s} • ${ago(f.at)}</small></span><em>${f.r}</em></button>`).join(''):'<p class="empty">No activity yet</p>'}
+  <p style="text-align:center;margin-top:26px"><button class="link" style="color:var(--muted);font-weight:600;font-size:14px" data-act="logout">Log out</button></p></div></section>`},
+
+staff:()=>`<section class="scr">${hd('Staff','Active and Pending Recio Agents','dash')}
+ <div class="bd">${search('Search staff members...')}<div id="list">
+ ${S.staff.length?S.staff.map(s=>{const b=sBadge(s),st=staffStats(s);return `<article class="card sc" data-k="${esc((s.name+' '+s.phone).toLowerCase())}">
+  <button class="row" style="gap:12px;width:100%;text-align:left" data-go="staffProfile" data-id="${esc(s.id)}">${av(s.name)}<span class="grow" style="min-width:0"><b class="h" style="font-size:14.5px;display:block">${esc(s.name)}</b><small class="muted">${st.trades} Trades Handled • ${st.accounts} Accounts</small></span><span class="badge ${b[1]} xs">${b[0]}</span></button>
+  <div class="row" style="gap:8px;margin-top:12px"><button class="sb o-red" data-act="staffDelete" data-id="${esc(s.id)}">Delete</button>
+   ${s.status==='rejected'?'':`<button class="sb orange" data-act="staffReject" data-id="${esc(s.id)}">REJECT</button>`}
+   ${s.status==='approved'?'':`<button class="sb blue" data-act="staffApprove" data-id="${esc(s.id)}">${s.status==='rejected'?'Re-Approve':'Approve Staff'}</button>`}</div></article>`}).join(''):'<p class="empty">No staff yet</p>'}</div>
+ <div style="text-align:right;margin-top:24px"><a class="fabx" href="/staff-login.html">${I('plus','style="width:16px;height:16px"')}Add Staff</a></div></div></section>`,
+
+staffProfile:()=>{const s=S.staff.find(x=>x.id===S.id);if(!s)return V.staff();const b=sBadge(s),st=staffStats(s),p=s.status==='pending',r=s.status==='rejected';
+ return `<section class="scr">${hd('Staff Profile',p?'Pending Review':'Agent ID: #REC-'+esc(String(s.id).slice(0,4).toUpperCase()),'staff')}
+ <div class="bd"><div class="card" style="text-align:center">${av(s.name,'xl')}<h2 class="h" style="font-size:19px;margin-top:12px">${esc(s.name)}</h2><p class="muted" style="font-size:14px">Staff Agent</p>
+  <span class="badge ${b[1]} xs" style="margin-top:8px">${p||r?b[0]:'ACTIVE AGENT'}</span><div class="hr" style="margin:18px 0 14px"></div>
+  <div class="cl" style="text-align:left;margin-top:0">Performance metrics</div>
+  <div class="g2" style="text-align:left">${[[n0(st.trades),'Trades Handled'],[st.accounts,'Active Accounts'],[st.rate,'Success Rate'],p?['Pending','Verification Status']:[st.failed,'Failed Trades']].map(m=>`<div class="met"><b>${m[0]}</b><small>${m[1]}</small></div>`).join('')}</div></div>
+ <div class="card" style="margin-top:14px"><div class="cl" style="margin-top:0">Contact &amp; registration</div>
+  <div class="ci">${I('phone')}<span><small>PHONE NUMBER</small>${esc(s.phone)}</span></div>
+  <div class="ci">${I('cal')}<span><small>${p?'SUBMISSION DATE':'REGISTRATION DATE'}</small>${fd(s.createdAt)}</span></div></div>
+ ${p?`<button class="b blue" data-act="staffApprove" data-id="${esc(s.id)}">Approve &amp; Activate</button><div class="g2"><button class="b orange" data-act="staffReject" data-id="${esc(s.id)}">Reject Staff</button><button class="b o-red" data-act="staffDelete" data-id="${esc(s.id)}">Delete Application</button></div>`
+  :r?`<button class="b green" data-act="staffApprove" data-id="${esc(s.id)}">Re-Approve Agent</button><div class="g2"><button class="b soft" data-act="soon">Investigate</button><button class="b o-red" data-act="staffDelete" data-id="${esc(s.id)}">Delete Agent</button></div>`
+  :`<div class="g2"><button class="b blue" data-act="soon">Edit Profile</button><button class="b o-orange" data-act="staffReject" data-id="${esc(s.id)}">Suspend Agent</button></div><button class="b o-red" data-act="staffDelete" data-id="${esc(s.id)}">Delete Permanently</button>`}
+ </div></section>`},
+
+accounts:()=>{if(!S.form||S.form.id)S.form=blankAcct();return `<section class="scr">${hd('Accounts','Staff Ledgers Assigned to You','dash')}<div class="bd">${acctForm(false)}</div></section>`},
+accountEdit:()=>`<section class="scr">${hd('Accounts','Staff Ledgers Assigned to You',S.back)}<div class="bd">${acctForm(true)}</div></section>`,
+accountAdded:()=>{const a=S.done;return `<section class="scr">${hd('Accounts','Staff Ledgers assigned to you','accounts','','blue')}
+ <div class="bd"><div class="card" style="text-align:center;padding:26px 22px"><div class="ok-ring" style="background:#D9F5EA"><i style="background:#B5ECD6"><b style="background:var(--green)">${I('check')}</b></i></div>
+  <h2 class="h" style="font-size:21px;line-height:1.25">Account Added<br>Successfully</h2><p class="muted" style="font-size:14px;margin:12px 0 20px">Your new account has been created and is ready to use.</p><div class="hr"></div>
+  <div class="sum plain" style="text-align:left"><div><span>Country</span><b style="font-weight:600">${esc(a.title)}</b></div><div><span>Bank Name</span><b style="font-weight:600">${esc(a.bankName)}</b></div>
+   <div><span>Account Number</span><b style="font-weight:600">${esc(String(a.accountNumber).split('\n')[0].slice(0,24))}</b></div><div><span>Status</span><span class="badge b-approved">Active</span></div></div></div>
+  <button class="b navy" data-go="accounts">Go Back to Accounts</button></div></section>`},
+accountsAll:()=>`<section class="scr"><div class="bd" style="padding-top:24px"><div class="top"><button class="icon-btn" style="width:36px;height:36px;color:var(--slate)" data-go="accounts" aria-label="Back">${I('al','style="width:16px;height:16px"')}</button><span class="title" style="font-family:var(--body);font-size:15px;font-weight:600">All Account</span><span></span></div>
+  <p class="muted" style="text-align:center;font-size:13px;margin-top:-8px">Search by country or bank to see the account, minimum, limit, and rate.</p>${search('Search country or bank...')}
+  <div id="list">${S.accounts.length?S.accounts.map(a=>acctCard(a,a.active
+    ?`<button class="b blue2" data-act="acctEdit" data-id="${esc(a.id)}">Edit Account</button><button class="b red" data-act="acctDelete" data-id="${esc(a.id)}">Delete Account</button>`
+    :`<div class="row" style="gap:8px;margin-top:14px"><button class="sb blue2" data-act="acctEdit" data-id="${esc(a.id)}">Edit Account</button><button class="sb red" data-act="acctDelete" data-id="${esc(a.id)}">Delete Account</button><button class="sb green" data-act="acctVerify" data-id="${esc(a.id)}">Verify</button></div>`)).join(''):'<p class="empty">No accounts yet</p>'}</div>
+  <div class="card" style="padding:16px"><div class="cap" style="font-size:12px">Instructions</div><p class="muted" style="font-size:13px;margin-top:8px">Please make sure to copy the account number exactly as shown. Use the concept label in your bank description for faster verification.</p></div></div></section>`,
+
+receipts:()=>{const list=S.trades.filter(t=>S.rcTab==='all'||pending(t));
+ return `<section class="scr">${hd('Admin Panel','Recio Ledger Review Console','dash')}
+ <div class="bd"><div class="g3"><div class="stat sm"><small>Pending</small><b style="color:var(--orange)">${S.trades.filter(t=>['checking','seen'].includes(t.status)).length}</b></div>
+  <div class="stat sm"><small>Accounts</small><b style="color:var(--blue)">${S.accounts.filter(a=>a.active).length} Active</b></div>
+  <div class="stat sm"><small>Today's Conf</small><b style="color:var(--green)">${S.trades.filter(t=>['confirmed','approved'].includes(t.status)&&today(t.updatedAt||t.createdAt)).length}</b></div></div>
+  <div class="between" style="margin:18px 0 12px"><h2 class="sh" style="margin:0">${S.rcTab==='all'?'All Receipts':'Pending Receipts'}</h2><button class="link" style="font-size:13px;font-weight:600" data-set="rcTab:${S.rcTab==='all'?'pending':'all'}">${S.rcTab==='all'?'Pending only':'Show all'}</button></div>
+  ${list.length?list.map(t=>{const img=safeImg(t.receiptImage),b=tBadge(t),fin=t.status==='failed'||(t.status==='approved'&&t.creditedAmount!=null);return `<article class="card rc">
+   <button class="row" style="gap:12px;width:100%;text-align:left;align-items:flex-start" data-go="trade" data-id="${esc(t.id)}">${img?`<img class="th" src="${img}" alt="Receipt">`:`<span class="th">${I('file')}</span>`}
+    <span class="grow" style="min-width:0"><b class="h" style="font-size:16px">${n0(t.intendedAmount)}</b><small class="d">${esc(t.accountTitleUsed||'Account')} • ${esc(t.userName)}</small><small class="d">${fdt(t.createdAt)}</small></span><span class="badge ${b[1]} xs">${b[0]}</span></button>
+   ${fin?'':`<div class="row" style="gap:8px;margin-top:12px"><button class="sb s-red" data-go="trade" data-id="${esc(t.id)}">Failed</button><button class="sb s-green" data-act="tradeMark" data-status="confirmed" data-id="${esc(t.id)}">Confirm</button><button class="sb s-blue" data-act="tradeMark" data-status="approved" data-id="${esc(t.id)}">Approve</button></div>`}
+   ${t.status==='approved'&&t.creditedAmount==null?`<button class="b green" style="margin-top:10px" data-go="trade" data-id="${esc(t.id)}">Verify and Credit Balance</button>`:''}</article>`}).join(''):'<p class="empty">No receipts waiting</p>'}</div></section>`},
+
+trade:()=>{const t=S.trades.find(x=>x.id===S.id);if(!t)return V.receipts();const img=safeImg(t.receiptImage),b=tBadge(t),fi=safeImg(t.failImage),canCredit=t.status==='approved'&&t.creditedAmount==null;
+ const row=(l,v)=>`<div><span>${l}</span><b>${v}</b></div>`;
+ return `<section class="scr">${hd('Trade '+tid(t),'Full Review &amp; Admin Controls',S.back==='user'?'user':'receipts')}
+ <div class="bd"><div class="card row" style="gap:12px;padding:14px">${av(t.userName)}<span class="grow" style="min-width:0"><b class="h" style="font-size:15px;display:block">${esc(t.userName)}</b><small class="muted">${esc(t.userPhone)}</small></span><span class="badge ${b[1]} xs">${b[0]}</span></div>
+  <div class="card" style="margin-top:14px;padding:12px"><div class="cl" style="margin-top:2px">User uploaded receipt</div>
+   ${img?`<img src="${img}" alt="Receipt uploaded by the customer" style="width:100%;max-height:460px;object-fit:contain;background:#EEF2F8;border-radius:10px;display:block"><a class="b soft" style="margin-top:10px" href="${img}" download="receipt-${esc(String(t.id).slice(0,8))}.jpg">${I('dl','style="width:16px;height:16px"')}Save to Device</a>`:'<div class="noimg" style="margin-top:0">No receipt image</div>'}</div>
+  <div class="card tp" style="margin-top:14px"><b style="font-size:14px">Trade Parameters</b>
+   ${row('Amount',n0(t.intendedAmount))}${row('Country',esc(t.accountTitleUsed||'—'))}${row('Account Paid To',`<span style="white-space:pre-wrap">${esc(t.accountNumberUsed||'—')}</span>`)}
+   ${row('User account',esc([t.userPayoutBank,t.userPayoutAccount].filter(Boolean).join(' • ')||'—'))}${row('Staff Handled','Staff: '+esc(t.staffName))}${row('Date &amp; Time',fdt(t.createdAt))}
+   ${t.lowestRate!=null?row('Account rates',`${n0(t.lowestAmount)} → ${naira(t.lowestRate)}<br>${n0(t.higherAmount)} → ${naira(t.higherRate)}`):''}
+   ${t.staffCreditedAmount!=null?row('Staff proposed',naira(t.staffCreditedAmount)):''}${t.creditedAmount!=null?row('Credited to balance',`<span style="color:#0E9F6E">${naira(t.creditedAmount)}</span>`):''}
+   ${t.failReason?row('Failure reason',`<span style="color:var(--red)">${esc(t.failReason)}</span>`):''}</div>
+  ${fi?`<img src="${fi}" alt="Failure proof" style="width:100%;border-radius:12px;margin-top:12px">`:''}
+  ${canCredit?`<div class="card" style="margin-top:14px;border-color:#A7E3CB"><label class="cl" style="margin-top:0" for="t-credit">Final amount to credit (₦)</label><input class="in" id="t-credit" inputmode="decimal" placeholder="e.g. 450000" value="${t.staffCreditedAmount!=null?esc(t.staffCreditedAmount):''}"><button class="b green" data-act="tradeCredit" data-id="${esc(t.id)}">Verify and Credit Balance</button></div>`:''}
+  <label for="t-reason" style="display:block;font-weight:600;font-size:13.5px;margin:18px 0 8px">Failure Reason/ Compensation Reason (Mandatory if Undoing/Failing)</label>
+  <textarea class="in" id="t-reason" rows="2" placeholder="Enter reason (e.g., Receipt amount mismatch, Unconfirmed credit)..."></textarea>
+  <div class="row g4"><button class="sb s-red" data-act="tradeMark" data-status="failed" data-id="${esc(t.id)}">Undo to Failed</button><button class="sb green" data-act="tradeMark" data-status="approved" data-id="${esc(t.id)}">Approve Trade</button><button class="sb orange" data-act="tradeMark" data-status="confirmed" data-id="${esc(t.id)}">Confirmed</button><button class="sb blue" data-act="soon">Compensation</button></div></div></section>`},
+
+wds:()=>{const pend=S.wds.filter(w=>w.status==='pending'),paidToday=S.wds.filter(w=>w.status==='paid'&&today(w.updatedAt||w.createdAt));
+ const all=S.wdTab==='pending'?pend:S.wdTab==='all'?S.wds:S.wds.filter(w=>w.status===S.wdTab),list=all.slice(0,S.wdPage*6),next={pending:'all',all:'paid',paid:'rejected',rejected:'pending'}[S.wdTab];
+ const title={pending:`Pending Review (${pend.length})`,all:'All Requests',paid:'Approved',rejected:'Declined'}[S.wdTab];
+ return `<section class="scr">${hd('Withdrawals','Executive Control','dash',`<button class="fbtn" data-set="wdTab:${next}">${I('filter','style="width:13px;height:13px"')}Filter</button>`,'dark')}
+ <div class="bd"><div class="g3"><div class="stat sm"><small>Total Requests</small><b>${S.wds.length}</b><i>All time</i></div>
+  <div class="stat sm" style="border:1.5px solid var(--blue)"><small>Pending</small><b style="color:#D97706">${pend.length}</b><i>Needs action</i></div>
+  <div class="stat sm"><small>Approved Today</small><b>${paidToday.length}</b><i>${naira(paidToday.reduce((s,w)=>s+w.amount,0))} paid</i></div></div>
+  <button class="b green" style="margin-top:14px" data-go="loans">view loan request</button>
+  <div class="between" style="margin:16px 0 10px"><b style="font-size:13.5px">${title}</b><button class="link" style="font-size:12.5px;font-weight:600" data-set="wdTab:${S.wdTab==='all'?'pending':'all'}">${S.wdTab==='all'?'Pending only':'View History'}</button></div>
+  ${list.length?list.map(w=>{const b=wBadge(w);return `<button class="card wd" data-go="wd" data-id="${esc(w.id)}"><span class="row" style="gap:10px">${av(w.userName,'sm')}<span class="grow" style="min-width:0;text-align:left"><b style="font-size:13.5px;display:block">${esc(w.userName)}</b><small class="muted" style="font-size:11.5px">${ago(w.createdAt)}, ${ft(w.createdAt)}</small></span><span class="badge ${b[1]} xs">${b[0]}</span></span>
+   <span class="between" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><span class="row muted" style="gap:6px;font-size:13px">${I('cardi','style="width:14px;height:14px"')}${esc(w.payoutBank)}</span><b class="h" style="font-size:16px">${naira(w.amount)}</b></span></button>`}).join(''):'<p class="empty">Nothing here</p>'}
+  ${all.length>list.length?`<button class="b ghost" data-set="wdPage:${S.wdPage+1}">Load More Requests ${I('cd','style="width:15px;height:15px"')}</button>`:''}</div></section>`},
+
+wd:()=>{const w=S.wds.find(x=>x.id===S.id);if(!w)return V.wds();const b=wBadge(w);
+ return `<section class="scr">${hd('Account Detail','Executive Action Panel','wds','','dark')}
+ <div class="bd"><div class="card row" style="gap:12px;padding:14px">${av(w.userName)}<span class="grow" style="min-width:0"><b style="font-size:14.5px;display:block">${esc(w.userName)}</b><small class="muted">${ago(w.createdAt)}, ${ft(w.createdAt)}</small></span><span class="badge ${b[1]}">${b[0]}</span></div>
+  <div class="card tp" style="margin-top:16px"><div class="cl" style="margin-top:0">Transaction details</div>
+   <div><span class="row" style="gap:8px">${I('cardi','style="width:15px;height:15px"')}Bank Name</span><b>${esc(w.payoutBank)}</b></div>
+   <div><span>Account Number</span><b class="row" style="gap:8px;font-size:15px">${esc(w.payoutAccount)}<button data-copy="${esc(w.payoutAccount)}" aria-label="Copy account number" style="color:var(--soft)">${I('copy','style="width:15px;height:15px"')}</button></b></div>
+   <div><span>Amount</span><b class="h" style="font-size:21px">${naira(w.amount)}</b></div>${w.reason?`<div><span>Reason</span><b style="color:var(--red)">${esc(w.reason)}</b></div>`:''}</div>
+  ${w.status==='pending'?`<label for="w-reason" style="display:block;font-weight:600;font-size:13px;margin:20px 0 8px">Reason for cancellation</label><textarea class="in" id="w-reason" rows="3" placeholder="Enter reason why request was cancelled..."></textarea>
+   <button class="b green" data-act="wdPaid" data-id="${esc(w.id)}">${I('check','style="width:16px;height:16px"')}MARK AS PAID</button><button class="b red2" data-act="wdCancel" data-id="${esc(w.id)}">${I('xc','style="width:16px;height:16px"')}CANCEL REQUEST</button>`:''}</div></section>`},
+
+wdDone:()=>{const w=S.done;return `<section class="scr">${hd('Payment Confirmation','Transaction Receipt','wds','','dark')}
+ <div class="bd" style="text-align:center"><div class="ok-ring" style="background:#D9F5EA;width:84px;height:84px;margin-top:14px"><i style="background:#C3F0DD;width:64px;height:64px"><b style="background:none;color:var(--green)">${I('check')}</b></i></div>
+  <h2 class="h" style="font-size:21px">Payment Successful!</h2><p class="muted" style="font-size:13.5px;margin:6px 0 18px">The withdrawal request has been marked as paid</p>
+  <div class="card tp" style="text-align:left"><div class="cl" style="margin-top:0">Transaction summary</div><small class="muted" style="display:block;margin-top:8px">Amount Disbursed</small><b class="h" style="font-size:28px;color:var(--green);display:block;padding-bottom:10px">${naira(w.amount)}</b>
+   <div><span>Recipient</span><b>${esc(w.userName)}</b></div><div><span>Bank Name</span><b>${esc(w.payoutBank)}</b></div><div><span>Account Number</span><b>${esc(w.payoutAccount)}</b></div><div><span>Paid On</span><b>Today, ${ft(new Date())}</b></div></div>
+  <button class="b green" style="margin-top:26px" data-go="wds">BACK TO REQUESTS</button></div></section>`},
+
+loans:()=>`<section class="scr"><div class="bd" style="padding-top:24px"><div class="top"><button class="icon-btn" data-go="wds" aria-label="Back">${I('al')}</button><span class="title brand" style="font-size:19px">AZAPLUG</span><span></span></div>
+  <h1 class="h" style="font-size:23px;font-weight:700;margin-bottom:16px">Loan Applications</h1>
+  <div class="card"><p class="empty" style="padding:26px 0">No loan applications yet.<br>Loans are not connected to the server yet.</p></div></div></section>`,
+
+users:()=>{const list=S.users.filter(u=>S.userTab==='all'||(S.userTab==='approved'?u.status==='approved':u.status!=='approved'));
+ return `<section class="scr"><div class="bd" style="padding-top:24px"><div class="top" style="margin-bottom:12px"><button class="icon-btn sqr" style="width:36px;height:36px" data-go="dash" aria-label="Back">${I('cl','style="width:16px;height:16px"')}</button>
+   <span class="title" style="line-height:1.2">Users<small class="muted" style="display:block;font:400 12.5px var(--body)">${S.users.filter(u=>u.status==='approved').length} total approved accounts</small></span><span></span></div>
+  ${search('Search users, banks, or accounts...')}
+  <div class="chips">${[['all','All Users'],['approved','Approved'],['suspended','Suspended']].map(c=>`<button class="${S.userTab===c[0]?'on':''}" data-set="userTab:${c[0]}">${c[1]}</button>`).join('')}</div>
+  <div id="list">${list.length?list.map(u=>{const ok=u.status==='approved';return `<article class="card uc" data-k="${esc((u.name+' '+u.phone+' '+u.bankName+' '+u.accountNumber).toLowerCase())}">
+   <button class="between" style="width:100%;text-align:left;align-items:flex-start" data-go="user" data-id="${esc(u.id)}"><span style="min-width:0"><b class="h" style="font-size:15.5px;display:block;word-break:break-word">${esc(u.name)}</b><small class="muted">Balance: <b style="color:var(--slate)">${naira(u.balance)}</b></small></span><span class="badge ${ok?'b-approved':'b-failed'} xs">${ok?'APPROVED':'SUSPENDED'}</span></button>
+   <div class="ur"><div><span>PHONE</span><b>${esc(u.phone)}</b></div><div><span>BANK</span><b>${esc(u.bankName)}</b></div><div><span>ACCOUNT NO</span><b style="font-weight:700">${esc(u.accountNumber)}</b></div></div>
+   <div class="row" style="gap:8px"><button class="sb s-blue" data-act="userEdit" data-id="${esc(u.id)}">${I('pen','style="width:13px;height:13px"')}Edit</button>
+    ${ok?`<button class="sb s-yellow" data-act="userSuspend" data-id="${esc(u.id)}">Suspend</button>`:`<button class="sb s-green" data-act="userApprove" data-id="${esc(u.id)}">Approve</button>`}
+    <button class="sb s-red" data-act="userDelete" data-id="${esc(u.id)}">${I('trash','style="width:13px;height:13px"')}Delete</button></div></article>`}).join(''):'<p class="empty">No users here</p>'}</div></div></section>`},
+
+user:()=>{const u=S.users.find(x=>x.id===S.uid);if(!u)return V.users();const ok=u.status==='approved';
+ const tx=[...S.trades.filter(t=>t.userId===u.id).map(t=>({at:t.createdAt,n:(t.accountTitleUsed||'Trade')+' receipt',r:t.creditedAmount!=null?'+ '+naira(t.creditedAmount):n0(t.intendedAmount),s:tBadge(t)[0],in:1,id:t.id})),
+   ...S.wds.filter(w=>w.userId===u.id).map(w=>({at:w.createdAt,n:'Withdrawal',r:'- '+naira(w.amount),s:wBadge(w)[0],wid:w.id}))].sort((a,b)=>new Date(b.at)-new Date(a.at)).slice(0,6);
+ return `<section class="scr"><div class="bd" style="padding-top:24px"><div class="top"><button class="icon-btn sqr" style="width:36px;height:36px" data-go="users" aria-label="Back">${I('cl','style="width:16px;height:16px"')}</button><span class="title" style="font-size:17px">User Profile</span><span></span></div>
+  <div class="card" style="text-align:center">${av(u.name,'xl')}<h2 class="h" style="font-size:19px;margin-top:12px;word-break:break-word">${esc(u.name)}</h2><p class="muted" style="font-size:13.5px">${esc(u.bankName)} Customer</p>
+   <span class="badge ${ok?'b-approved':'b-failed'} xs" style="margin-top:8px">${ok?'APPROVED ACCOUNT':'SUSPENDED ACCOUNT'}</span><div class="hr" style="margin:16px 0 12px"></div>
+   <div style="text-align:left"><small class="cl" style="margin:0">Balance</small><b class="h" style="font-size:18px;display:block">${naira(u.balance)}</b></div></div>
+  <div class="row" style="gap:8px;margin:14px 0"><a class="sb s-blue" style="height:40px" href="tel:${esc(String(u.phone).replace(/[^0-9+]/g,''))}">${I('phone','style="width:14px;height:14px"')}Call</a><button class="sb s-green" style="height:40px" data-go="chat" data-from="user" data-id="${esc(u.id)}">${I('chat','style="width:14px;height:14px"')}Chat</button><button class="sb indigo" style="height:40px" data-act="userEdit" data-id="${esc(u.id)}">${I('pen','style="width:14px;height:14px"')}Edit</button></div>
+  <div class="card"><b class="cl" style="margin:0;color:var(--slate);font-size:13px">Contact &amp; account info</b><div class="ur" style="border-bottom:0;margin-bottom:0;padding-bottom:0"><div><span>PHONE</span><b>${esc(u.phone)}</b></div><div><span>BANK NAME</span><b>${esc(u.bankName)}</b></div><div><span>ACCOUNT NO</span><b style="font-weight:700">${esc(u.accountNumber)}</b></div></div></div>
+  <h2 class="cl" style="color:var(--slate);font-size:13px;margin:20px 0 10px">Recent transactions</h2>
+  ${tx.length?tx.map(x=>`<button class="feed" ${x.id?`data-go="trade" data-from="user" data-id="${esc(x.id)}"`:`data-go="wd" data-id="${esc(x.wid)}"`}><span class="av sm" style="background:${x.in?'#E4F6EE':'#EAF1FE'};color:${x.in?'#0E9F6E':'var(--blue)'}">${I(x.in?'adl':'share','style="width:14px;height:14px"')}</span><span class="grow" style="min-width:0"><b>${esc(x.n)}</b><small>${ago(x.at)}, ${ft(x.at)}</small></span><em style="text-align:right;color:var(--slate)">${x.r}<small style="display:block;font-weight:400;color:var(--soft)">${x.s}</small></em></button>`).join(''):'<p class="empty" style="padding:16px 0">No transactions yet</p>'}
+  <h2 class="cl" style="color:var(--slate);font-size:13px;margin:20px 0 10px">Activity history</h2>
+  <div class="card" style="padding:14px 16px"><b style="font-size:13.5px;display:block">Account created</b><small class="muted">System Registration • ${fd(u.createdAt)}</small></div></div></section>`},
+
+userEdit:()=>{const u=S.users.find(x=>x.id===S.id);if(!u)return V.users();return `<section class="scr">${hd('Edit User',esc(u.phone),S.back)}
+ <div class="bd"><form data-form="userEdit" novalidate><label class="cl" for="u-n" style="margin-top:0">Full name</label><input class="in" id="u-n" value="${esc(u.name)}">
+  <label class="cl" for="u-b">Bank name</label><input class="in" id="u-b" value="${esc(u.bankName)}"><label class="cl" for="u-a">Account number</label><input class="in" id="u-a" inputmode="numeric" value="${esc(u.accountNumber)}">
+  <button class="b blue">Save Change</button></form><button class="b red" data-go="${S.back}">Cancel Change</button></div></section>`},
+
+rates:()=>`<section class="scr">${hd('Rates &amp; Rules','Admin Controls • Strict Overrides','dash')}
+ <div style="background:#fff;padding:12px 20px;display:flex;gap:10px">${[['rates','Rates Panel'],['rules','Rules Policy']].map(t=>`<button class="tabb ${S.ratesTab===t[0]?'on':''}" data-set="ratesTab:${t[0]}">${t[1]}</button>`).join('')}</div>
+ <div class="bd">${S.ratesTab==='rates'?`<div class="between" style="margin-bottom:12px"><b style="font-size:13.5px">Active Exchange Rates</b><small class="muted">Max limit ${naira(S.settings.maxDeposit)}</small></div>
+  ${S.accounts.length?S.accounts.map(a=>`<article class="card rt2"><div class="between"><b class="h" style="font-size:14.5px">${esc(a.title)} <small class="muted" style="font:400 12px var(--body)">${esc(a.bankName)}</small></b><button data-act="acctEdit" data-from="rates" data-id="${esc(a.id)}" aria-label="Edit rates for ${esc(a.title)}" style="color:var(--blue)">${I('pen','style="width:16px;height:16px"')}</button></div>
+   <div class="g2">${[['LOWER',n0(a.lowestAmount)],['Rate at lower',naira(a.lowestRate)],['HIGHER',n0(a.higherAmount)],['Rate at higher',naira(a.higherRate)],['Min Limit',naira(a.minAmount)],['Max Limit',naira(a.maxAmount)]].map(r=>`<div><small>${r[0]}</small><b>${r[1]}</b></div>`).join('')}</div></article>`).join(''):'<p class="empty">No accounts yet. Add one under Accounts.</p>'}
+  <div class="pol"><b>System Policy Rules List</b><p>${esc((S.settings.rulesText||'No rules posted yet.').slice(0,220))}${(S.settings.rulesText||'').length>220?'…':''}</p><button class="link" style="font-size:13px" data-set="ratesTab:rules">+ Configure Policy Rules</button></div>`
+ :`<form data-form="rules" novalidate><label class="cl" for="r-text" style="margin-top:0">Rules shown to customers</label><textarea class="in" id="r-text" rows="16">${esc(S.settings.rulesText||'')}</textarea>
+  <label class="cl" for="r-max">Maximum deposit (₦)</label><input class="in" id="r-max" inputmode="decimal" value="${esc(S.settings.maxDeposit??'')}"><button class="b blue">Save Change</button></form>`}</div></section>`,
+
+chats:()=>{const wait=S.convos.filter(c=>c.lastSender==='user'),list=S.chatTab==='wait'?wait:S.convos;
+ return `<section class="scr">${hd('Awaiting Customers','','dash',`<span class="badge b-failed xs">${wait.length} WAITING</span>`)}
+ <div class="bd" style="padding-left:0;padding-right:0"><div style="padding:0 20px">${search('Search customer name or keyword...')}
+  <div class="chips">${[['all','All Queue',S.convos.length],['wait','Awaiting reply',wait.length]].map(c=>`<button class="${S.chatTab===c[0]?'on':''}" data-set="chatTab:${c[0]}">${c[1]} <i>${c[2]}</i></button>`).join('')}</div>
+  <button class="b dark" style="margin:4px 0 14px" data-act="soon">Admin Console</button></div>
+  <div id="list">${list.length?list.map(c=>`<button class="cv" data-go="chat" data-id="${esc(c.userId)}" data-k="${esc((c.name+' '+c.lastMessage).toLowerCase())}">${av(c.name,c.lastSender==='user'?'red':'')}<span class="grow" style="min-width:0"><span class="between"><b>${esc(c.name)}</b><small class="muted">${ago(c.lastAt)}</small></span>
+   <span class="lm">${esc(c.lastMessage)}</span>${c.lastSender==='user'?`<span class="badge b-checking xs" style="margin-top:4px">${I('clock','style="width:10px;height:10px;vertical-align:-1px"')} waiting</span>`:''}</span></button>`).join(''):'<p class="empty">No conversations yet</p>'}</div></div></section>`},
+
+chat:()=>{const u=S.users.find(x=>x.id===S.id)||{name:'Customer',phone:''};return `<section class="chat">
+  <header class="chat-top"><button data-go="${S.back==='user'?'user':'chats'}" aria-label="Back">${I('cl','style="width:24px;height:24px"')}</button>${av(u.name)}
+   <span style="flex:1;min-width:0"><b class="h" style="font-size:16px;font-weight:600;display:block;line-height:1.2">${esc(u.name)}</b><small class="muted">${esc(u.phone)}</small></span>
+   ${u.phone?`<a href="tel:${esc(String(u.phone).replace(/[^0-9+]/g,''))}" aria-label="Call customer" style="color:var(--slate)">${I('phone','style="width:22px;height:22px"')}</a>`:''}</header>
+  <div class="msgs" id="msgs">${msgsHtml()}</div>
+  <form class="composer" data-form="chat"><label class="rb" aria-label="Attach photo" style="cursor:pointer">${I('clip')}<input id="c-file" type="file" accept="image/*" hidden></label>
+   <span class="inp"><input id="c-in" placeholder="Type a message..." aria-label="Message" autocomplete="off"></span><button class="rb send" aria-label="Send message">${I('send')}</button></form></section>`}
+};
+function msgsHtml(){if(!S.chat.length)return '<p class="empty">No messages yet</p>';let day='';
+  return S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender!=='user';const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
+    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">`:''}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(m.createdAt)}</time></div>`}).join('')}
+
+/* ---------- Render + navigation ---------- */
+let poll=null;
+const typing=()=>document.activeElement&&document.activeElement.matches('input,textarea');
+function render(){$('#app').innerHTML=V[S.route]();if(S.route==='chat')window.scrollTo(0,document.body.scrollHeight)}
+function go(r,o){
+  if(S.route!==r)$('#toast').classList.remove('show');
+  Object.assign(S,o||{});S.route=r;if(r==='wds')S.wdPage=S.wdPage||1;
+  render();if(r!=='chat')window.scrollTo(0,0);
+  clearInterval(poll);poll=null;
+  if(r==='login'||r==='loading')return;
+  if(r==='chat'){S.chat=[];const pull=()=>api('GET','/api/admin/chats/'+encodeURIComponent(S.id)).then(d=>{const n=(d.messages||[]).length!==S.chat.length;S.chat=d.messages||[];
+      if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight)}}).catch(()=>{});pull();poll=setInterval(pull,5000);return}
+  if(['dash','staff','receipts','wds','users','chats','accountsAll','rates'].includes(r))refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{});
+}
+async function reload(r,o){await refresh();go(r||S.route,o)}
+
+/* ---------- Actions ---------- */
+const ACT={
+  soon(){toast('Coming soon')},
+  show(el){const i=$('#lg-pw'),sh=i.type==='password';i.type=sh?'text':'password';el.textContent=sh?'HIDE':'SHOW'},
+  async logout(){try{await api('POST','/api/admin/logout')}catch(e){}go('login')},
+  async staffApprove(el,id){await api('PUT',`/api/admin/staff/${id}/approve`);toast('Staff approved');await reload()},
+  async staffReject(el,id){const s=S.staff.find(x=>x.id===id);if(!await ask(s.status==='approved'?'Suspend this agent?':'Reject this staff?',`${s.name} will not be able to use the Staff portal.`,s.status==='approved'?'Suspend':'Reject',1))return;
+    await api('PUT',`/api/admin/staff/${id}/reject`);toast('Staff access turned off');await reload()},
+  async staffDelete(el,id){const s=S.staff.find(x=>x.id===id);if(!await ask('Delete this staff account?',`${s.name} will be removed permanently. This cannot be undone.`,'Delete permanently',1))return;
+    await api('DELETE',`/api/admin/staff/${id}`);toast('Staff deleted');await reload('staff')},
+  userEdit(el,id){go('userEdit',{id,back:S.route==='user'?'user':'users'})},
+  async userSuspend(el,id){const u=S.users.find(x=>x.id===id);if(!await ask('Suspend this user?',`${u.name} will be locked out until you approve them again.`,'Suspend',1))return;
+    await api('PUT',`/api/admin/users/${id}/reject`);toast('User suspended');await reload()},
+  async userApprove(el,id){await api('PUT',`/api/admin/users/${id}/approve`);toast('User approved');await reload()},
+  async userDelete(el,id){const u=S.users.find(x=>x.id===id);if(!await ask('Delete this user?',`${u.name} and their account will be removed permanently. This cannot be undone.`,'Delete permanently',1))return;
+    await api('DELETE',`/api/admin/users/${id}`);toast('User deleted');await reload('users')},
+  acctEdit(el,id){const a=S.accounts.find(x=>x.id===id);go('accountEdit',{form:{...a},back:el.dataset.from||'accountsAll'})},
+  async acctVerify(el,id){await api('PUT',`/api/admin/accounts/${id}`,{active:true});toast('Account verified. Customers can now see it.');await reload()},
+  async acctDelete(el,id){const a=S.accounts.find(x=>x.id===id);if(!await ask('Delete this account?',`${a.title} (${a.bankName}) will be removed permanently. This cannot be undone.`,'Delete permanently',1))return;
+    await api('DELETE',`/api/admin/accounts/${id}`);toast('Account deleted');await reload()},
+  async tradeMark(el,id){const status=el.dataset.status,t=S.trades.find(x=>x.id===id),body={status};
+    if(status==='failed'){const r=($('#t-reason')||{}).value;if(!r||!r.trim()){toast('Enter the failure reason first');$('#t-reason')&&$('#t-reason').focus();return}
+      body.reason=r.trim();if(!await ask('Mark this trade as failed?',t.creditedAmount!=null?`${naira(t.creditedAmount)} already credited will be taken back from ${t.userName}'s balance.`:`${t.userName} will see the reason you entered.`,'Mark as failed',1))return}
+    await api('POST',`/api/admin/trades/${id}/mark`,body);toast('Trade marked '+status);await reload()},
+  async tradeCredit(el,id){const amount=num($('#t-credit').value),t=S.trades.find(x=>x.id===id);if(!amount){toast('Enter the final amount to credit');$('#t-credit').focus();return}
+    if(!await ask('Credit this balance?',`${naira(amount)} will be added to ${t.userName}'s balance.`,'Credit '+naira(amount)))return;
+    await api('POST',`/api/admin/trades/${id}/credit`,{creditedAmount:amount});toast('Balance credited');await reload()},
+  async wdPaid(el,id){const w=S.wds.find(x=>x.id===id);if(!await ask('Mark as paid?',`Confirm you have sent ${naira(w.amount)} to ${w.userName} (${w.payoutBank}, ${w.payoutAccount}). This cannot be undone.`,'Mark as paid'))return;
+    await api('POST',`/api/admin/withdrawals/${id}/mark`,{status:'paid'});await refresh();go('wdDone',{done:S.wds.find(x=>x.id===id)||w})},
+  async wdCancel(el,id){const r=$('#w-reason').value.trim(),w=S.wds.find(x=>x.id===id);if(!r){toast('Enter the reason for cancellation');$('#w-reason').focus();return}
+    if(!await ask('Cancel this request?',`${naira(w.amount)} will be returned to ${w.userName}'s balance.`,'Cancel request',1))return;
+    await api('POST',`/api/admin/withdrawals/${id}/mark`,{status:'rejected',reason:r});toast('Request cancelled and refunded');await reload('wds')}
+};
+let busy=false;
+document.addEventListener('click',async e=>{
+  const k=e.target.closest('[data-ask]');if(k){$('#sheet').innerHTML='';askResolve&&askResolve(k.dataset.ask==='1');askResolve=null;return}
+  if(e.target.classList.contains('sheet-bg')){$('#sheet').innerHTML='';askResolve&&askResolve(false);askResolve=null;return}
+  const c=e.target.closest('[data-copy]');if(c){navigator.clipboard?.writeText(c.dataset.copy).then(()=>toast('Copied'),()=>toast('Could not copy'));return}
+  const a=e.target.closest('[data-act]');if(a){if(busy)return;busy=true;try{await ACT[a.dataset.act](a,a.dataset.id)}catch(err){toast(err.message||'Something went wrong. Try again.')}finally{busy=false}return}
+  const s=e.target.closest('[data-set]');if(s){const[key,v]=s.dataset.set.split(':');S[key]=key==='wdPage'?Number(v):v;if(key==='wdTab')S.wdPage=1;return render()}
+  const g=e.target.closest('[data-go]');if(g){let r=g.dataset.go;const o={};
+    if(g.dataset.id){if(r==='user')o.uid=g.dataset.id;else o.id=g.dataset.id}
+    if(g.dataset.from)o.back=g.dataset.from;else if(r==='trade'||r==='chat')o.back='';
+    if(r==='rates')o.ratesTab='rates';if(r==='rules'){r='rates';o.ratesTab='rules'}
+    if(r==='accounts')o.form=null;
+    return go(r,o)}
+});
+document.addEventListener('input',e=>{if(e.target.id==='q'){const q=e.target.value.toLowerCase();document.querySelectorAll('#list [data-k]').forEach(el=>el.style.display=el.dataset.k.includes(q)?'':'none')}});
+document.addEventListener('change',async e=>{const t=e.target;
+  if(t.id==='f-img'&&t.files[0]){try{S.form.imageData=await compress(t.files[0]);$('#f-drop').firstChild.remove();$('#f-drop').insertAdjacentHTML('afterbegin',`<img src="${S.form.imageData}" alt="Account image" style="max-height:140px;max-width:100%;border-radius:8px">`);const sp=$('#f-drop span');sp&&sp.remove()}catch(err){toast('Could not read that image')}}
+  if(t.id==='c-file'&&t.files[0]){try{const imageData=await compress(t.files[0]);const d=await api('POST','/api/admin/chats/'+encodeURIComponent(S.id)+'/send',{imageData});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight)}catch(err){toast(err.message||'Could not send photo')}t.value=''}
+});
+const val=id=>$('#'+id).value.trim();
+const FORMS={
+  async login(){const password=$('#lg-pw').value;if(!password)throw new Error('Enter the admin password');await api('POST','/api/admin/login',{password});await refresh();go('dash')},
+  async account(){const b={title:val('f-title'),bankName:val('f-bank'),accountNumber:val('f-num'),lowestAmount:num(val('f-la')),lowestRate:num(val('f-lr')),higherAmount:num(val('f-ha')),higherRate:num(val('f-hr')),minAmount:num(val('f-min')),maxAmount:num(val('f-max')),imageData:S.form.imageData||null};
+    if(!b.title||!b.bankName||!b.accountNumber)throw new Error('Country, bank name and account number are required');
+    if(S.form.id){await api('PUT','/api/admin/accounts/'+S.form.id,b);toast('Account saved');const back=S.back;S.form=null;await reload(back)}
+    else{const d=await api('POST','/api/admin/accounts',b);S.form=null;await refresh();go('accountAdded',{done:d.account||b})}},
+  async userEdit(){const b={name:val('u-n'),bankName:val('u-b'),accountNumber:val('u-a')};if(Object.values(b).some(v=>!v))throw new Error('All fields are required');
+    await api('PUT','/api/admin/users/'+S.id,b);toast('User saved');await reload(S.back)},
+  async rules(){await api('PUT','/api/admin/settings',{rulesText:$('#r-text').value,maxDeposit:num(val('r-max'))});toast('Rules saved');await refresh()},
+  async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';const d=await api('POST','/api/admin/chats/'+encodeURIComponent(S.id)+'/send',{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight);i.focus()}
+};
+document.addEventListener('submit',async e=>{
+  e.preventDefault();const f=e.target,fn=FORMS[f.dataset.form];if(!fn||f.dataset.busy)return;
+  f.dataset.busy=1;const b=f.querySelector('.btn,.b');const label=b&&b.innerHTML;if(b){b.disabled=true;b.textContent='Please wait…'}
+  try{await fn()}catch(err){toast(err.message||'Something went wrong. Try again.')}
+  finally{delete f.dataset.busy;if(b&&b.isConnected){b.disabled=false;b.innerHTML=label}}
+});
+render();
+refresh().then(()=>go('dash')).catch(()=>go('login'));
+</script>
+</body>
+</html>
