@@ -365,6 +365,7 @@ app.delete('/api/staff/accounts/:id', requireStaff, requireApprovedStaff, async 
     const account = await store.findAccountById(req.params.id);
     if (!account || account.staffId !== req.staff.id) return res.status(403).json({ error: 'You can only delete accounts you provided.' });
     await store.deleteAccount(req.params.id);
+    notifyAccountGone(account);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete account.' }); }
 });
@@ -410,6 +411,7 @@ app.post('/api/staff/trades/:id/mark', requireStaff, requireApprovedStaff, async
       failImage: status === 'failed' ? (reasonImage || null) : trade.failImage,
       staffCreditedAmount: status === 'approved' ? Number(staffCreditedAmount) : trade.staffCreditedAmount
     });
+    notifyTrade(trade, status, reason);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update trade.' }); }
 });
@@ -455,6 +457,7 @@ app.post('/api/staff/chats/:userId/send', requireStaff, requireApprovedStaff, as
     const user = await store.findUserById(req.params.userId);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
     const msg = await store.addMessage({ userId: user.id, sender: 'admin', text, imageData });
+    notify(user.id, 'chat', 'AZAPLUG Support', text ? String(text).slice(0, 140) : 'Sent you a photo', { feed: false, go: 'chat' });
     res.json({ ok: true, message: msg });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send message.' }); }
 });
@@ -559,12 +562,21 @@ app.post('/api/admin/accounts', requireAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not create account.' }); }
 });
 app.put('/api/admin/accounts/:id', requireAdmin, async (req, res) => {
-  try { await store.updateAccount(req.params.id, req.body || {}); res.json({ ok: true }); }
+  try {
+    const before = await store.findAccountById(req.params.id);
+    await store.updateAccount(req.params.id, req.body || {});
+    if ((req.body || {}).active === false) notifyAccountGone(before); // un-verified = hidden from customers
+    res.json({ ok: true });
+  }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not update account.' }); }
 });
 app.delete('/api/admin/accounts/:id', requireAdmin, async (req, res) => {
-  try { await store.deleteAccount(req.params.id); res.json({ ok: true }); }
-  catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete account.' }); }
+  try {
+    const account = await store.findAccountById(req.params.id);
+    await store.deleteAccount(req.params.id);
+    notifyAccountGone(account);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete account.' }); }
 });
 
 // ============================================================
@@ -612,6 +624,7 @@ app.post('/api/admin/trades/:id/mark', requireAdmin, async (req, res) => {
       await store.addToBalance(trade.userId, -trade.creditedAmount);
       await store.updateTradeStatus(trade.id, { status: 'failed', creditedAmount: null });
     }
+    notifyTrade(trade, status, reason);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update trade.' }); }
 });
@@ -638,6 +651,7 @@ app.post('/api/admin/trades/:id/credit', requireAdmin, async (req, res) => {
       userPayoutBank: user ? user.bankName : trade.userPayoutBank
     });
     await store.addToBalance(trade.userId, Number(creditedAmount));
+    notify(trade.userId, 'tx', 'Balance credited', `₦${plain(creditedAmount)} has been added to your balance for your ${trade.accountTitleUsed || ''} receipt.`.replace('  ', ' '));
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not credit trade.' }); }
 });
@@ -676,6 +690,8 @@ app.post('/api/admin/withdrawals/:id/mark', requireAdmin, async (req, res) => {
     }
     await store.updateWithdrawalStatus(withdrawal.id, patch);
     if (status === 'rejected') await store.addToBalance(withdrawal.userId, withdrawal.amount); // refund the hold
+    if (status === 'paid') notify(withdrawal.userId, 'tx', 'Withdrawal paid', `Your withdrawal of ₦${plain(withdrawal.amount)} has been paid to ${patch.payoutBank || withdrawal.payoutBank}.`);
+    else notify(withdrawal.userId, 'tx', 'Withdrawal cancelled', `Your withdrawal of ₦${plain(withdrawal.amount)} was cancelled: ${reason}. The money is back in your balance.`);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update withdrawal.' }); }
 });
@@ -727,8 +743,104 @@ app.post('/api/admin/chats/:userId/send', requireAdmin, async (req, res) => {
     const { text, imageData } = req.body || {};
     if (!text && !imageData) return res.status(400).json({ error: 'Message is empty.' });
     const msg = await store.addMessage({ userId: req.params.userId, sender: 'admin', text, imageData });
+    notify(req.params.userId, 'chat', 'AZAPLUG Support', text ? String(text).slice(0, 140) : 'Sent you a photo', { feed: false, go: 'chat' });
     res.json({ ok: true, message: msg });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send message.' }); }
+});
+
+// ============================================================
+// PUSH NOTIFICATIONS + in-app notification feed (customers)
+// The key pair is created once and kept in the push_keys table, so there is nothing to configure.
+// Nothing in here is allowed to break the request that triggered it.
+// ============================================================
+let webpush = null;
+try { webpush = require('web-push'); } catch (e) { console.warn('web-push is not installed, push notifications are off.'); }
+let pushKeysPromise = null;
+function pushKeys() {
+  if (!webpush) return Promise.resolve(null);
+  if (!pushKeysPromise) {
+    pushKeysPromise = (async () => {
+      let keys = await store.getPushKeys();
+      if (!keys) keys = await store.savePushKeys(webpush.generateVAPIDKeys());
+      webpush.setVapidDetails(process.env.PUSH_CONTACT || 'https://recio-exchange.onrender.com', keys.publicKey, keys.privateKey);
+      return keys;
+    })().catch(err => { pushKeysPromise = null; throw err; });
+  }
+  return pushKeysPromise;
+}
+async function sendPush(subs, payload) {
+  if (!subs.length || !(await pushKeys())) return;
+  await Promise.all(subs.map(s =>
+    webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), { TTL: 86400 })
+      .catch(err => {
+        // 404 / 410 = the browser dropped this subscription; forget it.
+        if (err.statusCode === 404 || err.statusCode === 410) return store.deletePushSubscription(s.endpoint).catch(() => {});
+        console.error('Push failed:', err.statusCode || err.message);
+      })));
+}
+// Tells a customer something: saved to their in-app Notifications (unless feed is false) and pushed to their devices.
+// userId null = every customer. Runs in the background and never throws.
+function notify(userId, kind, title, body, opts) {
+  const o = opts || {};
+  if (o.feed !== false) store.addNotification({ userId, kind, title, body }).catch(err => console.error('Notification save error:', err.message || err));
+  store.listPushSubscriptions(userId).then(subs => sendPush(subs, { title, body, go: o.go || 'notifications' }))
+    .catch(err => console.error('Push error:', err.message || err));
+}
+const plain = n => Number(n || 0).toLocaleString('en-NG');
+function notifyTrade(trade, status, reason) {
+  const what = `${trade.accountTitleUsed || 'your'} receipt for ${plain(trade.intendedAmount)}`;
+  if (status === 'seen') notify(trade.userId, 'tx', 'Receipt seen', `We have seen your ${what} and are checking it.`);
+  if (status === 'confirmed') notify(trade.userId, 'tx', 'Payment confirmed', `Your ${what} has been confirmed.`);
+  if (status === 'approved') notify(trade.userId, 'tx', 'Receipt approved', `Your ${what} was approved. Your balance will be credited shortly.`);
+  if (status === 'failed') notify(trade.userId, 'tx', 'Receipt failed', `Your ${what} failed: ${reason}`);
+}
+// An account customers could see has been removed or hidden: warn everyone to stop paying into it.
+function notifyAccountGone(account) {
+  if (!account || !account.active) return;
+  notify(null, 'alert', `Stop using ${account.title} (${account.bankName})`,
+    `This ${account.title} account is no longer in use. Do not send money to it. Open AZAPLUG and check Get Account for the current one.`);
+}
+
+app.get('/api/push/key', requireUser, async (req, res) => {
+  try {
+    const keys = await pushKeys();
+    if (!keys) return res.status(503).json({ error: 'Push notifications are not available right now.' });
+    res.json({ publicKey: keys.publicKey });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Push notifications are not set up yet.' }); }
+});
+app.post('/api/push/subscribe', requireUser, async (req, res) => {
+  try {
+    const b = req.body || {}, k = b.keys || {};
+    if (!b.endpoint || !/^https:\/\//.test(b.endpoint) || !k.p256dh || !k.auth) return res.status(400).json({ error: 'Invalid subscription.' });
+    await store.savePushSubscription({ endpoint: b.endpoint, userId: req.session.userId, p256dh: k.p256dh, auth: k.auth });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not turn on notifications.' }); }
+});
+app.post('/api/push/unsubscribe', requireUser, async (req, res) => {
+  try {
+    const endpoint = (req.body || {}).endpoint;
+    const mine = (await store.listPushSubscriptions(req.session.userId)).some(s => s.endpoint === endpoint);
+    if (mine) await store.deletePushSubscription(endpoint);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not turn off notifications.' }); }
+});
+app.get('/api/notifications', requireUser, async (req, res) => {
+  try {
+    const user = await store.findUserById(req.session.userId);
+    if (!user) return res.status(401).json({ error: 'Please log in first.' });
+    res.json({ notifications: await store.listNotificationsForUser(user.id, user.createdAt) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load notifications.' }); }
+});
+// Admin "Write": an announcement to every customer.
+app.post('/api/admin/announce', requireAdmin, async (req, res) => {
+  try {
+    const title = String((req.body || {}).title || '').trim(), body = String((req.body || {}).body || '').trim();
+    if (!title || !body) return res.status(400).json({ error: 'Enter a title and a message.' });
+    if (title.length > 80 || body.length > 400) return res.status(400).json({ error: 'That announcement is too long.' });
+    await store.addNotification({ userId: null, kind: 'info', title, body });
+    notify(null, 'info', title, body, { feed: false });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send the announcement. Is the notifications table set up?' }); }
 });
 
 // ============================================================

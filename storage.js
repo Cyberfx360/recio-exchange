@@ -393,7 +393,61 @@ async function resolveEscalation(id, feedback) {
   if (error) throw error;
 }
 
+// ============================================================
+// PUSH NOTIFICATIONS + in-app notification feed (customers)
+// ============================================================
+async function getPushKeys() {
+  const { data, error } = await supabase.from('push_keys').select('*').eq('id', 1).maybeSingle();
+  if (error) throw error;
+  return data ? { publicKey: data.public_key, privateKey: data.private_key } : null;
+}
+// Stores the server's push key pair once. If another instance saved one first, that one is kept and returned.
+async function savePushKeys(k) {
+  const { error } = await supabase.from('push_keys')
+    .upsert({ id: 1, public_key: k.publicKey, private_key: k.privateKey }, { onConflict: 'id', ignoreDuplicates: true });
+  if (error) throw error;
+  return getPushKeys();
+}
+async function savePushSubscription(s) {
+  const { error } = await supabase.from('push_subscriptions')
+    .upsert({ endpoint: s.endpoint, user_id: s.userId, p256dh: s.p256dh, auth: s.auth }, { onConflict: 'endpoint' });
+  if (error) throw error;
+}
+async function deletePushSubscription(endpoint) {
+  const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  if (error) throw error;
+}
+// userId null = every customer's devices
+async function listPushSubscriptions(userId) {
+  let q = supabase.from('push_subscriptions').select('*');
+  if (userId) q = q.eq('user_id', userId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data.map(r => ({ endpoint: r.endpoint, userId: r.user_id, p256dh: r.p256dh, auth: r.auth }));
+}
+function noteRow(r) {
+  return { id: r.id, userId: r.user_id, kind: r.kind, title: r.title, body: r.body, createdAt: r.created_at };
+}
+// userId null = shown to every customer
+async function addNotification(n) {
+  const { error } = await supabase.from('notifications')
+    .insert({ id: uid(), user_id: n.userId || null, kind: n.kind || 'info', title: n.title, body: n.body });
+  if (error) throw error;
+}
+async function listNotificationsForUser(userId, since) {
+  const mine = await supabase.from('notifications').select('*').eq('user_id', userId)
+    .order('created_at', { ascending: false }).limit(50);
+  if (mine.error) throw mine.error;
+  const everyone = await supabase.from('notifications').select('*').is('user_id', null).gte('created_at', since)
+    .order('created_at', { ascending: false }).limit(50);
+  if (everyone.error) throw everyone.error;
+  return mine.data.concat(everyone.data).map(noteRow)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 50);
+}
+
 module.exports = {
+  getPushKeys, savePushKeys, savePushSubscription, deletePushSubscription, listPushSubscriptions,
+  addNotification, listNotificationsForUser,
   createEscalation, findEscalationById, listEscalations, resolveEscalation,
   createUser, findUserByPhone, findUserById, listUsers, setUserStatus, updateUser, deleteUser, addToBalance,
   createStaff, findStaffByPhone, findStaffById, listStaff, setStaffStatus, deleteStaff,

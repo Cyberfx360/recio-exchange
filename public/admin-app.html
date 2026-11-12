@@ -444,7 +444,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
    ...S.wds.filter(w=>w.status==='pending').map(w=>({at:w.createdAt,t:'Withdrawal Request',s:esc(w.userName),r:naira(w.amount),go:'wd',id:w.id})),
    ...S.escs.filter(e=>e.status==='open').map(e=>({at:e.createdAt,t:'Chat Escalated',s:`${esc(e.userName)} • by ${esc(e.staffName)}`,r:'Review',go:'console',id:''}))].sort((a,b)=>new Date(b.at)-new Date(a.at)).slice(0,6);
  const qa=[['staff','users','Manage Staff'],['accounts','users','Accounts'],['users','users','Manage Users'],['chats','help','Help &amp; Support'],['rules','gear','Edit Rules'],['receipts','file','Receipts'],['wds','dl','Withdrawer Request'],['rates','trend','Edit Rates']];
- return `<section class="scr">${hd('Admin Panel','AzaPlug Executive Control','',`<button class="write" data-act="soon">${I('pen','style="width:15px;height:15px"')}Write</button>`)}
+ return `<section class="scr">${hd('Admin Panel','AzaPlug Executive Control','',`<button class="write" data-go="announce">${I('pen','style="width:15px;height:15px"')}Write</button>`)}
  <div class="bd"><div class="g2">
   <div class="stat"><small>Total Users</small><b>${n0(S.users.length)}</b><i style="color:var(--green)">+${week} this week</i></div>
   <div class="stat"><small>Active Trades</small><b>${act.length}</b><i style="color:var(--blue)">${S.trades.length} all time</i></div>
@@ -557,6 +557,12 @@ wdDone:()=>{const w=S.done;return `<section class="scr">${hd('Payment Confirmati
 loans:()=>`<section class="scr"><div class="bd" style="padding-top:24px"><div class="top"><button class="icon-btn" data-go="wds" aria-label="Back">${I('al')}</button><span class="title brand" style="font-size:19px">AZAPLUG</span><span></span></div>
   <h1 class="h" style="font-size:23px;font-weight:700;margin-bottom:16px">Loan Applications</h1>
   <div class="card"><p class="empty" style="padding:26px 0">No loan applications yet.<br>Loans are not connected to the server yet.</p></div></div></section>`,
+
+announce:()=>`<section class="scr">${hd('Write','Announcement to all customers','dash')}
+ <div class="bd"><form data-form="announce" novalidate><label class="cl" for="an-t" style="margin-top:0">Title</label><input class="in" id="an-t" maxlength="80" placeholder="e.g. New Mexico rate">
+  <label class="cl" for="an-b">Message</label><textarea class="in" id="an-b" rows="5" maxlength="400" placeholder="What should every customer know?"></textarea>
+  <p style="background:#EEF2F8;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#4B5563;margin-top:14px">Every customer sees this in their Notifications. Customers who turned on push also get it on their phone.</p>
+  <button class="b blue">Send to all customers</button></form></div></section>`,
 
 users:()=>{const list=S.users.filter(u=>S.userTab==='all'||(S.userTab==='approved'?u.status==='approved':u.status!=='approved'));
  return `<section class="scr"><div class="bd" style="padding-top:24px"><div class="top" style="margin-bottom:12px"><button class="icon-btn sqr" style="width:36px;height:36px" data-go="dash" aria-label="Back">${I('cl','style="width:16px;height:16px"')}</button>
@@ -702,6 +708,9 @@ document.addEventListener('change',async e=>{const t=e.target;
 });
 const val=id=>$('#'+id).value.trim();
 const FORMS={
+  async announce(){const title=val('an-t'),body=val('an-b');if(!title||!body)throw new Error('Enter a title and a message');
+    if(!await ask('Send to every customer?',`"${title}" will go to all ${S.users.length} customers and cannot be taken back.`,'Send announcement'))return;
+    await api('POST','/api/admin/announce',{title,body});toast('Announcement sent');go('dash')},
   async login(){const password=$('#lg-pw').value;if(!password)throw new Error('Enter the admin password');await api('POST','/api/admin/login',{password});await refresh();go('dash')},
   async account(){const b={title:val('f-title'),bankName:val('f-bank'),accountNumber:val('f-num'),lowestAmount:num(val('f-la')),lowestRate:num(val('f-lr')),higherAmount:num(val('f-ha')),higherRate:num(val('f-hr')),minAmount:num(val('f-min')),maxAmount:num(val('f-max')),imageData:S.form.imageData||null};
     if(!b.title||!b.bankName||!b.accountNumber)throw new Error('Country, bank name and account number are required');
