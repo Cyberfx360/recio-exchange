@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0D4DC7">
+<title>AZAPLUG</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* ---------- Brand tokens (AZAPLUG Brand Guidelines v1.0) ---------- */
+:root{
+  --blue:#0D4DC7; --blue-dark:#0A3FA6; --slate:#111827; --bg:#F4F7FC;
+  --green:#10B981; --orange:#F59E0B; --red:#EF4444;
+  --muted:#6B7280; --soft:#9CA3AF; --line:#E3E8F1; --card:#fff;
+  --head:'Outfit',system-ui,sans-serif; --body:'Geist','Inter',system-ui,sans-serif; --mono:'Geist Mono',ui-monospace,Menlo,monospace;
+  --r-card:24px; --r-field:12px; --m:24px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:#E6EAF2;font-family:var(--body);color:var(--slate);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+#app{max-width:402px;margin:0 auto;min-height:100dvh;background:var(--bg);position:relative;overflow-x:hidden}
+.screen{min-height:100dvh;padding:28px var(--m) 40px;display:flex;flex-direction:column}
+.screen.tabs{padding-bottom:130px}
+.screen.white{background:#fff}
+.screen.blue{background:var(--blue);color:#fff}
+h1,h2,h3,.h{font-family:var(--head);letter-spacing:-.01em}
+.muted{color:var(--muted)}
+.grow{flex:1}
+.row{display:flex;align-items:center}
+.between{display:flex;align-items:center;justify-content:space-between;gap:12px}
+
+/* ---------- Buttons ---------- */
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:58px;border-radius:999px;background:var(--blue);color:#fff;font-family:var(--head);font-weight:700;font-size:17px;transition:transform .08s,background .15s}
+.btn:active{transform:scale(.985);background:var(--blue-dark)}
+.btn.sq{border-radius:16px;height:56px;box-shadow:0 10px 22px -10px rgba(13,77,199,.55)}
+.btn.white{background:#fff;color:var(--blue)}
+.btn.outline{background:#fff;color:var(--slate);border:1.5px solid #D9DEE8;font-family:var(--body);font-weight:500;font-size:18px}
+.icon-btn{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid var(--line);display:grid;place-items:center;color:var(--blue);flex:none}
+.icon-btn.sqr{border-radius:12px;color:var(--slate)}
+.link{color:var(--blue);font-weight:700}
+
+/* ---------- Fields ---------- */
+label.lb{display:block;font-weight:600;font-size:15px;margin:22px 0 10px}
+.field{display:flex;align-items:center;gap:10px;height:58px;border:1.5px solid #E1E5EC;border-radius:var(--r-field);background:#fff;padding:0 18px}
+.field:focus-within{border-color:var(--blue)}
+.field input,.field select{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:16px;height:100%}
+.field input::placeholder{color:#9CA3AF}
+.field select{appearance:none;-webkit-appearance:none;font-weight:600}
+.field .eye{color:#4B5563}
+.field.sm{height:52px}
+
+/* ---------- Cards / badges ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-card);padding:20px}
+.badge{display:inline-block;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.b-approved,.b-processing{background:#E4F6EE;color:#0E9F6E}
+.b-checking{background:#FEEFC3;color:#E08A00}
+.b-confirmed,.b-compensation,.b-draft,.b-live{background:#EAF1FE;color:var(--blue)}
+.b-failed{background:#FDE0E0;color:var(--red)}
+.cap{font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+
+/* ---------- Top bars ---------- */
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;min-height:44px}
+.top .title{font-family:var(--head);font-weight:700;font-size:20px;position:absolute;left:0;right:0;text-align:center;pointer-events:none}
+.top.left .title{position:static;text-align:left;font-size:24px;margin-left:14px;flex:1}
+.brand{font-family:var(--head);font-weight:800;font-size:22px;color:var(--blue);letter-spacing:0}
+
+/* ---------- Bottom nav ---------- */
+.nav{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);width:calc(min(402px,100vw) - 40px);height:76px;background:var(--blue);border-radius:38px;display:flex;align-items:center;justify-content:space-around;padding:0 10px;box-shadow:0 14px 30px -10px rgba(13,77,199,.6);z-index:20}
+.nav button{white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:6px;color:rgba(255,255,255,.72);font-size:11.5px;font-weight:500;flex:1 1 0;min-width:0}
+.nav button.on{color:#fff;font-weight:700}
+.nav svg.i{width:23px;height:23px}
+.fab{position:fixed;bottom:108px;right:calc(50% - min(201px,50vw) + 22px);width:48px;height:48px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;box-shadow:0 8px 18px -6px rgba(13,77,199,.7);z-index:21}
+.fab.low{bottom:28px}
+
+/* ---------- Segments ---------- */
+.seg{display:flex;background:#fff;border:1px solid var(--line);border-radius:16px;padding:5px;gap:4px}
+.seg button{flex:1;height:40px;border-radius:12px;font-weight:600;font-size:14px;color:var(--muted)}
+.seg button.on{background:var(--blue);color:#fff}
+
+/* ---------- Auth ---------- */
+.logo-dot{width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,.14);display:grid;place-items:center;margin:0 auto}
+.logo-dot svg.i{width:40px;height:40px;stroke-width:1.6}
+.logo-dot.sm{width:64px;height:64px}.logo-dot.sm svg.i{width:26px;height:26px;stroke-width:2}
+.wordmark{font-family:var(--head);font-weight:800;font-size:36px;text-align:center}
+.role{display:flex;align-items:center;gap:16px;width:100%;padding:18px;border-radius:20px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);text-align:left;margin-top:14px;color:#fff}
+.role .ic{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.14);display:grid;place-items:center}
+.role b{font-family:var(--head);font-size:19px;font-weight:700;display:block}
+.role span{font-size:14px;opacity:.8}
+.role.on{background:#fff;color:var(--blue);box-shadow:0 12px 26px -10px rgba(0,0,0,.35)}
+.role.on .ic{background:#EEF2FB}
+.role .chev{margin-left:auto;opacity:.7}
+.auth h1{font-size:32px;font-weight:800;line-height:1.15}
+.auth .sub{color:#4B5563;font-size:16px;margin-top:10px}
+.or{display:flex;align-items:center;gap:20px;color:var(--muted);margin:22px 0}
+.or:before,.or:after{content:"";flex:1;height:1px;background:#E1E5EC}
+.finger{width:180px;height:180px;border-radius:50%;margin:0 auto;display:grid;place-items:center;background:#F5F7FD;border:1px solid #E1E7F5}
+.finger i{width:140px;height:140px;border-radius:50%;display:grid;place-items:center;background:#E7ECF9;border:1px solid #D2DBF2}
+.finger b{width:100px;height:100px;border-radius:50%;display:grid;place-items:center;background:var(--blue);color:#fff;box-shadow:0 10px 22px -6px rgba(13,77,199,.6)}
+.finger svg.i{width:44px;height:44px;stroke-width:1.5}
+
+/* ---------- Home ---------- */
+.balance{background:var(--blue);color:#fff;border-radius:28px;padding:22px 20px 20px;box-shadow:0 16px 30px -14px rgba(13,77,199,.7)}
+.balance small{font-size:13px;opacity:.85}
+.balance .amt{font-family:var(--head);font-weight:800;font-size:36px;line-height:1.2;margin:4px 0 16px}
+.pills{display:flex;gap:8px}
+.pills button{flex:1;height:36px;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.12);color:#fff;font-weight:700;font-size:12.5px;white-space:nowrap;padding:0;min-width:0}
+.pills button:first-child{font-size:11px;flex:1.1}
+.pills button.on{background:#fff;color:var(--blue);border-color:#fff}
+.txn{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:16px;margin-top:10px}
+.txn .nm{font-family:var(--head);font-weight:600;font-size:16.5px}
+.txn .dt{font-size:12px;color:var(--soft);margin-top:2px}
+.txn .rt{margin-left:auto;text-align:right}
+.txn .am{font-family:var(--head);font-weight:700;font-size:16.5px;margin-bottom:4px}
+.flag{width:40px;height:40px;border-radius:50%;background:#EEF1F6;display:grid;place-items:center;font-size:24px;line-height:1;overflow:hidden;flex:none}
+.sec-h{display:flex;align-items:center;justify-content:space-between;margin:24px 0 4px}
+.sec-h h3{font-size:17px;font-weight:600}
+
+/* ---------- Get account ---------- */
+.acct .mono{font-family:var(--mono);font-weight:700;font-size:13px;margin-top:12px}
+.noimg{height:100px;border-radius:14px;background:#EEF2F8;border:1px solid var(--line);display:grid;place-items:center;align-content:center;gap:8px;color:#9AA3B5;font-family:var(--mono);font-size:13px;margin-top:14px}
+.noimg svg.i{width:26px;height:26px}
+.copy{width:42px;height:42px;border-radius:12px;border:1.5px solid var(--slate);background:#fff;color:var(--blue);display:grid;place-items:center;box-shadow:0 2px 0 rgba(17,24,39,.15)}
+.kv{border:1px solid var(--line);border-radius:14px;margin-top:12px;overflow:hidden}
+.kv div{display:flex;justify-content:space-between;padding:7px 14px;font-size:13px;border-top:1px solid #EEF1F6}
+.kv div:first-child{border-top:0}
+.kv b{font-family:var(--mono);font-weight:700}
+.kv span{color:var(--muted)}
+
+/* ---------- Summary rows ---------- */
+.sum div{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:15px}
+.sum span{color:#4B5563}
+.sum b{font-family:var(--head);font-weight:700;font-size:17px}
+.sum.plain b{font-family:var(--body);font-weight:500;font-size:15px}
+.hr,.sum div.hr{height:1px;background:var(--line);margin:8px 0;padding:0}
+.ok-ring{width:104px;height:104px;border-radius:50%;background:#E3EAF8;display:grid;place-items:center;margin:8px auto 18px}
+.ok-ring i{width:80px;height:80px;border-radius:50%;background:#C9D6F3;display:grid;place-items:center}
+.ok-ring b{width:60px;height:60px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center}
+.ok-ring svg.i{width:28px;height:28px}
+.upload{display:grid;place-items:center;align-content:center;gap:10px;height:106px;border:1px solid var(--line);border-radius:14px;background:#fff;color:var(--soft);cursor:pointer;width:100%}
+.upload span.c{width:36px;height:36px;border-radius:50%;background:#F1F4F9;border:1px solid var(--line);display:grid;place-items:center;color:#4B5563}
+
+/* ---------- Crypto ---------- */
+.toggle2{display:flex;border:1.5px solid var(--line);border-radius:999px;padding:3px;background:#fff}
+.toggle2 button{padding:6px 16px;border-radius:999px;font-weight:700;font-size:14px;color:var(--muted)}
+.toggle2 button.on{background:var(--blue);color:#fff}
+.coin{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff}
+.coin svg.i{width:18px;height:18px}
+.big{font-family:var(--head);font-weight:800;font-size:32px;margin-top:16px}
+.qr{width:200px;height:200px;margin:26px auto 18px;position:relative}
+
+/* ---------- Chat ---------- */
+.chat{padding:0;background:#E8EEF8;min-height:100dvh;display:flex;flex-direction:column}
+.chat-top{background:#fff;display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.avatar{width:44px;height:44px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-family:var(--head);font-weight:700;position:relative;flex:none}
+.avatar:after{content:"";position:absolute;right:0;bottom:0;width:10px;height:10px;border-radius:50%;background:var(--green);border:2px solid #fff}
+.msgs{flex:1;padding:18px 16px 110px;display:flex;flex-direction:column;gap:20px}
+.day{align-self:center;background:#DDE3EE;color:#6B7280;font-size:11px;font-weight:700;padding:5px 12px;border-radius:999px;letter-spacing:.03em}
+.msg{max-width:80%;padding:12px 15px 9px;border-radius:18px;font-size:15px;line-height:1.45;box-shadow:0 1px 2px rgba(17,24,39,.06)}
+.msg.in{background:#fff;align-self:flex-start;border-bottom-left-radius:6px}
+.msg.out{background:var(--blue);color:#fff;align-self:flex-end;border-bottom-right-radius:6px}
+.msg .who{display:block;color:var(--blue);font-weight:700;font-size:13px;margin-bottom:3px}
+.msg time{display:block;text-align:right;font-size:11px;opacity:.65;margin-top:3px}
+.voice{display:flex;align-items:center;gap:10px}
+.voice .pl{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex:none}
+.voice .pl svg.i{width:15px;height:15px;stroke-width:2.5}
+.msg.in .pl{background:var(--blue);color:#fff}.msg.out .pl{background:#fff;color:var(--blue)}
+.wave{display:flex;align-items:center;gap:2px;height:22px}
+.wave i{width:2.5px;border-radius:2px;background:currentColor;opacity:.9}
+.msg.in .wave{color:var(--blue)}
+.shot{height:150px;border-radius:14px;background:linear-gradient(135deg,#C6D8DE,#E9F0F3);display:grid;place-items:center;color:#5B6B7A;font-size:12px;margin-bottom:8px}
+.composer{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(402px,100vw);background:#fff;border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom))}
+.composer .inp{flex:1;min-width:0;display:flex;align-items:center;height:42px;border-radius:999px;background:#F1F3F7;padding:0 14px;color:#6B7280}
+.composer input{flex:1;border:0;outline:0;background:transparent;min-width:0}
+.composer .rb{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:#F1F3F7;color:#6B7280;flex:none}
+.composer .rb.send{background:var(--blue);color:#fff;box-shadow:0 6px 14px -4px rgba(13,77,199,.6)}
+
+/* ---------- Profile ---------- */
+.hero{background:var(--blue);color:#fff;border-radius:28px;padding:24px;text-align:center;box-shadow:0 16px 30px -14px rgba(13,77,199,.7)}
+.hero .ph{width:84px;height:84px;border-radius:50%;background:rgba(255,255,255,.18);border:3px solid rgba(255,255,255,.35);display:grid;place-items:center;margin:0 auto 14px;font-family:var(--head);font-weight:700;font-size:30px}
+.info div{display:flex;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+.info span{color:var(--muted)}.info b{font-weight:600;text-align:right;word-break:break-word}
+.pref{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--line)}
+.pref b{font-family:var(--head);font-weight:600;display:block}.pref small{color:var(--muted);font-size:12.5px}
+.sw{width:46px;height:26px;border-radius:999px;background:#D5D9E2;position:relative;transition:.15s;flex:none}
+.sw:after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s}
+.sw.on{background:var(--blue)}.sw.on:after{left:23px}
+.menu{display:flex;align-items:center;gap:14px;width:100%;background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-top:12px;font-family:var(--head);font-weight:600;font-size:15.5px;text-align:left}
+.menu .ic{width:36px;height:36px;border-radius:50%;background:#EEF2FB;color:var(--blue);display:grid;place-items:center}
+.menu .chev{margin-left:auto;color:var(--soft)}
+.menu.danger{color:var(--red)}.menu.danger .ic{background:#FDE0E0;color:var(--red)}.menu.danger .chev{color:var(--red)}
+
+/* ---------- Notifications / rules / loan ---------- */
+.note{display:flex;gap:14px;background:#fff;border:1px solid var(--line);border-radius:18px;padding:16px;margin-top:12px}
+.note.unread{border:1.5px solid var(--blue)}
+.note .ic{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;flex:none}
+.note h4{font-family:var(--head);font-weight:600;font-size:15.5px}
+.note p{font-size:13px;color:var(--muted);margin-top:4px}
+.note .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--blue);margin-left:8px;vertical-align:middle}
+.rules p{font-weight:500;font-size:14.5px;margin-bottom:18px;line-height:1.35}
+.warn{display:flex;gap:14px;align-items:center;background:#FEF9E6;border:1px solid #F8DE8B;border-radius:18px;padding:16px;color:#B45309}
+.warn b{font-family:var(--head);display:block}.warn p{font-size:13px}
+.tile{border-radius:16px;padding:16px;margin-top:14px}
+.banner{display:flex;align-items:center;gap:10px;background:#E6ECF9;color:var(--blue);font-weight:600;border-radius:12px;padding:12px 14px;margin-bottom:22px}
+
+.toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);background:var(--slate);color:#fff;padding:11px 18px;border-radius:999px;font-size:13.5px;z-index:50;max-width:340px;text-align:center;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.empty{text-align:center;color:var(--soft);padding:40px 0}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.blue :focus-visible{outline-color:#fff}
+.btn:disabled{opacity:.7}
+a.role{display:flex}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+/* ---------- Icons (20px stroke line icons, per brand guide) ---------- */
+const P={
+ home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+ repeat:'<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
+ bars:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+ btc:'<path d="M11.767 19.089c4.924.868 6.14-6.025 1.216-6.894m-1.216 6.894L5.86 18.047m5.908 1.042-.347 1.97m1.563-8.864c4.924.869 6.14-6.025 1.215-6.893m-1.215 6.893-3.94-.694m5.155-6.2L8.29 4.26m5.908 1.042.348-1.97M7.48 20.364l3.126-17.727"/>',
+ user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+ bell:'<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+ chat:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+ cl:'<polyline points="15 18 9 12 15 6"/>', cr:'<polyline points="9 18 15 12 9 6"/>', cd:'<polyline points="6 9 12 15 18 9"/>',
+ al:'<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+ eyeoff:'<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',
+ eye:'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+ copy:'<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+ search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+ camera:'<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+ check:'<polyline points="20 6 9 17 4 12"/>',
+ phone:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+ info:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+ clip:'<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+ mic:'<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+ send:'<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+ play:'<polygon points="6 4 20 12 6 20 6 4"/>',
+ imgoff:'<line x1="2" y1="2" x2="22" y2="22"/><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"/><line x1="13.5" y1="13.5" x2="6" y2="21"/><line x1="18" y1="12" x2="21" y2="15"/><path d="M3.59 3.59A2 2 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.05-.22 1.41-.59"/><path d="M21 15V5a2 2 0 0 0-2-2H9"/>',
+ bank:'<line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/>',
+ alertt:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+ alertc:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+ checkc:'<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+ lock:'<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+ help:'<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+ logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+ share:'<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>',
+ plusc:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>',
+ brief:'<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+ shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+ shielda:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+ finger:'<path d="M2 12C2 6.5 6.5 2 12 2a10 10 0 0 1 8 4"/><path d="M5 19.5C5.5 18 6 15 6 12c0-.7.12-1.37.34-2"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .13-5.35 0-6"/><path d="M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2"/>',
+ adl:'<line x1="17" y1="7" x2="7" y2="17"/><polyline points="17 17 7 17 7 7"/>',
+ trend:'<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
+ cc:'<path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/>',
+ swap:'<path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/>'
+};
+const I=(n,s='')=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true" ${s}>${P[n]}</svg>`;
+
+/* =====================================================================
+   AZAPLUG Customer App — connected to the Express API in server.js
+   Nothing financial is decided here: balances, statuses and credited
+   amounts are only ever read from the server.
+   ===================================================================== */
+
+/* Wallet details shown on the Bitcoin / USDT tab.
+   Kenneth: paste your receiving addresses and fixed naira rates here.
+   Leave a value empty and the app shows "not set yet" instead. */
+const CRYPTO = {
+  BTC:  {name:'Bitcoin', pair:'BTC / NGN',  color:'#F7931A', network:'Bitcoin (BTC)', label:'Bitcoin',       address:'', rate:null},
+  USDT: {name:'Tether',  pair:'USDT / NGN', color:'#26A17B', network:'TRON (TRC-20)', label:'TRC-20 Tether', address:'', rate:null}
+};
+
+/* ---------- State + helpers ---------- */
+const S={route:'loading',homeTab:'trades',histTab:'All',coin:'BTC',me:null,accounts:[],trades:[],withdrawals:[],rules:null,chat:[],
+  slip:null,wd:null,send:{title:'',accountId:'',amount:'',image:null}};
+const $=s=>document.querySelector(s);
+const amt=n=>Number(n||0).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2});
+const n0=n=>Number(n||0).toLocaleString('en-NG');
+const naira=n=>'₦'+amt(n), naira0=n=>'₦'+n0(n);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safeImg=s=>/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+$/i.test(s||'')?s:'';
+const fd=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+const ft=d=>d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+const num=v=>parseFloat(String(v).replace(/[^0-9.]/g,''))||0;
+let tt;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('show'),2600)}
+
+async function api(method,url,body){
+  const r=await fetch(url,{method,credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
+  let d={};try{d=await r.json()}catch(e){}
+  if(r.status===401&&S.me){S.me=null;go('login')}
+  if(!r.ok)throw new Error(d.error||'Something went wrong. Try again.');
+  return d;
+}
+async function loadMe(){const d=await api('GET','/api/me');S.me=d.loggedIn?d:null;return S.me}
+async function loadAll(){
+  const [a,t,w]=await Promise.all([api('GET','/api/accounts'),api('GET','/api/trades'),api('GET','/api/withdrawals')]);
+  S.accounts=a.accounts||[];S.trades=t.trades||[];S.withdrawals=w.withdrawals||[];
+}
+async function enter(){
+  const me=await loadMe();
+  if(!me)return go('splash');
+  if(me.status!=='approved'){location.href='/pending.html';return}
+  await loadAll();go('home');
+}
+function compress(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onerror=rej;fr.onload=e=>{const img=new Image();img.onerror=rej;img.onload=()=>{
+  const c=document.createElement('canvas'),k=Math.min(1,1000/img.width);c.width=img.width*k;c.height=img.height*k;
+  c.getContext('2d').drawImage(img,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.75))};img.src=e.target.result};fr.readAsDataURL(file)})}
+
+const TS={checking:['Checking','b-checking'],seen:['Seen','b-confirmed'],confirmed:['Confirmed','b-confirmed'],approved:['Approved','b-approved'],failed:['Failed','b-failed']};
+const WS={pending:['Pending','b-checking'],paid:['Paid','b-approved'],rejected:['Rejected','b-failed']};
+const back=(to,sq)=>`<button class="icon-btn ${sq?'sqr':''}" data-go="${to}" aria-label="Back">${I(sq?'cl':'al')}</button>`;
+const nav=on=>{const c=S.coin==='USDT'?'USDT':'Bitcoin';
+  return `<nav class="nav" aria-label="Main">${[['home','home','Home'],['accounts','repeat','Get Account'],['history','bars','History'],['crypto','btc',c],['profile','user','Account']]
+  .map(([r,i,l])=>`<button class="${on===r?'on':''}" data-go="${r}" ${on===r?'aria-current="page"':''}>${I(i)}<span>${l}</span></button>`).join('')}</nav>`};
+const fab=low=>`<button class="fab ${low?'low':''}" data-go="chat" aria-label="Chat with support">${I('chat')}</button>`;
+const pw=(id,ph,ac)=>`<div class="field"><input id="${id}" type="password" placeholder="${ph}" autocomplete="${ac}"><button type="button" class="eye" data-act="eye" aria-label="Show password">${I('eyeoff')}</button></div>`;
+const tradeCard=(t,rich)=>{const m=TS[t.status]||TS.checking,d=new Date(t.createdAt),ti=t.accountTitleUsed||'Account';
+  return `<div class="txn">${rich?`<div class="flag" style="font-family:var(--head);font-weight:700;font-size:16px;color:var(--blue)">${esc(ti[0].toUpperCase())}</div>`:''}
+  <div style="min-width:0"><div class="nm">${esc(ti)}</div><div class="dt">${fd(d)} · ${ft(d)}</div>
+  ${t.creditedAmount!=null?`<div class="dt" style="color:#0E9F6E">Credited ${naira(t.creditedAmount)}</div>`:''}
+  ${t.status==='failed'&&t.failReason?`<div class="dt" style="color:var(--red)">${esc(t.failReason)}</div>`:''}</div>
+  <div class="rt"><div class="am">${amt(t.intendedAmount)}</div><span class="badge ${m[1]}">${m[0]}</span></div></div>`};
+const wdCard=w=>{const m=WS[w.status]||WS.pending,d=new Date(w.createdAt);
+  return `<div class="txn"><div style="min-width:0"><div class="nm">${esc(w.payoutBank)}</div><div class="dt">${esc(w.payoutAccount)} · ${fd(d)}</div>
+  ${w.status==='rejected'&&w.reason?`<div class="dt" style="color:var(--red)">${esc(w.reason)}</div>`:''}</div>
+  <div class="rt"><div class="am">${naira(w.amount)}</div><span class="badge ${m[1]}">${m[0]}</span></div></div>`};
+const tiers=a=>`${n0(a.lowestAmount)} → ${naira0(a.lowestRate)}  ·  ${n0(a.higherAmount)} → ${naira0(a.higherRate)}`;
+const titles=()=>[...new Set(S.accounts.map(a=>a.title))];
+
+/* ---------- Screens ---------- */
+const V={
+loading:()=>`<section class="screen blue"><div class="grow"></div><div class="logo-dot">${I('swap')}</div><div class="wordmark" style="margin-top:22px">AZAPLUG</div><div class="grow"></div></section>`,
+
+splash:()=>`<section class="screen blue">
+  <div class="grow"></div>
+  <div class="logo-dot">${I('swap')}</div>
+  <div class="wordmark" style="margin-top:22px">AZAPLUG</div>
+  <p style="text-align:center;margin-top:14px;font-size:16px;opacity:.95">Send &amp; Receive Funds at the Best Rates</p>
+  <div class="grow"></div>
+  <button class="btn white" data-go="role">Get Started</button>
+</section>`,
+
+role:()=>`<section class="screen blue">
+  <div class="logo-dot sm" style="margin-top:40px">${I('swap')}</div>
+  <div class="wordmark" style="font-size:25px;margin-top:14px">AZAPLUG</div>
+  <div style="flex:.8"></div>
+  <h1 style="text-align:center;font-size:26px;font-weight:800">Select Your Role</h1>
+  <p style="text-align:center;opacity:.75;margin:8px 0 22px">Choose how you'd like to sign in</p>
+  <button class="role on" data-go="login"><span class="ic">${I('user')}</span><span><b>User</b><span>Personal Account</span></span><span class="chev">${I('cr')}</span></button>
+  <a class="role" href="/staff-login.html" style="text-decoration:none"><span class="ic">${I('brief')}</span><span><b>Staff</b><span>Employee Portal</span></span><span class="chev">${I('cr')}</span></a>
+  <a class="role" href="/admin.html" style="text-decoration:none"><span class="ic">${I('shield')}</span><span><b>Admin</b><span>Admin Dashboard</span></span><span class="chev">${I('cr')}</span></a>
+  <div class="grow"></div>
+</section>`,
+
+login:()=>`<section class="screen white auth">
+  <h1 style="margin-top:70px">Welcome Back</h1><p class="sub">Sign in to continue trading securely</p>
+  <div style="height:120px"></div>
+  <form data-form="login" novalidate>
+  <label class="lb" for="lg-id">Phone Number</label>
+  <div class="field"><input id="lg-id" type="tel" placeholder="0801 234 5678" autocomplete="username"></div>
+  <label class="lb" for="lg-pw">Password</label>${pw('lg-pw','Enter password','current-password')}
+  <div style="height:26px"></div>
+  <button class="btn">Login</button>
+  </form>
+  <div class="grow" style="min-height:60px"></div>
+  <p style="text-align:center;color:#4B5563">Don't have an account? <button class="link" data-go="signup">Sign Up</button></p>
+</section>`,
+
+signup:()=>`<section class="screen white auth">
+  <h1 style="margin-top:44px;font-size:34px">Create Account</h1><p class="sub">Sign up to start trading securely</p>
+  <form data-form="signup" novalidate>
+  <label class="lb" for="su-n">Full Name</label><div class="field"><input id="su-n" placeholder="Daniel Benson" autocomplete="name"></div>
+  <label class="lb" for="su-p">Phone Number</label><div class="field"><input id="su-p" type="tel" placeholder="0801 234 5678" autocomplete="username"></div>
+  <label class="lb" for="su-b">Bank Name</label><div class="field"><input id="su-b" placeholder="e.g. Opay"></div>
+  <label class="lb" for="su-a">Account Number</label><div class="field"><input id="su-a" inputmode="numeric" placeholder="This is where we pay you"></div>
+  <label class="lb" for="su-pw">Password</label>${pw('su-pw','Create strong password','new-password')}
+  <label class="lb" for="su-pw2">Confirm Password</label>${pw('su-pw2','Repeat your password','new-password')}
+  <button class="btn" style="margin-top:22px">Sign Up</button>
+  </form>
+  <p style="text-align:center;color:#4B5563;margin-top:26px">Already have an account? <button class="link" data-go="login">Login</button></p>
+</section>`,
+
+home:()=>{const list=S.homeTab==='trades'
+   ?(S.trades.length?S.trades.slice(0,5).map(t=>tradeCard(t)).join(''):'<p class="empty">No trades yet. Get an account and send your first receipt.</p>')
+   :(S.withdrawals.length?S.withdrawals.slice(0,5).map(wdCard).join(''):'<p class="empty">No withdrawals yet</p>');
+ return `<section class="screen tabs">
+  <div class="between" style="margin-bottom:18px"><span class="brand">AZAPLUG</span>
+   <span class="row" style="gap:12px"><button data-go="accounts" style="background:var(--blue);color:#fff;font-weight:700;font-size:14px;padding:9px 16px;border-radius:999px">Rate</button>
+   <button class="icon-btn" data-act="soon" aria-label="Notifications">${I('bell')}</button></span></div>
+  <div class="balance"><small>Balance</small><div class="amt">${naira(S.me.balance)}</div>
+   <div class="pills"><button class="on" data-go="accounts">Get Account</button><button data-go="withdraw">Withdraw</button><button data-go="rules">Rules</button><button data-act="soon">Borrow</button></div></div>
+  <button class="btn sq" style="margin:16px 0 20px;font-family:var(--body);font-weight:600" data-go="send">Send Receipt</button>
+  <div class="seg" role="tablist"><button class="${S.homeTab==='trades'?'on':''}" data-set="homeTab:trades">Trades</button><button class="${S.homeTab==='withdrawals'?'on':''}" data-set="homeTab:withdrawals">Withdrawals</button></div>
+  <div class="sec-h"><h3>Recent Transactions</h3><button class="link" style="font-size:15px" data-go="history">See All</button></div>
+  ${list}
+  ${fab()}${nav('home')}</section>`},
+
+accounts:()=>`<section class="screen tabs">
+  <div class="top">${back('home')}<span class="title" style="font-family:var(--body);font-size:16px;font-weight:600">Get Account</span><span></span></div>
+  <p class="muted" style="text-align:center;font-size:13.5px;margin-top:-6px">Search by country or bank to see the account, minimum, limit, and rate.</p>
+  <div class="field" style="height:42px;margin:14px 0;color:var(--soft);padding:0 14px">${I('search','style="width:17px;height:17px"')}<input id="acct-q" placeholder="Search country or bank..." style="font-size:14px" aria-label="Search country or bank"></div>
+  <div id="acct-list">${S.accounts.length?S.accounts.map(a=>{const img=safeImg(a.imageData);return `<article class="card acct" data-k="${esc((a.title+' '+a.bankName+' '+a.accountNumber).toLowerCase())}" style="padding:16px;margin-bottom:14px">
+    <div style="font-weight:600">${esc(a.title)}</div>
+    ${img?`<img src="${img}" alt="" style="width:100%;border-radius:14px;margin-top:14px;display:block">`:`<div class="noimg">${I('imgoff')}No image</div>`}
+    <div class="mono" style="white-space:pre-wrap;line-height:2.1;word-break:break-word">${esc(a.accountNumber)}</div>
+    <div style="font-family:var(--mono);font-size:10.5px;color:var(--soft)">:${esc(a.bankName)}</div>
+    <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="copy" data-copy="${esc(a.accountNumber)}" aria-label="Copy account details">${I('copy')}</button></div>
+    <div class="kv"><div><span>Minimum</span><b>${naira0(a.minAmount)}</b></div><div><span>Limit</span><b>${naira0(a.maxAmount)}</b></div>
+     <div><span style="font-family:var(--mono)">${n0(a.lowestAmount)}</span><b>${naira0(a.lowestRate)}</b></div><div><span style="font-family:var(--mono)">${n0(a.higherAmount)}</span><b>${naira0(a.higherRate)}</b></div></div></article>`}).join('')
+    :'<p class="empty">No accounts available right now. Please check back soon.</p>'}</div>
+  <div class="card" style="padding:16px"><div class="cap" style="font-size:12px">Instructions</div><p class="muted" style="font-size:13px;margin-top:8px">Please make sure to copy the account number exactly as shown. Use the concept label in your bank description for faster verification.</p></div>
+  ${nav('accounts')}</section>`,
+
+send:()=>{const ts=titles();if(!ts.length)return `<section class="screen"><div class="top left">${back('home',1)}<span class="title">Send Receipt</span></div><p class="empty">No accounts available right now. Please check back soon.</p></section>`;
+ if(!ts.includes(S.send.title))S.send.title=ts[0];
+ const opts=S.accounts.filter(a=>a.title===S.send.title);
+ if(!opts.some(a=>a.id===S.send.accountId))S.send.accountId=opts[0].id;
+ const a=opts.find(x=>x.id===S.send.accountId),img=safeImg(S.send.image);
+ return `<section class="screen">
+  <div class="top left">${back('home',1)}<span class="title">Send Receipt</span></div>
+  <div class="card sum" style="margin:0 -24px;border-radius:20px;padding:16px 18px">
+   <div><b style="font-family:var(--body);font-size:15px;font-weight:600">Trade summary</b><span class="badge b-draft">Draft</span></div>
+   <div><span>You send</span><b id="s-send">${amt(num(S.send.amount))}</b></div><div><span>Recipient gets</span><b style="font-family:var(--body);font-size:14px;font-weight:500;color:var(--muted)">Set after review</b></div>
+   <div><span>Minimum · Limit</span><b style="font-size:15px">${naira0(a.minAmount)} · ${naira0(a.maxAmount)}</b></div></div>
+  <form data-form="send" novalidate>
+  <label class="lb" style="margin-top:16px;font-size:14px" for="s-c">Country</label>
+  <div class="field sm"><select id="s-c" style="font-family:var(--head);font-size:17px">${ts.map(t=>`<option ${t===S.send.title?'selected':''}>${esc(t)}</option>`).join('')}</select>${I('cd','style="color:#6B7280"')}</div>
+  <label class="lb" style="margin-top:16px;font-size:14px" for="s-a">Amount you sent</label>
+  <div class="field sm"><input id="s-a" inputmode="decimal" placeholder="Enter amount" value="${esc(S.send.amount)}"></div>
+  <label class="lb" style="margin-top:16px;font-size:14px" for="s-b">Select the bank used</label>
+  <div class="field sm"><select id="s-b" style="font-weight:400">${opts.map(o=>`<option value="${esc(o.id)}" ${o.id===a.id?'selected':''}>${esc(o.bankName)}</option>`).join('')}</select>${I('cd','style="color:#6B7280"')}</div>
+  <label class="lb" style="margin-top:16px;font-size:14px">Exchange rate</label>
+  <div class="field sm" style="justify-content:space-between;font-size:14px"><span style="white-space:pre">${tiers(a)}</span><span class="badge b-live">Live</span></div>
+  <label class="lb" style="margin-top:34px;font-size:14px">Add Receipt</label>
+  <label class="upload" style="${img?'height:auto;padding:10px':''}">${img?`<img src="${img}" alt="Receipt preview" style="max-width:100%;max-height:220px;border-radius:10px">`:`<span class="c">${I('camera','style="width:18px;height:18px"')}</span>`}<span>${img?'Tap to change photo':'Upload photo'}</span><input id="s-file" type="file" accept="image/*" hidden></label>
+  <p style="font-size:12px;color:var(--soft);margin:12px 0">By starting, you agree to the exchange rate and fees shown.</p>
+  <button class="btn sq">Start Trade</button></form></section>`},
+
+slip:()=>{const d=S.slip,m=TS[d.status]||TS.checking;return `<section class="screen">
+  <div class="top left">${back('home',1)}<span class="title" style="font-size:21px">Slip Sent</span></div>
+  <div class="ok-ring" style="background:none;margin-top:20px"><b style="width:84px;height:84px;box-shadow:0 12px 26px -8px rgba(13,77,199,.5)">${I('check')}</b></div>
+  <h2 style="text-align:center;font-size:25px;font-weight:700">Slip Sent Successfully</h2>
+  <p class="muted" style="text-align:center;margin:12px 0 28px">Your slip is being checked. We will notify you once confirmed.</p>
+  <div class="card sum"><div><b style="font-family:var(--body);font-size:15.5px;font-weight:600;color:#374151">Transaction Details</b><span class="badge ${m[1]}">${m[0]}</span></div><div class="hr"></div>
+   <div><span>You send</span><b>${amt(d.intendedAmount)}</b></div><div><span>Account</span><b>${esc(d.accountTitleUsed)}</b></div>
+   <div><span>Recipient gets</span><b style="font-family:var(--body);font-size:14px;font-weight:500;color:var(--muted)">Set after review</b></div>
+   <div><span>Reference ID</span><b style="font-size:15px">${esc(String(d.id).slice(0,8).toUpperCase())} <button data-copy="${esc(d.id)}" aria-label="Copy reference" style="color:var(--soft);vertical-align:-3px">${I('copy','style="width:16px;height:16px"')}</button></b></div></div>
+  <div class="grow" style="min-height:40px"></div>
+  <button class="btn sq" data-go="home">Back to Home</button></section>`},
+
+history:()=>{const f={All:()=>1,Completed:t=>t.status==='approved',Pending:t=>['checking','seen','confirmed'].includes(t.status),Failed:t=>t.status==='failed'}[S.histTab];
+ const rows=S.trades.filter(f);return `<section class="screen tabs">
+  <div class="between" style="margin-bottom:18px"><h1 style="font-size:21px;font-weight:600">Transaction History</h1><button class="icon-btn" data-go="chat" aria-label="Chat with support">${I('chat')}</button></div>
+  <div class="seg" role="tablist" style="margin-bottom:8px">${['All','Completed','Pending','Failed'].map(t=>`<button class="${S.histTab===t?'on':''}" data-set="histTab:${t}">${t}</button>`).join('')}</div>
+  ${rows.length?rows.map(t=>tradeCard(t,1)).join(''):'<p class="empty">Nothing here yet</p>'}
+  ${nav('history')}</section>`},
+
+crypto:()=>{const k=S.coin,c=CRYPTO[k];return `<section class="screen tabs">
+  <div class="between" style="margin-bottom:18px"><span class="brand">AZAPLUG</span><button class="icon-btn" data-act="soon" aria-label="Notifications">${I('bell')}</button></div>
+  <div class="card"><div class="between"><span class="row" style="gap:12px"><span class="coin" style="background:${c.color}">${I('btc')}</span><span><b class="h" style="font-size:17px;font-weight:600;display:block;line-height:1.2">${c.name}</b><small class="muted">${c.pair}</small></span></span>
+    <span class="toggle2">${['BTC','USDT'].map(x=>`<button class="${k===x?'on':''}" data-set="coin:${x}">${x}</button>`).join('')}</span></div>
+   <div class="big" style="${c.rate?'':'font-size:22px;color:var(--muted)'}">${c.rate?naira(c.rate):'Rate not set yet'}</div></div>
+  <button class="btn sq" style="margin:16px 0" data-go="receive">${I('plusc')} Get Wallet</button>
+  <div class="card"><b class="h" style="font-size:17px;font-weight:600">Our Fixed Rate</b><div class="h" style="font-size:20px;font-weight:700;margin:10px 0">${c.rate?`1 ${k} = ${naira(c.rate)}`:'—'}</div><small class="muted">Rate is fixed from our end</small></div>
+  ${nav('crypto')}</section>`},
+
+receive:()=>{const k=S.coin,c=CRYPTO[k];return `<section class="screen tabs">
+  <div class="between" style="margin-bottom:22px"><span class="row" style="gap:14px"><button class="icon-btn" style="color:var(--slate)" data-go="crypto" aria-label="Back">${I('al')}</button><span class="brand">AZAPLUG</span></span><span></span></div>
+  <h1 style="font-size:25px;font-weight:700">Receive ${k}</h1><p class="muted" style="margin-bottom:22px">Receive ${c.label} directly to your wallet</p>
+  ${c.address?`<div class="card" style="text-align:center;padding:30px 20px"><span class="badge" style="background:#E2E9F8;color:var(--blue);font-family:var(--head);font-size:14px;padding:7px 16px">● &nbsp;${c.network}</span>
+   <div id="qr" class="qr" style="height:auto;min-height:20px"></div>
+   <p class="muted">Scan this QR code to deposit ${k} instantly</p></div>
+  <div class="card" style="margin-top:20px"><b class="h" style="font-weight:600">Your Wallet Address</b>
+   <div class="field" style="background:#F4F7FC;margin:14px 0 18px;padding-right:8px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${esc(c.address)}</span><button class="icon-btn sqr" style="width:40px;height:40px;color:var(--blue)" data-copy="${esc(c.address)}" aria-label="Copy wallet address">${I('copy')}</button></div>
+   <button class="btn sq" data-act="share">${I('share')} Share Address</button></div>`
+  :`<div class="card"><p class="empty" style="padding:24px 0">The ${k} wallet address has not been set yet. Please chat with support.</p></div>`}
+  ${nav('crypto')}</section>`},
+
+withdraw:()=>{const u=S.me;return `<section class="screen">
+  <div class="top"><button class="icon-btn" data-go="home" aria-label="Back">${I('cl')}</button><span class="title">Withdraw</span><span></span></div>
+  <div class="banner">${I('info')}Available Balance: ${naira(u.balance)}</div>
+  <form data-form="withdraw" novalidate>
+  <div class="card"><label class="cap" for="w-a">Enter amount</label>
+   <div class="row" style="border-bottom:1px solid var(--line);padding:14px 0 16px;margin-bottom:4px"><span class="h" style="font-size:34px;font-weight:700;color:var(--blue);margin-right:6px">₦</span>
+   <input id="w-a" inputmode="decimal" placeholder="0.00" style="border:0;outline:0;width:100%;font-family:var(--head);font-weight:700;font-size:34px;background:transparent"></div></div>
+  <div class="card" style="margin-top:22px"><div class="between"><span class="cap">Withdraw to</span><button type="button" class="link" data-go="edit">Change</button></div>
+   <div class="row" style="gap:14px;margin-top:14px"><span style="width:44px;height:44px;border-radius:12px;background:#EEF2FB;color:var(--blue);display:grid;place-items:center">${I('bank')}</span>
+   <span style="min-width:0"><b class="h" style="font-weight:600;font-size:16.5px;display:block">${esc(u.bankName)}</b><span class="muted" style="font-size:14px">${esc(u.accountNumber)}</span><br><small style="color:var(--soft);text-transform:uppercase">${esc(u.name)}</small></span></div></div>
+  <div class="card sum plain" style="margin-top:22px"><div class="cap" style="display:block;padding:0 0 6px">Transaction summary</div>
+   <div><span>Withdrawal Amount</span><b id="w-amt">${naira(0)}</b></div><div class="hr"></div>
+   <div><b style="font-weight:600;font-size:16px">Total to Deduct</b><b id="w-tot" style="font-family:var(--head);font-weight:700;font-size:19px;color:var(--blue)">${naira(0)}</b></div></div>
+  <button class="btn sq" style="margin-top:22px;font-family:var(--body)">Confirm Withdrawal</button></form></section>`},
+
+withdrawn:()=>{const d=S.wd,m=WS[d.status]||WS.pending;return `<section class="screen">
+  <div class="top"><button class="icon-btn" data-go="home" aria-label="Back">${I('cl')}</button><span class="title">Pay for Withdraw</span><span></span></div>
+  <div class="ok-ring"><i><b>${I('check')}</b></i></div>
+  <h2 style="text-align:center;font-size:25px;font-weight:700">Request Submitted</h2>
+  <p class="muted" style="text-align:center;margin:10px 0 28px">Your withdrawal request of <b style="color:var(--slate)">${naira(d.amount)}</b> has been submitted successfully and is being processed.</p>
+  <div class="card sum plain"><div class="cap" style="display:block;font-size:12px;letter-spacing:.08em;padding-bottom:6px">Transaction details</div>
+   <div><span>Bank Name</span><b style="font-family:var(--head);font-weight:600">${esc(d.payoutBank)}</b></div><div><span>Account Number</span><b>${esc(d.payoutAccount)}</b></div>
+   <div><span>Withdrawal Amount</span><b>${naira(d.amount)}</b></div><div class="hr"></div>
+   <div><span>Total to Deduct</span><b style="font-family:var(--head);font-weight:700;font-size:17px;color:var(--blue)">${naira(d.amount)}</b></div><div class="hr"></div>
+   <div><span>Status</span><span class="badge ${m[1]}">${m[0]}</span></div></div>
+  <button class="btn sq" style="margin-top:28px;font-family:var(--body)" data-go="home">Back to Home</button></section>`},
+
+profile:()=>{const u=S.me,ini=u.name.trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();
+ return `<section class="screen tabs">
+  <h1 style="text-align:center;font-size:18px;font-weight:600;margin:8px 0 22px">My Profile</h1>
+  <div class="hero"><div class="ph">${esc(ini)}</div><b class="h" style="font-size:22px;font-weight:700">${esc(u.name)}</b><div style="opacity:.8;font-size:14px;margin-top:2px">${esc(u.phone)}</div></div>
+  <div class="card info" style="margin-top:22px"><b class="h" style="font-size:16.5px;font-weight:600">Account Information</b>
+   ${[['Full Name',u.name],['Account Number',u.accountNumber],['Bank Name',u.bankName],['Phone Number',u.phone]].map(r=>`<div><span>${r[0]}</span><b>${esc(r[1])}</b></div>`).join('')}</div>
+  <div style="height:10px"></div>
+  <button class="menu" data-go="edit"><span class="ic">${I('user')}</span>Edit Profile Details<span class="chev">${I('cr')}</span></button>
+  <button class="menu" data-go="chat"><span class="ic">${I('help')}</span>Help &amp; Customer Support<span class="chev">${I('cr')}</span></button>
+  <button class="menu danger" data-act="logout"><span class="ic">${I('logout')}</span>Log Out of Device<span class="chev">${I('cr')}</span></button>
+  ${nav('profile')}</section>`},
+
+edit:()=>{const u=S.me;return `<section class="screen">
+  <div class="top">${back('profile')}<span class="title">Edit Profile Details</span><span></span></div>
+  <form data-form="edit" class="card" novalidate>
+  <label class="lb" style="margin-top:0" for="e-n">Full Name</label><div class="field"><input id="e-n" value="${esc(u.name)}" autocomplete="name"></div>
+  <label class="lb" for="e-b">Bank Name</label><div class="field"><input id="e-b" value="${esc(u.bankName)}"></div>
+  <label class="lb" for="e-a">Account Number</label><div class="field"><input id="e-a" inputmode="numeric" value="${esc(u.accountNumber)}"></div>
+  <p class="muted" style="font-size:13px;margin:14px 0 18px">This is where your approved payments are sent. Make sure it is correct.</p>
+  <button class="btn sq">Save Changes</button></form></section>`},
+
+rules:()=>`<section class="screen rules">
+  <div class="top">${back('home')}<span class="title" style="font-size:19px">Rules</span><span></span></div>
+  <p style="white-space:pre-wrap">${S.rules==null?'Loading…':esc(S.rules||'No rules posted yet.')}</p>
+  ${fab(1)}</section>`,
+
+chat:()=>`<section class="chat">
+  <header class="chat-top"><button data-go="${S.prev||'home'}" aria-label="Back">${I('cl','style="width:24px;height:24px"')}</button><span class="avatar">AZ</span>
+   <span style="flex:1"><b class="h" style="font-size:17px;font-weight:600;display:block;line-height:1.2">AZAPLUG Support</b><small class="muted">We reply as soon as we can</small></span></header>
+  <div class="msgs" id="msgs">${msgsHtml()}</div>
+  <form class="composer" data-form="chat"><label class="rb" aria-label="Attach photo" style="cursor:pointer">${I('clip')}<input id="c-file" type="file" accept="image/*" hidden></label>
+   <span class="inp"><input id="c-in" placeholder="Type a message..." aria-label="Message" autocomplete="off"></span>
+   <button class="rb send" aria-label="Send message">${I('send')}</button></form></section>`
+};
+function msgsHtml(){if(!S.chat.length)return '<p class="empty">Send us a message and we will help you.</p>';let day='';
+  return S.chat.map(m=>{const d=new Date(m.createdAt),ds=fd(d),img=safeImg(m.imageData),mine=m.sender==='user';
+    const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
+    return `${head}<div class="msg ${mine?'out':'in'}">${mine?'':'<span class="who">AZAPLUG Agent</span>'}${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">`:''}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(d)}</time></div>`}).join('')}
+
+/* ---------- Render + navigation ---------- */
+let poll=null;
+function render(){$('#app').innerHTML=V[S.route]();if(S.route==='chat')window.scrollTo(0,document.body.scrollHeight);if(S.route==='receive')drawQR()}
+function go(r){
+  if(r==='chat'&&S.route!=='chat')S.prev=S.route;
+  if(S.route!==r)$('#toast').classList.remove('show');
+  S.route=r;render();if(r!=='chat')window.scrollTo(0,0);
+  clearInterval(poll);poll=null;
+  if(!S.me)return;
+  if(r==='home'||r==='history'||r==='withdraw'||r==='profile')Promise.all([loadMe(),loadAll()]).then(()=>{if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
+  if(r==='accounts'||r==='send')api('GET','/api/accounts').then(d=>{S.accounts=d.accounts||[];if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
+  if(r==='rules')api('GET','/api/rules').then(d=>{S.rules=d.rulesText||'';if(S.route===r)render()}).catch(e=>toast(e.message));
+  if(r==='chat'){const pull=()=>api('GET','/api/chat/messages').then(d=>{const n=(d.messages||[]).length!==S.chat.length;S.chat=d.messages||[];
+      if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight)}}).catch(()=>{});pull();poll=setInterval(pull,5000)}
+}
+function drawQR(){const c=CRYPTO[S.coin],el=$('#qr');if(!el||!c.address)return;
+  const make=()=>{try{const q=qrcode(0,'M');q.addData(c.address);q.make();el.innerHTML=q.createSvgTag({scalable:true})}catch(e){}};
+  if(window.qrcode)return make();
+  const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';s.onload=make;document.head.appendChild(s)}
+
+/* ---------- Events ---------- */
+document.addEventListener('click',e=>{
+  const g=e.target.closest('[data-go]');if(g)return go(g.dataset.go);
+  const s=e.target.closest('[data-set]');if(s){const[k,v]=s.dataset.set.split(':');S[k]=v;return render()}
+  const c=e.target.closest('[data-copy]');if(c){navigator.clipboard?.writeText(c.dataset.copy).then(()=>toast('Copied'),()=>toast('Could not copy'));return}
+  const a=e.target.closest('[data-act]');if(!a)return;
+  ({eye(){const i=a.parentElement.querySelector('input'),sh=i.type==='password';i.type=sh?'text':'password';a.innerHTML=I(sh?'eye':'eyeoff');a.setAttribute('aria-label',sh?'Hide password':'Show password')},
+    soon(){toast('Coming soon')},
+    async logout(){try{await api('POST','/api/logout')}catch(e){}S.me=null;S.trades=[];S.withdrawals=[];S.chat=[];go('splash')},
+    share(){const w=CRYPTO[S.coin].address;navigator.share?navigator.share({text:w}).catch(()=>{}):navigator.clipboard?.writeText(w).then(()=>toast('Address copied'))}
+  })[a.dataset.act]?.();
+});
+document.addEventListener('change',async e=>{const t=e.target;
+  if(t.id==='s-c'){S.send.title=t.value;S.send.accountId='';render()}
+  if(t.id==='s-b'){S.send.accountId=t.value;render()}
+  if(t.id==='s-file'&&t.files[0]){try{S.send.image=await compress(t.files[0]);render()}catch(err){toast('Could not read that photo')}}
+  if(t.id==='c-file'&&t.files[0]){try{const imageData=await compress(t.files[0]);const d=await api('POST','/api/chat/send',{imageData});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight)}catch(err){toast(err.message||'Could not send photo')}t.value=''}
+});
+document.addEventListener('input',e=>{const t=e.target;
+  if(t.id==='s-a'){S.send.amount=t.value;$('#s-send').textContent=amt(num(t.value))}
+  if(t.id==='w-a'){const v=num(t.value);$('#w-amt').textContent=naira(v);$('#w-tot').textContent=naira(v)}
+  if(t.id==='acct-q'){const q=t.value.toLowerCase();document.querySelectorAll('#acct-list .acct').forEach(el=>el.style.display=el.dataset.k.includes(q)?'':'none')}
+});
+const val=id=>$('#'+id).value.trim();
+const FORMS={
+  async login(){const phone=val('lg-id'),password=$('#lg-pw').value;if(!phone||!password)throw new Error('Enter your phone number and password');
+    await api('POST','/api/login',{phone,password});await enter()},
+  async signup(){const b={name:val('su-n'),phone:val('su-p'),bankName:val('su-b'),accountNumber:val('su-a'),password:$('#su-pw').value};
+    if(Object.values(b).some(v=>!v))throw new Error('Fill in every field');
+    if(b.password.length<6)throw new Error('Password must be at least 6 characters');
+    if(b.password!==$('#su-pw2').value)throw new Error('Passwords do not match');
+    await api('POST','/api/register',b);await enter()},
+  async send(){const intendedAmount=num(S.send.amount);
+    if(!intendedAmount)throw new Error('Enter the amount you sent');if(!S.send.image)throw new Error('Add a photo of your receipt');
+    const d=await api('POST','/api/trades',{accountId:S.send.accountId,intendedAmount,receiptImage:S.send.image});
+    S.slip=d.trade;S.send={title:'',accountId:'',amount:'',image:null};go('slip')},
+  async withdraw(){const amount=num(val('w-a'));if(!amount)throw new Error('Enter an amount');
+    const d=await api('POST','/api/withdrawals',{amount});S.wd=d.withdrawal;go('withdrawn')},
+  async edit(){const b={name:val('e-n'),bankName:val('e-b'),accountNumber:val('e-a')};if(Object.values(b).some(v=>!v))throw new Error('All fields are required');
+    await api('PUT','/api/me',b);await loadMe();toast('Details saved');go('profile')},
+  async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';
+    const d=await api('POST','/api/chat/send',{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight);i.focus()}
+};
+document.addEventListener('submit',async e=>{
+  e.preventDefault();const f=e.target,fn=FORMS[f.dataset.form];if(!fn||f.dataset.busy)return;
+  f.dataset.busy=1;const b=f.querySelector('.btn');const label=b&&b.innerHTML;if(b){b.disabled=true;b.textContent='Please wait…'}
+  try{await fn()}catch(err){toast(err.message||'Something went wrong. Try again.')}
+  finally{delete f.dataset.busy;if(b&&b.isConnected){b.disabled=false;b.innerHTML=label}}
+});
+render();
+enter().catch(()=>go('splash'));
+</script>
+</body>
+</html>
