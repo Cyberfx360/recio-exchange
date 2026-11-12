@@ -280,8 +280,8 @@ const I=(n,s='')=>`<svg class="i" viewBox="0 0 24 24" aria-hidden="true" ${s}>${
    Kenneth: paste your receiving addresses and fixed naira rates here.
    Leave a value empty and the app shows "not set yet" instead. */
 const CRYPTO = {
-  BTC:  {name:'Bitcoin', pair:'BTC / NGN',  color:'#F7931A', network:'Bitcoin (BTC)', label:'Bitcoin',       address:'', rate:null},
-  USDT: {name:'Tether',  pair:'USDT / NGN', color:'#26A17B', network:'TRON (TRC-20)', label:'TRC-20 Tether', address:'', rate:null}
+  BTC:  {name:'Bitcoin', pair:'BTC / NGN',  color:'#F7931A', network:'Bitcoin (BTC)', label:'Bitcoin',       address:'1EUBJeXCb5kkT8HuVh15uBuWy9PcqEoffN', rate:null},
+  USDT: {name:'Tether',  pair:'USDT / NGN', color:'#26A17B', network:'Ethereum (ERC-20)', label:'ERC-20 Tether', address:'0x4a44da73ea4c4a71125129c22100c84888b348f2', rate:null}
 };
 
 /* ---------- State + helpers ---------- */
@@ -497,9 +497,9 @@ receive:()=>{const k=S.coin,c=CRYPTO[k];return `<section class="screen tabs">
   <h1 style="font-size:25px;font-weight:700">Receive ${k}</h1><p class="muted" style="margin-bottom:22px">Receive ${c.label} directly to your wallet</p>
   ${c.address?`<div class="card" style="text-align:center;padding:30px 20px"><span class="badge" style="background:#E2E9F8;color:var(--blue);font-family:var(--head);font-size:14px;padding:7px 16px">● &nbsp;${c.network}</span>
    <div id="qr" class="qr" style="height:auto;min-height:20px"></div>
-   <p class="muted">Scan this QR code to deposit ${k} instantly</p></div>
+   <p class="muted">Scan this QR code to deposit ${k} instantly</p><p style="margin-top:12px;background:#FEF3C7;color:#92400E;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:600">Send only ${k} on ${c.network}. Other networks will be lost.</p></div>
   <div class="card" style="margin-top:20px"><b class="h" style="font-weight:600">Your Wallet Address</b>
-   <div class="field" style="background:#F4F7FC;margin:14px 0 18px;padding-right:8px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500">${esc(c.address)}</span><button class="icon-btn sqr" style="width:40px;height:40px;color:var(--blue)" data-copy="${esc(c.address)}" aria-label="Copy wallet address">${I('copy')}</button></div>
+   <div class="field" style="background:#F4F7FC;margin:14px 0 18px;padding:12px 8px 12px 16px;height:auto"><span style="flex:1;min-width:0;word-break:break-all;font-family:var(--mono);font-weight:700;font-size:14px;line-height:1.5">${esc(c.address)}</span><button class="icon-btn sqr" style="width:40px;height:40px;color:var(--blue)" data-copy="${esc(c.address)}" aria-label="Copy wallet address">${I('copy')}</button></div>
    <button class="btn sq" data-act="share">${I('share')} Share Address</button></div>`
   :`<div class="card"><p class="empty" style="padding:24px 0">The ${k} wallet address has not been set yet. Please chat with support.</p></div>`}
   ${nav('crypto')}</section>`},
