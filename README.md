@@ -10,6 +10,21 @@
 > ```
 > That's it — no other schema changes, nothing else to touch in Supabase.
 
+> **Escalated chats (Admin Console)** need one more table. Run this once in the Supabase SQL Editor:
+> ```sql
+> create table if not exists escalations (
+>   id uuid primary key default gen_random_uuid(),
+>   user_id uuid not null references users(id) on delete cascade,
+>   staff_id uuid references staff(id) on delete set null,
+>   reason text not null,
+>   status text not null default 'open',   -- open / resolved
+>   admin_feedback text,
+>   created_at timestamptz not null default now(),
+>   updated_at timestamptz not null default now()
+> );
+> ```
+> Until it exists, everything else keeps working; only escalating and the Admin Console show an error.
+
 Customers send money into an account you provide, upload a receipt, and your team manually
 verifies and credits their balance. Three roles: **Customer**, **Staff**, **Admin**.
 

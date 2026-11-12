@@ -299,6 +299,8 @@ form .g2{margin-top:14px;row-gap:14px}form .g2 .cl{margin-top:0}
 .rcp{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px 20px;background:#fff;border-top:1px solid var(--line)}.rcp:last-child{border-bottom:1px solid var(--line)}.rcp.on{background:#EEF3FE}
 .rcp b{display:block;font-size:14.5px;font-weight:600}.rcp small{font-size:12px;color:#4B5563}.av.solid{background:var(--blue);color:#fff}
 .radio{width:20px;height:20px;border-radius:50%;border:1.5px solid #9CA3AF;flex:none;display:grid;place-items:center}.rcp.on .radio{border-color:var(--blue);background:var(--blue);box-shadow:inset 0 0 0 4px #fff;border-width:2px}
+.tagx{display:inline-block;font-size:10px;font-weight:700;border-radius:4px;padding:0 6px;vertical-align:1px}.tagx.r{background:#FDE8E8;color:var(--red)}.tagx.g{background:#DFF7EC;color:#0E9F6E}
+.afb{background:#ECFDF5;border:1px solid #A7E3CB;border-radius:12px;padding:14px;margin-top:18px}.afb b{display:flex;gap:6px;align-items:center;color:#059669;font-size:12.5px}.afb p{font-size:13.5px;color:#374151;margin:8px 0 6px}.afb small{color:var(--soft);font-size:11.5px}
 </style>
 </head>
 <body>
@@ -382,7 +384,7 @@ Object.assign(P,{
    ===================================================================== */
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
 const S={route:'loading',me:null,portal:store.get('az_portal')==='chat'?'chat':'vendor',accounts:[],trades:[],convos:[],chat:[],chatUser:null,
-  rcTab:'pending',chatTab:'all',id:null,form:null,done:null,loop:true,fwd:{mid:null,to:null},recips:null};
+  rcTab:'pending',chatTab:'all',id:null,form:null,done:null,loop:true,fwd:{mid:null,to:null},recips:null,escs:[]};
 const $=s=>document.querySelector(s);
 const n0=n=>Number(n||0).toLocaleString('en-NG'), naira=n=>'₦'+n0(n);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -406,9 +408,15 @@ async function api(method,url,body){
 }
 async function loadMe(){const d=await api('GET','/api/staff/me');S.me=d.loggedIn?d:null;return S.me}
 async function refresh(){
-  if(S.portal==='chat'){S.convos=(await api('GET','/api/staff/chats')).conversations||[];return}
+  if(S.portal==='chat'){S.convos=(await api('GET','/api/staff/chats')).conversations||[];await loadEscs();return}
   const [a,t]=await Promise.all([api('GET','/api/staff/accounts'),api('GET','/api/staff/trades')]);S.accounts=a.accounts||[];S.trades=t.trades||[];
 }
+async function loadEscs(){try{S.escs=(await api('GET','/api/staff/escalations')).escalations||[]}catch(e){S.escs=[]}}
+const lastEsc=u=>S.escs.find(e=>e.userId===u);
+const escBanner=()=>{const e=lastEsc(S.id),ic=I('alertc','style="width:15px;height:15px;flex:none"');
+  if(e&&e.status==='open')return `${ic}<span class="grow">Escalated to admin. Waiting for their reply.</span>`;
+  if(e)return `${ic}<span class="grow">Returned from Admin: "${esc(e.adminFeedback||'Resolved')}"</span><button data-go="forward">Escalate</button>`;
+  return `${ic}<span class="grow">Need an admin to step in on this chat?</span><button data-go="forward">Escalate</button>`};
 const home=()=>S.portal==='chat'?'chats':'dash';
 async function enter(){const me=await loadMe();if(!me)return go('role');if(me.status!=='approved')return go('pending');await refresh();go(home())}
 function compress(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onerror=rej;fr.onload=e=>{const img=new Image();img.onerror=rej;img.onload=()=>{
@@ -538,17 +546,17 @@ verify:()=>{const t=S.trades.find(x=>x.id===S.id);if(!t)return V.receipts();cons
   :'<p class="hint" style="margin-top:16px">This trade has been verified and credited by an admin. Only an admin can change it now.</p>'}</div></section>`},
 
 /* ----- Chat Manager portal ----- */
-chats:()=>{const wait=S.convos.filter(c=>c.lastSender==='user'),list=S.chatTab==='pending'?wait:S.chatTab==='active'?S.convos.filter(c=>c.lastSender!=='user'):S.convos;
+chats:()=>{const wait=S.convos.filter(c=>c.lastSender==='user'),list=S.chatTab==='pending'?wait:S.chatTab==='active'?S.convos.filter(c=>c.lastSender!=='user'):S.chatTab==='fwd'?S.convos.filter(c=>lastEsc(c.userId)):S.convos;
  return `<section class="scr">${hd('Support Chats','Customer Messaging Console','',`<button class="bk" data-act="soon" aria-label="Notifications">${I('bell')}</button>`,'bluef')}
  <div class="bd">${search('Search customer or keyword...')}
-  <div class="chips">${[['all','All'],['active','Active'],['pending','Pending']].map(c=>`<button class="${S.chatTab===c[0]?'on':''}" data-set="chatTab:${c[0]}">${c[1]}${c[0]==='pending'&&wait.length?` <i>${wait.length}</i>`:''}</button>`).join('')}</div>
-  <div id="list">${list.length?list.map(c=>`<button class="card cvc" data-go="chat" data-id="${esc(c.userId)}" data-k="${esc((c.name+' '+c.lastMessage).toLowerCase())}">${av(c.name,c.lastSender==='user'?'dot o':'dot g')}<span class="grow" style="min-width:0"><span class="between"><b>${esc(c.name)}</b><small class="muted" style="font-size:11px">${ago(c.lastAt)}</small></span>
+  <div class="chips">${[['all','All'],['active','Active'],['pending','Pending'],['fwd','Forwarded']].map(c=>`<button class="${S.chatTab===c[0]?'on':''}" data-set="chatTab:${c[0]}">${c[1]}${c[0]==='pending'&&wait.length?` <i>${wait.length}</i>`:''}</button>`).join('')}</div>
+  <div id="list">${list.length?list.map(c=>`<button class="card cvc" data-go="chat" data-id="${esc(c.userId)}" data-k="${esc((c.name+' '+c.lastMessage).toLowerCase())}">${av(c.name,c.lastSender==='user'?'dot o':'dot g')}<span class="grow" style="min-width:0"><span class="between"><b>${esc(c.name)}${lastEsc(c.userId)?` <span class="tagx ${lastEsc(c.userId).status==='open'?'r':'g'}">${lastEsc(c.userId).status==='open'?'Escalated':'Returned'}</span>`:''}</b><small class="muted" style="font-size:11px">${ago(c.lastAt)}</small></span>
    <span class="between"><span class="lm">${esc(c.lastMessage)}</span>${c.lastSender==='user'?'<span class="newb">new</span>':''}</span></span></button>`).join(''):'<p class="empty">No conversations yet</p>'}</div>
   <p style="text-align:center;margin-top:26px"><button class="link" style="color:var(--muted);font-weight:600;font-size:14px" data-act="logout">Log out</button></p></div></section>`},
 
 chat:()=>{const u=S.chatUser||(S.convos.find(c=>c.userId===S.id)||{name:'Customer'});return `<section class="chat">
   <header class="hd bluef" style="position:sticky;top:0;z-index:5"><button class="bk" data-go="chats" aria-label="Back">${I('cl')}</button>${av(u.name,'wh')}<div class="grow" style="min-width:0"><h1 style="font-size:18px">${esc(u.name)}</h1><p>${esc(u.phone||'')}</p></div><button class="bk" data-go="forward" aria-label="Chat options">${I('kebab')}</button></header>
-  <div class="esc">${I('alertc','style="width:15px;height:15px;flex:none"')}<span class="grow">Need an admin to step in on this chat?</span><button data-go="forward">Escalate</button></div>
+  <div class="esc" id="escb">${escBanner()}</div>
   <div class="msgs" id="msgs">${msgsHtml()}</div>
   <form class="composer" data-form="chat"><label class="rb" aria-label="Attach photo" style="cursor:pointer">${I('clip')}<input id="c-file" type="file" accept="image/*" hidden></label>
    <span class="inp"><input id="c-in" placeholder="Type a message..." aria-label="Message" autocomplete="off"></span><button class="rb send" aria-label="Send message">${I('send')}</button></form></section>`},
@@ -562,11 +570,12 @@ forwardMsg:()=>{const m=S.chat.find(x=>x.id===S.fwd.mid)||{},u=S.chatUser||{name
   <div id="list" role="radiogroup" aria-label="Recipients">${!list?'<p class="empty">Loading…</p>':list.length?list.map(r=>`<button class="rcp ${S.fwd.to===r.id?'on':''}" role="radio" aria-checked="${S.fwd.to===r.id}" data-act="pickRecip" data-id="${esc(r.id)}" data-k="${esc((r.name+' '+r.role).toLowerCase())}">${av(r.name,S.fwd.to===r.id?'solid':'')}<span class="grow" style="min-width:0"><b>${esc(r.name)}</b><small>${esc(r.role)}</small></span><i class="radio"></i></button>`).join(''):'<p class="empty">No one to forward to yet</p>'}</div>
   <div style="padding:6px 20px 0"><form data-form="forwardMsg" novalidate><button class="b blue" style="height:48px">Forward Message ${I('send','style="width:15px;height:15px"')}</button></form></div></div></section>`},
 
-forward:()=>{const u=S.chatUser||{name:'Customer'};return `<section class="scr">${hd('Forward Chat','Transfer to Admin for Review','chat','','bluef')}
+forward:()=>{const u=S.chatUser||{name:'Customer'},e=lastEsc(S.id);return `<section class="scr">${hd('Forward Chat','Transfer to Admin for Review','chat','','bluef')}
  <div class="bd"><div class="card tp"><div class="cl" style="margin-top:0">Chat escalation summary</div><div><span>Customer</span><b>${esc(u.name)}</b></div><div><span>Phone</span><b>${esc(u.phone||'—')}</b></div><div><span>Message Count</span><b>${S.chat.length} Message${S.chat.length===1?'':'s'}</b></div></div>
   <form data-form="forward" novalidate><label for="fw-to" style="display:block;font-weight:600;font-size:13px;margin:18px 0 8px">Select Admin Recipient</label><div class="field" style="height:46px;border-width:1px;border-radius:8px;padding:0 12px"><select id="fw-to" style="font-size:14px"><option>Admin</option></select>${I('cd','style="width:16px;height:16px"')}</div>
   <label for="fw-r" style="display:block;font-weight:600;font-size:13px;margin:18px 0 8px">Reason for Forward</label><textarea class="in" id="fw-r" rows="4" placeholder="e.g. Receipt verified but ledger shows matching transaction is locked. Needs manual override."></textarea>
   <div class="between" style="margin-top:18px"><span><b style="font-size:14px;display:block">Keep me in the loop</b><small class="muted">Notify me when admin responds</small></span><button type="button" class="sw ${S.loop?'on':''}" role="switch" aria-checked="${S.loop}" aria-label="Keep me in the loop" data-act="loop"></button></div>
+  ${e&&e.status==='open'?`<p class="hint">This chat is already with the admin (sent ${ago(e.createdAt)}). You can forward it again after they reply.</p>`:e&&e.adminFeedback?`<div class="afb"><b>${I('checkc','style="width:15px;height:15px"')}ADMIN FEEDBACK</b><p>"${esc(e.adminFeedback)}"</p><small>${ago(e.updatedAt)}</small></div>`:''}
   <button class="b green" style="height:50px;border-radius:999px;margin-top:22px">Forward Chat</button></form><button class="b ghost" style="height:50px;border-radius:999px;border:1.5px solid var(--slate)" data-go="chat">Cancel</button></div></section>`}
 };
 function msgsHtml(){if(!S.chat.length)return '<p class="empty">No messages yet</p>';let day='';
@@ -582,8 +591,8 @@ function go(r,o){
   const from=S.route;Object.assign(S,o||{});S.route=r;render();if(r!=='chat')window.scrollTo(0,0);
   clearInterval(poll);poll=null;
   if(r==='forwardMsg'){api('GET','/api/staff/recipients').then(d=>{S.recips=d.recipients||[];if(S.route==='forwardMsg'&&!typing())render()}).catch(e=>{S.recips=[];toast(e.message);if(S.route==='forwardMsg')render()});return}
-  if(r==='chat'){if(from!=='forward'&&from!=='forwardMsg'){S.chat=[];S.chatUser=null}const pull=()=>api('GET','/api/staff/chats/'+encodeURIComponent(S.id)).then(d=>{const first=!S.chatUser,n=(d.messages||[]).length!==S.chat.length;S.chatUser=d.user||S.chatUser;S.chat=d.messages||[];
-      if(S.route!=='chat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight)}}).catch(()=>{});pull();poll=setInterval(pull,5000);return}
+  if(r==='chat'){if(from!=='forward'&&from!=='forwardMsg'){S.chat=[];S.chatUser=null}const pull=()=>{loadEscs().then(()=>{const b=$('#escb');if(b&&S.route==='chat')b.innerHTML=escBanner()});return api('GET','/api/staff/chats/'+encodeURIComponent(S.id)).then(d=>{const first=!S.chatUser,n=(d.messages||[]).length!==S.chat.length;S.chatUser=d.user||S.chatUser;S.chat=d.messages||[];
+      if(S.route!=='chat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight)}}).catch(()=>{})};pull();poll=setInterval(pull,5000);return}
   if(['dash','receipts','acctAll','chats'].includes(r))refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{});
 }
 async function reload(r,o){await refresh();go(r||S.route,o)}
@@ -633,7 +642,7 @@ const FORMS={
     if(S.form.id){await api('PUT','/api/staff/accounts/'+S.form.id,b);toast('Account saved');S.form=null;await reload('acctAll')}
     else{const d=await api('POST','/api/staff/accounts',b);S.form=null;await refresh();go('acctDone',{done:d.account||b})}},
   async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';const d=await api('POST','/api/staff/chats/'+encodeURIComponent(S.id)+'/send',{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight);i.focus()},
-  async forward(){throw new Error('Forwarding to admin is not connected yet')},
+  async forward(){const reason=val('fw-r');if(!reason)throw new Error('Enter the reason for forwarding');await api('POST','/api/staff/chats/'+encodeURIComponent(S.id)+'/escalate',{reason});await loadEscs();toast('Sent to admin. It is now in their Admin Console.');go('chat')},
   async forwardMsg(){if(!S.fwd.to)throw new Error('Select a recipient first');const r=S.recips.find(x=>x.id===S.fwd.to);throw new Error('Forwarding to '+r.name+' is not connected yet')}
 };
 document.addEventListener('submit',async e=>{
