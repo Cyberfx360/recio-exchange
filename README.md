@@ -25,6 +25,16 @@
 > ```
 > Until it exists, everything else keeps working; only escalating and the Admin Console show an error.
 
+> **Push notifications and the customer Notifications screen** need three tables. Run this once:
+> ```sql
+> create table if not exists notifications (id uuid primary key default gen_random_uuid(), user_id uuid references users(id) on delete cascade, kind text not null default 'info', title text not null, body text not null, created_at timestamptz not null default now());
+> create table if not exists push_subscriptions (endpoint text primary key, user_id uuid not null references users(id) on delete cascade, p256dh text not null, auth text not null, created_at timestamptz not null default now());
+> create table if not exists push_keys (id int primary key default 1, public_key text not null, private_key text not null);
+> alter table notifications enable row level security; alter table push_subscriptions enable row level security; alter table push_keys enable row level security;
+> ```
+> The server creates its own push key pair on first use and keeps it in `push_keys`; there are no keys to set on Render.
+> On iPhone, customers must add AZAPLUG to their Home Screen before push can be turned on (Apple's rule).
+
 Customers send money into an account you provide, upload a receipt, and your team manually
 verifies and credits their balance. Three roles: **Customer**, **Staff**, **Admin**.
 

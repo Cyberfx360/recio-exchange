@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0D4DC7">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="AZAPLUG">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>AZAPLUG</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -219,6 +226,7 @@ a.role{display:flex}
 .steps i{display:block;width:14px;height:14px;border-radius:50%;background:#D5DBE6;margin:0 auto 8px;position:relative;z-index:1}
 .steps div:not(:first-child):before{content:"";position:absolute;top:6px;right:50%;width:100%;height:2px;background:#D5DBE6}
 .steps .on{color:var(--blue)}.steps .on i,.steps .on:before{background:var(--blue)!important}
+.ndot{position:absolute;top:9px;right:10px;width:9px;height:9px;border-radius:50%;background:var(--red);border:2px solid #fff}
 </style>
 </head>
 <body>
@@ -285,7 +293,7 @@ const CRYPTO = {
 };
 
 /* ---------- State + helpers ---------- */
-const S={route:'loading',homeTab:'trades',histTab:'All',coin:'BTC',me:null,accounts:[],trades:[],withdrawals:[],rules:null,chat:[],
+const S={route:'loading',notes:[],noteTab:'all',push:'off',seenSnap:0,homeTab:'trades',histTab:'All',coin:'BTC',me:null,accounts:[],trades:[],withdrawals:[],rules:null,chat:[],
   slip:null,wd:null,send:{title:'',accountId:'',amount:'',image:null}};
 const $=s=>document.querySelector(s);
 const amt=n=>Number(n||0).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -310,11 +318,48 @@ async function loadAll(){
   const [a,t,w]=await Promise.all([api('GET','/api/accounts'),api('GET','/api/trades'),api('GET','/api/withdrawals')]);
   S.accounts=a.accounts||[];S.trades=t.trades||[];S.withdrawals=w.withdrawals||[];
 }
+/* ---------- Notifications + push ---------- */
+const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const seenAt=()=>Number(ls.get('az_seen')||0), unread=()=>S.notes.filter(n=>new Date(n.createdAt)>seenAt()).length;
+const agoS=d=>{const s=(Date.now()-new Date(d))/1000;return s<60?'Just now':s<3600?Math.floor(s/60)+'m ago':s<86400?Math.floor(s/3600)+'h ago':s<604800?Math.floor(s/86400)+'d ago':fd(new Date(d))};
+const bell=()=>`<button class="icon-btn" style="position:relative" data-go="notifications" aria-label="Notifications${unread()?' ('+unread()+' new)':''}">${I('bell')}${unread()?'<i class="ndot"></i>':''}</button>`;
+async function loadNotes(){try{S.notes=(await api('GET','/api/notifications')).notifications||[]}catch(e){S.notes=[]}
+  if(['home','crypto','notifications'].includes(S.route)&&!document.activeElement.matches('input,select'))render()}
+const PUSH_OK='serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+const IOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const STANDALONE=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const b64=s=>{const r=atob((s+'='.repeat((4-s.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(r,c=>c.charCodeAt(0))};
+const pushHelp={install:'On iPhone: tap the Share button in Safari, choose "Add to Home Screen", then open AZAPLUG from your Home Screen and turn this on.',
+  denied:'Notifications are blocked for AZAPLUG in your browser or phone settings. Allow them there, then come back.',unsupported:'This browser does not support push notifications.'};
+async function pushState(){
+  if(!PUSH_OK){S.push=IOS&&!STANDALONE?'install':'unsupported';return}
+  if(Notification.permission==='denied'){S.push='denied';return}
+  try{const reg=await navigator.serviceWorker.register('/sw.js'),sub=await reg.pushManager.getSubscription();
+    S.push=sub&&Notification.permission==='granted'?'on':'off';
+    if(S.push==='on')api('POST','/api/push/subscribe',sub.toJSON()).catch(()=>{})}catch(e){S.push='unsupported'}
+}
+async function pushOn(){
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted'){S.push=perm==='denied'?'denied':'off';throw new Error('Notifications were not allowed')}
+  const reg=await navigator.serviceWorker.ready,{publicKey}=await api('GET','/api/push/key');
+  const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(publicKey)});
+  await api('POST','/api/push/subscribe',sub.toJSON());S.push='on';
+}
+async function pushDetach(){if(!PUSH_OK)return null;const reg=await navigator.serviceWorker.getRegistration(),sub=reg&&await reg.pushManager.getSubscription();
+  if(sub)await api('POST','/api/push/unsubscribe',{endpoint:sub.endpoint}).catch(()=>{});return sub}
+async function pushOff(){const sub=await pushDetach();if(sub)await sub.unsubscribe();S.push='off'}
+let pbusy=false;
+async function togglePush(){if(pbusy)return;pbusy=true;
+  try{if(S.push==='on'){await pushOff();toast('Push notifications turned off')}else{await pushOn();toast('Push notifications turned on')}}catch(e){toast(e.message||'Could not change notifications')}
+  pbusy=false;if(S.route==='profile'||S.route==='notifications')render()}
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.go&&S.me&&V[e.data.go])go(e.data.go)});
+
 async function enter(){
   const me=await loadMe();
   if(!me)return go('splash');
   if(me.status!=='approved'){location.href='/pending.html';return}
-  await loadAll();go('home');
+  await loadAll();loadNotes();pushState().then(()=>{if(S.route==='profile'||S.route==='notifications')render()});
+  const h=location.hash.slice(1);go(h==='notifications'||h==='chat'?h:'home');
 }
 function compress(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onerror=rej;fr.onload=e=>{const img=new Image();img.onerror=rej;img.onload=()=>{
   const c=document.createElement('canvas'),k=Math.min(1,1000/img.width);c.width=img.width*k;c.height=img.height*k;
@@ -400,7 +445,7 @@ home:()=>{const list=S.homeTab==='trades'
  return `<section class="screen tabs">
   <div class="between" style="margin-bottom:18px"><span class="brand">AZAPLUG</span>
    <span class="row" style="gap:12px"><button data-go="accounts" style="background:var(--blue);color:#fff;font-weight:700;font-size:14px;padding:9px 16px;border-radius:999px">Rate</button>
-   <button class="icon-btn" data-act="soon" aria-label="Notifications">${I('bell')}</button></span></div>
+   ${bell()}</span></div>
   <div class="balance"><small>Balance</small><div class="amt">${naira(S.me.balance)}</div>
    <div class="pills"><button class="on" data-go="accounts">Get Account</button><button data-go="withdraw">Withdraw</button><button data-go="rules">Rules</button><button data-act="soon">Borrow</button></div></div>
   <button class="btn sq" style="margin:16px 0 20px;font-family:var(--body);font-weight:600" data-go="send">Send Receipt</button>
@@ -484,7 +529,7 @@ history:()=>{const f={All:()=>1,Completed:t=>t.status==='approved',Pending:t=>['
   ${nav('history')}</section>`},
 
 crypto:()=>{const k=S.coin,c=CRYPTO[k];return `<section class="screen tabs">
-  <div class="between" style="margin-bottom:18px"><span class="brand">AZAPLUG</span><button class="icon-btn" data-act="soon" aria-label="Notifications">${I('bell')}</button></div>
+  <div class="between" style="margin-bottom:18px"><span class="brand">AZAPLUG</span>${bell()}</div>
   <div class="card"><div class="between"><span class="row" style="gap:12px"><span class="coin" style="background:${c.color}">${I('btc')}</span><span><b class="h" style="font-size:17px;font-weight:600;display:block;line-height:1.2">${c.name}</b><small class="muted">${c.pair}</small></span></span>
     <span class="toggle2">${['BTC','USDT'].map(x=>`<button class="${k===x?'on':''}" data-set="coin:${x}">${x}</button>`).join('')}</span></div>
    <div class="big" style="${c.rate?'':'font-size:22px;color:var(--muted)'}">${c.rate?naira(c.rate):'Rate not set yet'}</div></div>
@@ -531,12 +576,26 @@ withdrawn:()=>{const d=S.wd,m=WS[d.status]||WS.pending;return `<section class="s
    <div><span>Status</span><span class="badge ${m[1]}">${m[0]}</span></div></div>
   <button class="btn sq" style="margin-top:28px;font-family:var(--body)" data-go="home">Back to Home</button></section>`},
 
+notifications:()=>{const f=S.noteTab,rows=S.notes.filter(n=>f==='all'||(f==='tx'?n.kind==='tx':n.kind!=='tx')),snap=S.seenSnap||0,
+  K={tx:['checkc','#10B981','#E4F6EE'],alert:['alertt','#EF4444','#FDE0E0'],info:['bell','#0D4DC7','#EAF1FE']};
+ return `<section class="screen">
+  <div class="top"><button data-go="home" aria-label="Back" style="width:32px;height:44px">${I('cl','style="width:24px;height:24px"')}</button><span class="title">Notifications</span>
+   <button data-act="readall" style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 13px;color:var(--blue);font-weight:700;font-size:12.5px">${I('cc','style="width:15px;height:15px"')}Read all</button></div>
+  <div class="seg" role="tablist" style="margin-bottom:6px">${[['all','All'],['tx','Transactions'],['alert','Alerts']].map(t=>`<button class="${f===t[0]?'on':''}" data-set="noteTab:${t[0]}">${t[1]}</button>`).join('')}</div>
+  ${S.push==='off'?`<div class="note" style="align-items:center"><span class="ic" style="background:#EAF1FE;color:var(--blue)">${I('bell')}</span><div style="flex:1"><h4>Get these on your phone</h4><p>Turn on push notifications so you never miss an update.</p></div><button data-act="push" style="background:var(--blue);color:#fff;font-weight:700;font-size:13px;padding:8px 14px;border-radius:999px">Turn on</button></div>`
+   :S.push==='install'?`<div class="note"><span class="ic" style="background:#EAF1FE;color:var(--blue)">${I('bell')}</span><div style="flex:1"><h4>Get these on your phone</h4><p>${pushHelp.install}</p></div></div>`:''}
+  ${rows.length?rows.map(n=>{const k=/failed|cancelled/i.test(n.title)?['alertc','#EF4444','#FDE0E0']:K[n.kind]||K.info,nw=new Date(n.createdAt)>snap;return `<article class="note ${nw?'unread':''}"><span class="ic" style="background:${k[2]};color:${k[1]}">${I(k[0])}</span><div style="flex:1;min-width:0"><div class="between" style="align-items:flex-start"><h4>${esc(n.title)}${nw?'<i class="dot"></i>':''}</h4><small class="muted" style="font-size:11.5px;white-space:nowrap">${agoS(n.createdAt)}</small></div><p style="word-break:break-word">${esc(n.body)}</p></div></article>`}).join(''):'<p class="empty">No notifications yet</p>'}
+  </section>`},
+
 profile:()=>{const u=S.me,ini=u.name.trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('').toUpperCase();
  return `<section class="screen tabs">
   <h1 style="text-align:center;font-size:18px;font-weight:600;margin:8px 0 22px">My Profile</h1>
   <div class="hero"><div class="ph">${esc(ini)}</div><b class="h" style="font-size:22px;font-weight:700">${esc(u.name)}</b><div style="opacity:.8;font-size:14px;margin-top:2px">${esc(u.phone)}</div></div>
   <div class="card info" style="margin-top:22px"><b class="h" style="font-size:16.5px;font-weight:600">Account Information</b>
    ${[['Full Name',u.name],['Account Number',u.accountNumber],['Bank Name',u.bankName],['Phone Number',u.phone]].map(r=>`<div><span>${r[0]}</span><b>${esc(r[1])}</b></div>`).join('')}</div>
+  <div class="card" style="margin-top:22px"><b class="h" style="font-size:16.5px;font-weight:600">Preferences</b>
+   <div class="pref" style="border-bottom:0;padding-bottom:${pushHelp[S.push]?8:0}px"><span><b>Push Notifications</b><small>Stay updated with trade statuses</small></span>${S.push==='on'||S.push==='off'?`<button class="sw ${S.push==='on'?'on':''}" role="switch" aria-checked="${S.push==='on'}" aria-label="Push Notifications" data-act="push"></button>`:''}</div>
+   ${pushHelp[S.push]?`<p class="muted" style="font-size:13px">${pushHelp[S.push]}</p>`:''}</div>
   <div style="height:10px"></div>
   <button class="menu" data-go="edit"><span class="ic">${I('user')}</span>Edit Profile Details<span class="chev">${I('cr')}</span></button>
   <button class="menu" data-go="chat"><span class="ic">${I('help')}</span>Help &amp; Customer Support<span class="chev">${I('cr')}</span></button>
@@ -579,6 +638,8 @@ function go(r){
   S.route=r;render();if(r!=='chat')window.scrollTo(0,0);
   clearInterval(poll);poll=null;
   if(!S.me)return;
+  if(r==='notifications'){S.seenSnap=seenAt();ls.set('az_seen',Date.now());render()}
+  if(r==='home'||r==='notifications')loadNotes();
   if(r==='trade'||r==='home'||r==='history'||r==='withdraw'||r==='profile')Promise.all([loadMe(),loadAll()]).then(()=>{if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
   if(r==='accounts'||r==='send')api('GET','/api/accounts').then(d=>{S.accounts=d.accounts||[];if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
   if(r==='rules')api('GET','/api/rules').then(d=>{S.rules=d.rulesText||'';if(S.route===r)render()}).catch(e=>toast(e.message));
@@ -599,7 +660,9 @@ document.addEventListener('click',e=>{
   const a=e.target.closest('[data-act]');if(!a)return;
   ({eye(){const i=a.parentElement.querySelector('input'),sh=i.type==='password';i.type=sh?'text':'password';a.innerHTML=I(sh?'eye':'eyeoff');a.setAttribute('aria-label',sh?'Hide password':'Show password')},
     soon(){toast('Coming soon')},
-    async logout(){try{await api('POST','/api/logout')}catch(e){}S.me=null;S.trades=[];S.withdrawals=[];S.chat=[];go('splash')},
+    push(){togglePush()},
+    readall(){S.seenSnap=Date.now();ls.set('az_seen',Date.now());render()},
+    async logout(){try{await pushDetach()}catch(e){}try{await api('POST','/api/logout')}catch(e){}S.notes=[];S.me=null;S.trades=[];S.withdrawals=[];S.chat=[];go('splash')},
     share(){const w=CRYPTO[S.coin].address;navigator.share?navigator.share({text:w}).catch(()=>{}):navigator.clipboard?.writeText(w).then(()=>toast('Address copied'))}
   })[a.dataset.act]?.();
 });
