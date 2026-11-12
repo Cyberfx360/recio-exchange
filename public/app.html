@@ -214,6 +214,11 @@ label.lb{display:block;font-weight:600;font-size:15px;margin:22px 0 10px}
 .blue :focus-visible{outline-color:#fff}
 .btn:disabled{opacity:.7}
 a.role{display:flex}
+.tx-b{width:100%;text-align:left}
+.steps{display:flex;margin-top:20px}.steps div{flex:1;text-align:center;font-size:11.5px;color:var(--soft);position:relative;font-weight:600}
+.steps i{display:block;width:14px;height:14px;border-radius:50%;background:#D5DBE6;margin:0 auto 8px;position:relative;z-index:1}
+.steps div:not(:first-child):before{content:"";position:absolute;top:6px;right:50%;width:100%;height:2px;background:#D5DBE6}
+.steps .on{color:var(--blue)}.steps .on i,.steps .on:before{background:var(--blue)!important}
 </style>
 </head>
 <body>
@@ -324,11 +329,11 @@ const nav=on=>{const c=S.coin==='USDT'?'USDT':'Bitcoin';
 const fab=low=>`<button class="fab ${low?'low':''}" data-go="chat" aria-label="Chat with support">${I('chat')}</button>`;
 const pw=(id,ph,ac)=>`<div class="field"><input id="${id}" type="password" placeholder="${ph}" autocomplete="${ac}"><button type="button" class="eye" data-act="eye" aria-label="Show password">${I('eyeoff')}</button></div>`;
 const tradeCard=(t,rich)=>{const m=TS[t.status]||TS.checking,d=new Date(t.createdAt),ti=t.accountTitleUsed||'Account';
-  return `<div class="txn">${rich?`<div class="flag" style="font-family:var(--head);font-weight:700;font-size:16px;color:var(--blue)">${esc(ti[0].toUpperCase())}</div>`:''}
+  return `<button class="txn tx-b" data-trade="${esc(t.id)}">${rich?`<div class="flag" style="font-family:var(--head);font-weight:700;font-size:16px;color:var(--blue)">${esc(ti[0].toUpperCase())}</div>`:''}
   <div style="min-width:0"><div class="nm">${esc(ti)}</div><div class="dt">${fd(d)} · ${ft(d)}</div>
   ${t.creditedAmount!=null?`<div class="dt" style="color:#0E9F6E">Credited ${naira(t.creditedAmount)}</div>`:''}
   ${t.status==='failed'&&t.failReason?`<div class="dt" style="color:var(--red)">${esc(t.failReason)}</div>`:''}</div>
-  <div class="rt"><div class="am">${amt(t.intendedAmount)}</div><span class="badge ${m[1]}">${m[0]}</span></div></div>`};
+  <div class="rt"><div class="am">${amt(t.intendedAmount)}</div><span class="badge ${m[1]}">${m[0]}</span></div></button>`};
 const wdCard=w=>{const m=WS[w.status]||WS.pending,d=new Date(w.createdAt);
   return `<div class="txn"><div style="min-width:0"><div class="nm">${esc(w.payoutBank)}</div><div class="dt">${esc(w.payoutAccount)} · ${fd(d)}</div>
   ${w.status==='rejected'&&w.reason?`<div class="dt" style="color:var(--red)">${esc(w.reason)}</div>`:''}</div>
@@ -357,7 +362,7 @@ role:()=>`<section class="screen blue">
   <p style="text-align:center;opacity:.75;margin:8px 0 22px">Choose how you'd like to sign in</p>
   <button class="role on" data-go="login"><span class="ic">${I('user')}</span><span><b>User</b><span>Personal Account</span></span><span class="chev">${I('cr')}</span></button>
   <a class="role" href="/staff-login.html" style="text-decoration:none"><span class="ic">${I('brief')}</span><span><b>Staff</b><span>Employee Portal</span></span><span class="chev">${I('cr')}</span></a>
-  <a class="role" href="/admin.html" style="text-decoration:none"><span class="ic">${I('shield')}</span><span><b>Admin</b><span>Admin Dashboard</span></span><span class="chev">${I('cr')}</span></a>
+  <a class="role" href="/admin-app.html" style="text-decoration:none"><span class="ic">${I('shield')}</span><span><b>Admin</b><span>Admin Dashboard</span></span><span class="chev">${I('cr')}</span></a>
   <div class="grow"></div>
 </section>`,
 
@@ -456,6 +461,20 @@ slip:()=>{const d=S.slip,m=TS[d.status]||TS.checking;return `<section class="scr
    <div><span>Reference ID</span><b style="font-size:15px">${esc(String(d.id).slice(0,8).toUpperCase())} <button data-copy="${esc(d.id)}" aria-label="Copy reference" style="color:var(--soft);vertical-align:-3px">${I('copy','style="width:16px;height:16px"')}</button></b></div></div>
   <div class="grow" style="min-height:40px"></div>
   <button class="btn sq" data-go="home">Back to Home</button></section>`},
+
+trade:()=>{const t=S.trades.find(x=>x.id===S.tradeId);if(!t)return V.history();const m=TS[t.status]||TS.checking,d=new Date(t.createdAt),img=safeImg(t.receiptImage),fi=safeImg(t.failImage);
+ const at=['checking','seen','confirmed','approved'].indexOf(t.status);
+ return `<section class="screen">
+  <div class="top left">${back(S.tprev||'home',1)}<span class="title" style="font-size:21px">Transaction Details</span></div>
+  <div class="card"><div class="between" style="align-items:flex-start"><span><small class="muted">You sent</small><b class="h" style="display:block;font-size:30px;line-height:1.2">${amt(t.intendedAmount)}</b></span><span class="badge ${m[1]}">${m[0]}</span></div>
+   ${t.status==='failed'?`<p style="margin-top:16px;background:#FDE8E8;color:#B91C1C;border-radius:12px;padding:12px 14px;font-size:14px"><b>This trade failed.</b>${t.failReason?'<br>'+esc(t.failReason):''}</p>`
+   :`<div class="steps">${['Checking','Seen','Confirmed','Approved'].map((n,i)=>`<div class="${i<=at?'on':''}"><i></i>${n}</div>`).join('')}</div>`}</div>
+  ${fi?`<img src="${fi}" alt="Proof attached by AZAPLUG" style="width:100%;border-radius:14px;margin-top:14px">`:''}
+  <div class="card sum" style="margin-top:16px"><div><span>Account</span><b>${esc(t.accountTitleUsed||'Account')}</b></div><div><span>Date</span><b style="font-size:15px">${fd(d)} · ${ft(d)}</b></div>
+   <div><span>Recipient gets</span>${t.creditedAmount!=null?`<b style="color:#0E9F6E">${naira(t.creditedAmount)}</b>`:'<b style="font-family:var(--body);font-size:14px;font-weight:500;color:var(--muted)">Set after review</b>'}</div>
+   <div><span>Reference ID</span><b style="font-size:15px">${esc(String(t.id).slice(0,8).toUpperCase())} <button data-copy="${esc(t.id)}" aria-label="Copy reference" style="color:var(--soft);vertical-align:-3px">${I('copy','style="width:16px;height:16px"')}</button></b></div></div>
+  <div class="card" style="margin-top:16px;padding:14px"><div class="cap" style="font-size:12px;margin-bottom:10px">Your receipt</div>${img?`<img src="${img}" alt="Receipt you uploaded" style="width:100%;border-radius:10px;display:block">`:'<p class="muted" style="font-size:14px">No receipt image</p>'}</div>
+  <button class="btn sq" style="margin-top:20px;font-family:var(--body);font-weight:600" data-go="chat">${I('chat')} Chat with support</button></section>`},
 
 history:()=>{const f={All:()=>1,Completed:t=>t.status==='approved',Pending:t=>['checking','seen','confirmed'].includes(t.status),Failed:t=>t.status==='failed'}[S.histTab];
  const rows=S.trades.filter(f);return `<section class="screen tabs">
@@ -560,7 +579,7 @@ function go(r){
   S.route=r;render();if(r!=='chat')window.scrollTo(0,0);
   clearInterval(poll);poll=null;
   if(!S.me)return;
-  if(r==='home'||r==='history'||r==='withdraw'||r==='profile')Promise.all([loadMe(),loadAll()]).then(()=>{if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
+  if(r==='trade'||r==='home'||r==='history'||r==='withdraw'||r==='profile')Promise.all([loadMe(),loadAll()]).then(()=>{if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
   if(r==='accounts'||r==='send')api('GET','/api/accounts').then(d=>{S.accounts=d.accounts||[];if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
   if(r==='rules')api('GET','/api/rules').then(d=>{S.rules=d.rulesText||'';if(S.route===r)render()}).catch(e=>toast(e.message));
   if(r==='chat'){const pull=()=>api('GET','/api/chat/messages').then(d=>{const n=(d.messages||[]).length!==S.chat.length;S.chat=d.messages||[];
@@ -573,6 +592,7 @@ function drawQR(){const c=CRYPTO[S.coin],el=$('#qr');if(!el||!c.address)return;
 
 /* ---------- Events ---------- */
 document.addEventListener('click',e=>{
+  const tr=e.target.closest('[data-trade]');if(tr&&!e.target.closest('[data-copy]')){S.tradeId=tr.dataset.trade;S.tprev=S.route;return go('trade')}
   const g=e.target.closest('[data-go]');if(g)return go(g.dataset.go);
   const s=e.target.closest('[data-set]');if(s){const[k,v]=s.dataset.set.split(':');S[k]=v;return render()}
   const c=e.target.closest('[data-copy]');if(c){navigator.clipboard?.writeText(c.dataset.copy).then(()=>toast('Copied'),()=>toast('Could not copy'));return}
