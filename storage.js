@@ -604,7 +604,35 @@ async function deletePasskey(id) {
   if (error) throw error;
 }
 
+// Messages a chat manager passed on to one person (a staff member, or the admin when to_staff_id is null).
+function forwardRow(r) {
+  return { id: r.id, fromStaffId: r.from_staff_id, toStaffId: r.to_staff_id, userId: r.user_id, text: r.message_text, imageData: r.image_data, sender: r.sender, status: r.status, createdAt: r.created_at };
+}
+async function createForward(f) {
+  const id = uid();
+  const { error } = await supabase.from('forwards').insert({ id, from_staff_id: f.fromStaffId, to_staff_id: f.toStaffId || null, user_id: f.userId, message_text: f.text || null, image_data: f.imageData || null, sender: f.sender });
+  if (error) throw error;
+  return id;
+}
+async function listForwardsTo(staffId) {
+  let q = supabase.from('forwards').select('*').order('created_at', { ascending: false }).limit(60);
+  q = staffId ? q.eq('to_staff_id', staffId) : q.is('to_staff_id', null);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data.map(forwardRow);
+}
+async function findForwardById(id) {
+  const { data, error } = await supabase.from('forwards').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? forwardRow(data) : null;
+}
+async function setForwardStatus(id, status) {
+  const { error } = await supabase.from('forwards').update({ status }).eq('id', id);
+  if (error) throw error;
+}
+
 module.exports = {
+  createForward, listForwardsTo, findForwardById, setForwardStatus,
   hasEmailColumns, findByEmail, setLogin, sessionGet, sessionSet, sessionDelete, savePasskey, findPasskey, updatePasskeyCounter, deletePasskey,
   saveTeamPush, deleteTeamPush, listTeamPush,
   createLoan, findLoanById, listLoans, listLoansForUser, updateLoan, getLoanLimit, setLoanLimit,

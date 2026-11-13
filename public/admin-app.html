@@ -352,6 +352,9 @@ img,svg,video{max-width:100%}
 .balance{container-type:inline-size}.balance .amt{font-size:clamp(20px,10.4cqw,36px);overflow-wrap:anywhere}
 @media (max-width:389px){.nav{width:calc(var(--w) - 24px);padding:0 4px}.nav button{font-size:10px;gap:5px}.pills{gap:6px}.pills button{font-size:11.5px}.pills button:first-child{font-size:10.5px}}
 @media (max-width:359px){.nav button{font-size:9.5px}.pills{flex-wrap:wrap}.pills button,.pills button:first-child{flex:1 1 40%;font-size:12px}}
+.fwc{padding:14px;border-radius:14px;margin-bottom:12px}.fwc.done{opacity:.6}
+.fwc .fwb{background:#F4F7FC;border-radius:12px;padding:10px 12px;margin:10px 0;font-size:14.5px;line-height:1.45;word-break:break-word}.fwc .fwb img{max-width:100%;max-height:260px;border-radius:10px;display:block;margin-bottom:6px}
+.fwc .fwb .voice .pl{background:var(--blue);color:#fff}.fwc .fwb .wave{color:var(--blue)}
 </style>
 </head>
 <body>
@@ -450,9 +453,12 @@ async function api(method,url,body){
   if(!r.ok)throw new Error(d.error||'Something went wrong. Try again.');
   return d;
 }
+const fwBody=f=>`<div class="fwb">${safeImg(f.imageData)?`<img src="${safeImg(f.imageData)}" alt="Forwarded photo"><button class="svp" style="color:var(--blue)" data-act="savePic" data-kind="chat" data-id="${esc(f.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(f)}${esc(f.text||'').replace(/\n/g,'<br>')}</div>`;
+const fwNew=()=>(S.fwds||[]).filter(f=>f.status==='new').length;
 async function refresh(){
   const [u,s,a,t,w,st,c]=await Promise.all(['users','staff','accounts','trades','withdrawals','settings','chats'].map(x=>api('GET','/api/admin/'+x)));
   S.users=u.users||[];S.staff=s.staff||[];S.accounts=a.accounts||[];S.trades=t.trades||[];S.wds=w.withdrawals||[];S.settings=st||{};S.convos=c.conversations||[];
+  try{S.fwds=(await api('GET','/api/admin/forwards')).forwards||[];S.fwdErr=''}catch(err){S.fwds=[];S.fwdErr=err.message}
   try{const e=await api('GET','/api/admin/escalations');S.escs=e.escalations||[];S.escErr=''}catch(err){S.escs=[];S.escErr=err.message}
   try{const l=await api('GET','/api/admin/loans');S.loans=l.loans||[];S.loanLimit=l.limit;S.loanErr=''}catch(err){S.loans=[];S.loanErr=err.message}
 }
@@ -521,7 +527,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
    ...S.staff.filter(s=>s.status==='pending').map(s=>({at:s.createdAt,t:'New Staff Account Pending',s:`${esc(s.name)} requested access`,r:'Review',go:'staffProfile',id:s.id})),
    ...S.wds.filter(w=>w.status==='pending').map(w=>({at:w.createdAt,t:'Withdrawal Request',s:esc(w.userName),r:naira(w.amount),go:'wd',id:w.id})),
    ...S.escs.filter(e=>e.status==='open').map(e=>({at:e.createdAt,t:'Chat Escalated',s:`${esc(e.userName)} • by ${esc(e.staffName)}`,r:'Review',go:'console',id:''}))].sort((a,b)=>new Date(b.at)-new Date(a.at)).slice(0,6);
- const cnt={staff:S.staff.filter(x=>x.status==='pending').length,accounts:S.accounts.filter(a=>!a.active).length,chats:S.convos.filter(c=>c.lastSender==='user').length+S.escs.filter(x=>x.status==='open').length,
+ const cnt={staff:S.staff.filter(x=>x.status==='pending').length,accounts:S.accounts.filter(a=>!a.active).length,chats:S.convos.filter(c=>c.lastSender==='user').length+S.escs.filter(x=>x.status==='open').length+fwNew(),
    receipts:act.length,wds:S.wds.filter(w=>w.status==='pending').length+S.loans.filter(l=>l.status==='pending').length};
  const qa=[['staff','users','Manage Staff'],['accounts','users','Accounts'],['users','users','Manage Users'],['chats','help','Help &amp; Support'],['rules','gear','Edit Rules'],['receipts','file','Receipts'],['wds','dl','Withdrawer Request'],['rates','trend','Edit Rates']];
  return `<section class="scr">${hd('Admin Panel','AzaPlug Executive Control','',`<button class="write" data-go="announce">${I('pen','style="width:15px;height:15px"')}Write</button>`)}
@@ -701,9 +707,11 @@ rates:()=>`<section class="scr">${hd('Rates &amp; Rules','Admin Controls • Str
 console:()=>{const open=S.escs.filter(e=>e.status==='open'),list=S.escTab==='open'?open:S.escTab==='resolved'?S.escs.filter(e=>e.status!=='open'):S.escs;
  return `<section class="scr">${hd('Admin Console <span class="sec">SECURE</span>','Priority &amp; Escalated Chats','chats',`<button class="bk" data-act="soon" aria-label="Console settings">${I('gear')}</button>`,'dark con')}
  <div class="bd">${search('Search escalated customers, staff, cases...')}
-  <div class="chips">${[['open','Escalated',open.length],['resolved','Resolved',S.escs.length-open.length],['all','All',S.escs.length]].map(c=>`<button class="${S.escTab===c[0]?'on gold':''}" data-set="escTab:${c[0]}">${c[1]} <i>${c[2]}</i></button>`).join('')}</div>
+  <div class="chips">${[['open','Escalated',open.length],['fwd','Forwarded',fwNew()],['resolved','Resolved',S.escs.length-open.length],['all','All',S.escs.length]].map(c=>`<button class="${S.escTab===c[0]?'on gold':''}" data-set="escTab:${c[0]}">${c[1]} <i>${c[2]}</i></button>`).join('')}</div>
   ${S.escErr?`<div class="warn2" style="margin:0 0 14px">${I('alertt','style="width:16px;height:16px;flex:none"')}<span><b>Escalations could not be loaded.</b> ${esc(S.escErr)} If this is a new setup, run the escalations table SQL from the README in Supabase.</span></div>`:''}
-  <div id="list">${list.length?list.map(e=>{const o=e.status==='open';return `<article class="card ec" data-k="${esc((e.userName+' '+e.staffName+' '+e.reason).toLowerCase())}">
+  <div id="list">${S.escTab==='fwd'?(S.fwdErr?`<p class="empty">${esc(S.fwdErr)}</p>`:(S.fwds||[]).length?S.fwds.map(f=>`<article class="card fwc ${f.status==='new'?'':'done'}" data-k="${esc((f.userName+' '+f.fromName+' '+(f.text||'')).toLowerCase())}"><div class="between"><b class="h" style="font-size:15px">${esc(f.userName)}</b><small class="muted">${ago(f.createdAt)}</small></div>
+   <small class="muted">${f.sender==='user'?'Customer message':'Agent message'} · forwarded by ${esc(f.fromName)}</small>${fwBody(f)}
+   <div class="row" style="gap:8px;justify-content:flex-end">${f.status==='new'?`<button class="mini" data-act="fwDone" data-id="${esc(f.id)}">Done</button>`:'<span class="tagx g">Done</span>'}<button class="mini dk" data-go="chat" data-from="console" data-id="${esc(f.userId)}">Open Chat</button></div></article>`).join(''):'<p class="empty">No forwarded messages</p>'):list.length?list.map(e=>{const o=e.status==='open';return `<article class="card ec" data-k="${esc((e.userName+' '+e.staffName+' '+e.reason).toLowerCase())}">
    <div class="row" style="gap:12px;align-items:flex-start">${av(e.userName,o?'red':'')}<span class="grow" style="min-width:0"><b class="h" style="font-size:15.5px;display:block">${esc(e.userName)}</b><span class="tagx ${o?'r':'g'}">${o?'Escalated':'Resolved'}</span></span><small class="muted" style="white-space:nowrap">${ago(e.createdAt)}</small></div>
    <p>${esc(e.reason)}</p>${e.adminFeedback?`<p class="fb"><b>Your feedback:</b> ${esc(e.adminFeedback)}</p>`:''}
    <div class="between" style="border-top:1px solid var(--line);padding-top:12px"><span class="byl">${I('shield','style="width:14px;height:14px"')}Escalated by ${esc(e.staffName)}</span>
@@ -804,7 +812,7 @@ function vnPaint(){document.querySelectorAll('.voice[data-vnid]').forEach(el=>{c
   if(pl.dataset.p!==String(playing)){pl.dataset.p=String(playing);pl.innerHTML=I(playing?'pause':'play');pl.setAttribute('aria-label',(playing?'Pause':'Play')+' voice note')}
   d.textContent=on&&a.currentTime>0?mmss(a.currentTime):d.dataset.d})}
 function vnStop(){const a=VN.audio;if(a){a.onended=a.onerror=a.ontimeupdate=a.onplay=a.onpause=null;a.pause();if(VN.url)URL.revokeObjectURL(VN.url)}VN.audio=null;VN.id=null;VN.url=null;vnPaint()}
-function vnPlay(id,frac){const m=S.chat.find(x=>String(x.id)===String(id)),v=m&&vnParse(m.imageData);if(!v)return;
+function vnPlay(id,frac){const m=S.chat.concat(S.fwds||[]).find(x=>String(x.id)===String(id)),v=m&&vnParse(m.imageData);if(!v)return;
   if(VN.audio&&String(VN.id)===String(id)){const a=VN.audio;if(frac!=null&&VN.dur){a.currentTime=frac*VN.dur;if(a.paused)a.play().catch(()=>{})}else a.paused?a.play().catch(()=>{}):a.pause();return}
   vnStop();
   try{const bin=atob(v.b64.replace(/\s/g,'')),u8=new Uint8Array(bin.length);for(let k=0;k<bin.length;k++)u8[k]=bin.charCodeAt(k);VN.url=URL.createObjectURL(new Blob([u8],{type:v.type}))}catch(e){return toast('This voice note is damaged')}
@@ -890,8 +898,9 @@ const ACT={
   soon(){toast('Coming soon')},
   show(el){const i=$('#lg-pw'),sh=i.type==='password';i.type=sh?'text':'password';el.textContent=sh?'HIDE':'SHOW'},
   async logout(){try{await pushDetach()}catch(e){}try{await api('POST','/api/admin/logout')}catch(e){}go(lsGet(BIO.key)?'lock':'login')},
+  async fwDone(el,id){await api('POST','/api/admin/forwards/'+encodeURIComponent(id)+'/done');await reload()},
   async alertsOn(){try{await pushOn();toast('Alerts turned on')}catch(e){toast(e.message||'Could not turn on alerts')}render()},
-  savePic(el,id){const k=el.dataset.kind,t=S.trades.find(x=>x.id===id)||{};savePic(k==='chat'?(S.chat.find(m=>m.id===id)||{}).imageData:k==='fail'?t.failImage:t.receiptImage,k==='chat'?'azaplug-chat-photo':'azaplug-receipt-'+String(id).slice(0,8))},
+  savePic(el,id){const k=el.dataset.kind,t=S.trades.find(x=>x.id===id)||{};savePic(k==='chat'?(S.chat.concat(S.fwds||[]).find(m=>m.id===id)||{}).imageData:k==='fail'?t.failImage:t.receiptImage,k==='chat'?'azaplug-chat-photo':'azaplug-receipt-'+String(id).slice(0,8))},
   async acctAssign(el,id){const a=S.accounts.find(x=>x.id===id),r=await pick('Assign '+a.title+' ('+a.bankName+') to',[{id:'',label:'No one (admin account)',on:!a.staffId}].concat(S.staff.filter(x=>x.status==='approved').map(x=>({id:x.id,label:x.name,on:a.staffId===x.id}))));
     if(!r||(r.id||null)===(a.staffId||null))return;await api('PUT','/api/admin/accounts/'+id,{staffId:r.id||null});toast(r.id?'Account assigned':'Account un-assigned');await reload()},
   async loanDecide(el,id){const l=S.loans.find(x=>x.id===id),yes=el.dataset.d==='approve';
