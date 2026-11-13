@@ -50,6 +50,113 @@ app.use(session({
 }));
 
 // ============================================================
+// CHAT STATUS: online / last seen, typing, and seen ticks.
+// Kept in memory and saved to the chat_state table every few seconds (so it survives restarts).
+// Keys: 'u:<id>' / 's:<id>' / 'admin' = last seen;  'r:<chat>><side>' = read up to.
+// Chats: 'c:<userId>' (customer <-> support, sides 'user' and 'support'), 't:<a>:<b>' (team, sides = 'admin' or a staff id).
+// ============================================================
+const CS = new Map(), CS_SAVED = new Map(), CS_DIRTY = new Set(), TYPING = new Map();
+const ONLINE_MS = 12000, TYPING_MS = 6000;
+let csLoaded = false, csTried = 0, csHinted = false;
+const csGet = id => CS.get(id) || 0;
+function csSet(id, t, saveEvery) {
+  if (!(t > csGet(id))) return;
+  CS.set(id, t);
+  if (t - (CS_SAVED.get(id) || 0) >= (saveEvery || 0)) CS_DIRTY.add(id);
+}
+async function csLoad() {
+  csTried = Date.now();
+  try {
+    (await store.listChatState()).forEach(r => { const t = Date.parse(r.at); if (t > csGet(r.id)) CS.set(r.id, t); CS_SAVED.set(r.id, t); });
+    csLoaded = true;
+  } catch (err) {
+    if (!csHinted) { csHinted = true; console.log('Chat status is only kept in memory until the chat_state SQL from the README is run.'); }
+  }
+}
+async function csFlush() {
+  if (!csLoaded) { if (Date.now() - csTried < 300000) return; await csLoad(); if (!csLoaded) return; }
+  if (!CS_DIRTY.size) return;
+  const ids = [...CS_DIRTY]; CS_DIRTY.clear();
+  try { await store.saveChatState(ids.map(id => ({ id, at: new Date(CS.get(id)).toISOString() }))); ids.forEach(id => CS_SAVED.set(id, CS.get(id))); }
+  catch (err) { ids.forEach(id => CS_DIRTY.add(id)); csLoaded = false; }
+  for (const [k, v] of TYPING) if (Date.now() - v.t > TYPING_MS) TYPING.delete(k);
+}
+csLoad();
+setInterval(() => csFlush().catch(() => {}), 10000);
+// Who is calling the API right now (the same browser can be signed in as customer, staff and admin).
+function whoIs(req) {
+  const s = req.session || {}, p = req.path, as = String((req.query && req.query.as) || (req.body && req.body.as) || '');
+  if (as === 'admin' || p.startsWith('/admin')) return s.isAdmin ? 'admin' : null;
+  if (as === 'staff' || p.startsWith('/staff')) return s.staffId ? 's:' + s.staffId : null;
+  if (p.startsWith('/team')) return null;
+  return s.userId ? 'u:' + s.userId : null;
+}
+// Apps check for calls every 3 seconds while they are open on screen, so that request means "online".
+app.use('/api', (req, res, next) => {
+  if (req.path === '/call/incoming' || req.path.startsWith('/peer') || req.method !== 'GET') {
+    const me = whoIs(req); if (me) csSet(me, Date.now(), 60000);
+  }
+  if (req.method === 'POST') { // sending a message ends "typing..."
+    let m;
+    if (req.path === '/chat/send' && req.session.userId) TYPING.delete('c:' + req.session.userId + '>user');
+    else if ((m = req.path.match(/^\/(?:staff|admin)\/chats\/([^/]+)\/send$/))) TYPING.delete('c:' + m[1] + '>support');
+    else if ((m = req.path.match(/^\/(staff|admin)\/team\/([^/]+)\/send$/))) { const me = m[1] === 'admin' ? 'admin' : req.session.staffId; if (me) TYPING.delete(teamChatKey(me, m[2]) + '>' + me); }
+  }
+  next();
+});
+const teamChatKey = (a, b) => 't:' + [String(a), String(b)].sort().join(':');
+const STAFF_C = new Map();
+async function staffCached(id) {
+  const c = STAFF_C.get(id);
+  if (c && Date.now() - c.at < 30000) return c.s;
+  const s = await store.findStaffById(id).catch(() => null);
+  STAFF_C.set(id, { s, at: Date.now() });
+  return s;
+}
+let SUPPORT = { at: 0, ids: [] };
+async function supportIds() { // admin + chat managers (all approved staff before departments are set up)
+  if (Date.now() - SUPPORT.at < 60000) return SUPPORT.ids;
+  const rolesOn = await roleReady(), staff = await store.listStaff().catch(() => []);
+  SUPPORT = { at: Date.now(), ids: ['admin'].concat(staff.filter(s => s.status === 'approved' && (!rolesOn || s.role === 'chat')).map(s => 's:' + s.id)) };
+  return SUPPORT.ids;
+}
+// Works out which chat the request is about. Returns { chat, me, peer, peerIds } or null.
+async function peerChat(req) {
+  const s = req.session || {}, q = Object.assign({}, req.query, req.body);
+  const as = String(q.as || ''), kind = String(q.chat || ''), id = String(q.id || '');
+  if (as === 'user' && kind === 'support') return s.userId ? { chat: 'c:' + s.userId, me: 'user', peer: 'support', peerIds: await supportIds() } : null;
+  if (as === 'admin' && !s.isAdmin) return null;
+  let meStaff = null;
+  if (as === 'staff') { meStaff = s.staffId ? await staffCached(s.staffId) : null; if (!meStaff || meStaff.status !== 'approved') return null; }
+  if (as !== 'admin' && as !== 'staff') return null;
+  if (kind === 'customer' && id) return { chat: 'c:' + id, me: 'support', peer: 'user', peerIds: ['u:' + id] };
+  if (kind !== 'team' || !id) return null;
+  if (as === 'admin') { const o = await staffCached(id); return o && o.status === 'approved' ? { chat: teamChatKey('admin', id), me: 'admin', peer: id, peerIds: ['s:' + id] } : null; }
+  if (id === 'admin') return { chat: teamChatKey(meStaff.id, 'admin'), me: meStaff.id, peer: 'admin', peerIds: ['admin'] };
+  const o = await staffCached(id);
+  if (!o || o.status !== 'approved' || o.id === meStaff.id || !canTalk(meStaff, o)) return null;
+  return { chat: teamChatKey(meStaff.id, o.id), me: meStaff.id, peer: o.id, peerIds: ['s:' + o.id] };
+}
+// Polled every 2 seconds while a chat is open: the other person's status, and "I have seen up to here".
+app.get('/api/peer', async (req, res) => {
+  try {
+    const c = await peerChat(req); if (!c) return res.status(403).json({ error: 'Not allowed.' });
+    const now = Date.now(), seen = Date.parse(req.query.seen || '');
+    if (seen) csSet('r:' + c.chat + '>' + c.me, Math.min(seen, now), 0);
+    const last = Math.max(0, ...c.peerIds.map(csGet)), ty = TYPING.get(c.chat + '>' + c.peer);
+    res.json({ online: now - last < ONLINE_MS, lastSeen: last || null, typing: ty && now - ty.t < TYPING_MS ? ty.kind : null, readAt: csGet('r:' + c.chat + '>' + c.peer) || null });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load status.' }); }
+});
+app.post('/api/peer/typing', async (req, res) => {
+  try {
+    const c = await peerChat(req); if (!c) return res.status(403).json({ error: 'Not allowed.' });
+    const kind = (req.body || {}).kind;
+    if (kind === 'typing' || kind === 'recording') TYPING.set(c.chat + '>' + c.me, { t: Date.now(), kind }); else TYPING.delete(c.chat + '>' + c.me);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update.' }); }
+});
+
+// ============================================================
 // MIDDLEWARE GUARDS
 // ============================================================
 function requireUser(req, res, next) {
