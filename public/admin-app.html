@@ -427,6 +427,9 @@ img,svg,video{max-width:100%}
 @media (prefers-reduced-motion:reduce){#callui .cav,#callui .cb .c-green i{animation:none}}
 .pinh{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--muted);padding:12px 20px 6px}
 .pinic{color:var(--muted);display:inline-flex}.newb{background:var(--blue);color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:999px;display:inline-grid;place-items:center;padding:0 6px}
+.chab{background:linear-gradient(135deg,#D97706,#B45309)!important}
+.chr{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}.chr:first-child{border-top:0}
+.chr .rk{width:34px;height:34px;flex:none;border-radius:50%;display:grid;place-items:center;font-weight:700;background:#EEF2F8;color:var(--muted)}.chr .r1{background:#FEF3C7;color:#B45309}.chr .r2{background:#E5E7EB;color:#374151}.chr .r3{background:#FFEDD5;color:#C2410C}
 .tfab{background:linear-gradient(135deg,#0D4DC7,#111827)!important}
 .tfk{font-family:var(--mono);font-size:15px;letter-spacing:.06em;word-break:break-all;background:#F4F7FC;border:1px dashed #C9D9FA;border-radius:12px;padding:12px;margin:8px 0}
 .tfs{display:flex;gap:12px;margin-top:16px}.tfs>i{flex:none;width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font-style:normal;font-weight:700;font-size:13px;display:grid;place-items:center}
@@ -448,6 +451,7 @@ const P={
  gift:'<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5" rx="1"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>',
  belloff:'<path d="M13.73 21a2 2 0 0 1-3.46 0M18.63 13A17.89 17.89 0 0 1 18 8M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14M18 8a6 6 0 0 0-9.33-5M1 1l22 22"/>',
  mobile:'<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
+ trophy:'<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
  home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
  repeat:'<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
  bars:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
@@ -595,6 +599,15 @@ const acctForm=(edit)=>{const f=S.form,img=safeImg(f.imageData),fl=(id,l,v,ph,im
 const V={
 loading:()=>`<section class="screen blue"><div class="grow"></div><div class="logo-dot">${I('swap')}</div><div class="wordmark" style="margin-top:22px">AZAPLUG</div><div class="grow"></div></section>`,
 
+chal:()=>{const c=S.chal,fmt=t=>new Date(t).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
+ return `<section class="scr">${hd('December Challenge','Top 3 traders win prizes','dash','')}
+ <div class="bd">${!c?'<p class="empty">Loading…</p>':`
+  <div class="card" style="padding:16px"><div class="between"><b>${esc(c.title)}</b><span class="badge ${c.ended?'b-approved':'b-checking'}">${c.ended?'ENDED':c.now<c.start?'NOT STARTED':'LIVE'}</span></div>
+   <p class="muted" style="font-size:13px;margin-top:6px">Receipts sent ${fmt(c.start)} to ${fmt(c.end)} count. Prizes: 1st ₦${n0(c.prizes[0])}, 2nd ₦${n0(c.prizes[1])}, 3rd ₦${n0(c.prizes[2])}. Customers only see the first 3 letters of names.</p></div>
+  <div class="card" style="padding:4px 16px;margin-top:14px">${c.board.length?c.board.map(r=>`<div class="chr"><span class="rk r${r.rank}">${r.rank}</span><span class="grow" style="min-width:0"><b style="display:block">${esc(r.name)}</b><small class="muted">${esc(r.phone)} · ${r.trades} trade${r.trades===1?'':'s'} · ${naira(r.total)}</small>
+   ${r.rank<=3?(r.paidAt?`<span class="tagx g" style="margin-top:6px;display:inline-block">Prize paid · ₦${n0(r.prize)}</span>`:c.ended?`<button class="b green" style="height:40px;margin-top:8px;font-size:13.5px" data-act="chalPay" data-rank="${r.rank}" data-uid="${esc(r.userId)}">Add ₦${n0(r.prize)} to their balance</button>`:`<small style="display:block;color:#B45309;font-weight:600;margin-top:4px">Prize ₦${n0(r.prize)} if they stay here</small>`):''}</span></div>`).join(''):'<p class="empty">No approved trades in the challenge yet</p>'}</div>`}
+ </div></section>`},
+
 tfa:()=>{const t=S.tfa,k=t&&t.secret?t.secret.replace(/(.{4})/g,'$1 ').trim():'';
  return `<section class="scr">${hd('Two-Step Login','Google Authenticator for admin sign-in','dash','')}
  <div class="bd">${!t?'<p class="empty">Loading…</p>':t.on?`
@@ -651,6 +664,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
   <h2 class="sh">Quick Actions</h2>
   <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
   <button class="gab" data-go="giveaway"><span class="gai">${I('gift','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Giveaways</b><small>Reward the first customers to say hi</small></span>${I('cr','style="width:18px;height:18px"')}</button>
+  <button class="gab chab" data-go="chal"><span class="gai">${I('trophy','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>December Challenge</b><small>Top 3 traders: real names and prizes</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <button class="gab tfab" data-go="tfa"><span class="gai">${I('shielda','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Two-Step Login</b><small>Google Authenticator code for admin sign-in</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <div class="between" style="margin:22px 0 10px"><h2 class="sh" style="margin:0">Recent Activity Feed</h2><button class="link" style="font-size:14px" data-go="receipts">View All</button></div>
   ${feed.length?feed.map(f=>`<button class="feed" data-go="${f.go}" data-id="${esc(f.id)}"><i></i><span class="grow" style="min-width:0"><b>${f.t}</b><small>${f.s} • ${ago(f.at)}</small></span><em>${f.r}</em></button>`).join(''):'<p class="empty">No activity yet</p>'}
@@ -1079,6 +1093,7 @@ function go(r,o,pop){
       if(S.route!=='staffChat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(e=>{if(S.route==='staffChat'&&!S.staffPerson){toast(e.message);go('chats')}});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
   if(r==='chat'){S.chat=[];const cv=(S.convos||[]).find(c=>c.userId===S.id);if(cv)cv.unread=false;const pull=()=>api('GET','/api/admin/chats/'+encodeURIComponent(S.id)).then(d=>{const n=sig(d.messages)!==sig(S.chat);S.chat=d.messages||[];
       if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
+  if(r==='chal'){S.chal=null;api('GET','/api/admin/challenge').then(d=>{S.chal=d;if(S.route==='chal')render()}).catch(e=>toast(e.message))}
   if(r==='tfa'){if(!S.tfa||!S.tfa.done)api('GET','/api/admin/2fa').then(d=>{S.tfa=d;if(S.route==='tfa')render()}).catch(e=>toast(e.message))}
   if(r==='giveaway'){loadGas();clearInterval(S.gaT);S.gaT=setInterval(()=>S.route==='giveaway'?loadGas():clearInterval(S.gaT),10000)}
   if(['dash','staff','receipts','wds','users','chats','accountsAll','rates','console','loans'].includes(r))refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{});
@@ -1091,6 +1106,9 @@ const ACT={
   show(el){const i=$('#lg-pw'),sh=i.type==='password';i.type=sh?'text':'password';el.textContent=sh?'HIDE':'SHOW'},
   async logout(){if(!await ask('Log out of admin?','To sign in again you will need your admin password and the code from Google Authenticator.','Log out',1))return;try{await pushDetach()}catch(e){}try{await api('POST','/api/admin/logout')}catch(e){}go(lsGet(BIO.key)?'lock':'login')},
   async staffRole(el,id){if(el.classList.contains('blue'))return;await api('PUT','/api/admin/staff/'+encodeURIComponent(id)+'/role',{role:el.dataset.role});toast('Department changed');await reload()},
+  async chalPay(el){const r=(S.chal.board||[]).find(x=>String(x.rank)===el.dataset.rank);if(!r)return;
+    if(!await ask(`Pay the ${['1st','2nd','3rd'][r.rank-1]} prize?`,`₦${n0(r.prize)} will be added to ${r.name}'s AZAPLUG balance (${r.phone}). This can only be done once.`,'Pay prize'))return;
+    const d=await api('POST','/api/admin/challenge/pay',{rank:r.rank,userId:r.userId});toast(`Paid ₦${n0(d.paid)} to ${d.name}`);S.chal=await api('GET','/api/admin/challenge');render()},
   async gaCredit(el,id){const g=S.gas.find(x=>x.id===id),only=el.dataset.entry,n=only?1:g.entries.filter(e=>e.won&&!e.credited).length;
     if(!await ask(only?'Pay this winner?':`Pay ${n} winners?`,`${naira(n*g.amount)} will be added to ${only?'their balance':'their balances'} now. Each winner gets a notification.`,'Pay '+naira(n*g.amount)))return;
     const d=await api('POST','/api/admin/giveaways/'+encodeURIComponent(id)+'/credit',only?{entryId:only}:{});toast(`Paid ${d.paid} winner${d.paid===1?'':'s'}`);await loadGas()},

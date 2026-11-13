@@ -1846,31 +1846,69 @@ app.post('/api/team/push/unsubscribe', requireTeam, async (req, res) => {
 // A customer can only borrow after this much naira has been credited to them from receipts.
 // ---- Top Traders (trust board): first 3 letters of the name + total traded through approved trades.
 let TOP = { at: 0, data: null };
+// ---- December Challenge: the top 3 traders win prizes. Receipts SENT between start and end (Lagos time) count,
+// even if they are approved later. The banner shows in the app until showUntil.
+const CHALLENGE = { id: 'dec2026', title: 'December Top Traders', start: Date.parse('2026-12-01T00:00:00+01:00'), end: Date.parse('2026-12-23T16:00:00+01:00'),
+  showUntil: Date.parse('2027-01-05T00:00:00+01:00'), prizes: [20000, 15000, 10000] };
+const inChallenge = t => { const c = Date.parse(t.createdAt); return c >= CHALLENGE.start && c < CHALLENGE.end; };
+const chalPaidKey = rank => 'chal:' + CHALLENGE.id + ':' + rank;
 const maskName = n => { const w = String(n || '').replace(/[^\p{L}\p{N}]/gu, ''); return (w.slice(0, 3) || 'Cus').replace(/^./, c => c.toUpperCase()) + '***'; };
 const lagosMonth = d => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit' }).format(new Date(d));
-async function topTraders() {
-  if (TOP.data && Date.now() - TOP.at < 300000) return TOP.data; // worked out at most every 5 minutes
+async function topTraders(fresh) {
+  if (!fresh && TOP.data && Date.now() - TOP.at < 300000) return TOP.data; // worked out at most every 5 minutes
   const [trades, users] = await Promise.all([store.listApprovedTradeTotals(), store.listUsers()]);
   const ok = new Map(users.filter(u => u.status === 'approved').map(u => [u.id, u]));
-  const month = lagosMonth(Date.now()), all = new Map(), mon = new Map();
+  const month = lagosMonth(Date.now()), all = new Map(), mon = new Map(), chal = new Map();
   const add = (m, t) => { const v = m.get(t.userId) || { total: 0, n: 0 }; v.total += t.creditedAmount; v.n++; m.set(t.userId, v); };
   let total = 0, count = 0;
   for (const t of trades) {
     if (!ok.has(t.userId) || !(t.creditedAmount > 0)) continue;
     total += t.creditedAmount; count++; add(all, t);
     if (lagosMonth(t.createdAt) === month) add(mon, t);
+    if (inChallenge(t)) add(chal, t);
   }
   const rank = m => [...m.entries()].map(([id, v]) => ({ id, name: maskName(ok.get(id).name), total: Math.round(v.total), trades: v.n }))
     .sort((a, b) => b.total - a.total).slice(0, 10);
-  TOP = { at: Date.now(), data: { month: rank(mon), all: rank(all), totalTraded: Math.round(total), trades: count, customers: all.size } };
+  const chalFull = [...chal.entries()].map(([id, v]) => ({ id, name: ok.get(id).name, phone: ok.get(id).phone, total: Math.round(v.total), trades: v.n }))
+    .sort((a, b) => b.total - a.total || a.trades - b.trades).slice(0, 10);
+  TOP = { at: Date.now(), data: { month: rank(mon), all: rank(all), chal: chalFull.map(r => ({ ...r, name: maskName(r.name), phone: undefined })), chalFull, totalTraded: Math.round(total), trades: count, customers: all.size } };
   return TOP.data;
 }
 app.get('/api/top-traders', requireUser, async (req, res) => {
   try {
     const d = await topTraders(), me = req.session.userId;
     const out = list => list.map((r, i) => ({ rank: i + 1, name: r.name, total: r.total, trades: r.trades, me: r.id === me }));
-    res.json({ month: out(d.month), all: out(d.all), totalTraded: d.totalTraded, trades: d.trades, customers: d.customers });
+    const now = Date.now(), c = CHALLENGE;
+    res.json({ month: out(d.month), all: out(d.all), totalTraded: d.totalTraded, trades: d.trades, customers: d.customers,
+      challenge: now < c.showUntil ? { title: c.title, start: c.start, end: c.end, prizes: c.prizes, now, board: now >= c.start ? out(d.chal) : [] } : null });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load top traders.' }); }
+});
+
+// Admin: the real names and numbers of the challenge leaders, and paying the top 3 prizes into their balance.
+app.get('/api/admin/challenge', requireAdmin, async (req, res) => {
+  try {
+    const d = await topTraders(true), c = CHALLENGE, now = Date.now();
+    res.json({ title: c.title, start: c.start, end: c.end, prizes: c.prizes, now, ended: now >= c.end,
+      board: d.chalFull.map((r, i) => ({ rank: i + 1, userId: r.id, name: r.name, phone: r.phone, total: r.total, trades: r.trades, prize: c.prizes[i] || 0, paidAt: i < 3 ? csGet(chalPaidKey(i + 1)) || null : null })) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load the challenge.' }); }
+});
+app.post('/api/admin/challenge/pay', requireAdmin, ADMIN_MONEY, async (req, res) => {
+  try {
+    const rank = Number((req.body || {}).rank), c = CHALLENGE;
+    if (Date.now() < c.end) return res.status(400).json({ error: 'The challenge has not ended yet.' });
+    if (![1, 2, 3].includes(rank)) return res.status(400).json({ error: 'Only the top 3 get a prize.' });
+    if (csGet(chalPaidKey(rank))) return res.status(400).json({ error: 'This prize has already been paid.' });
+    const winner = (await topTraders(true)).chalFull[rank - 1];
+    if (!winner) return res.status(400).json({ error: 'Nobody is in that position.' });
+    if (req.body.userId && req.body.userId !== winner.id) return res.status(409).json({ error: 'The board changed. Open the page again.' });
+    // Mark it paid (and saved) first, so it can never be paid twice.
+    csSet(chalPaidKey(rank), Date.now(), 0); await csFlush();
+    if (CS_SAVED.get(chalPaidKey(rank)) !== CS.get(chalPaidKey(rank))) { CS.delete(chalPaidKey(rank)); return res.status(500).json({ error: 'Run the chat_state SQL from the README in Supabase first.' }); }
+    const prize = c.prizes[rank - 1];
+    await store.addToBalance(winner.id, prize);
+    notify(winner.id, 'tx', `You won ${['1st', '2nd', '3rd'][rank - 1]} place!`, `Congratulations! ₦${plain(prize)} from the ${c.title} has been added to your balance.`);
+    res.json({ ok: true, paid: prize, name: winner.name });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not pay the prize.' }); }
 });
 
 const LOAN_MIN_TRADED = 70000;
