@@ -106,6 +106,8 @@ async function csFlush() {
 }
 csLoad();
 setInterval(() => csFlush().catch(() => {}), 10000);
+// Render stops the old server with SIGTERM when it deploys: save chat status first so nothing is lost.
+for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => { Promise.race([csFlush().catch(() => {}), new Promise(r => setTimeout(r, 4000))]).then(() => process.exit(0)); });
 // Who is calling the API right now (the same browser can be signed in as customer, staff and admin).
 function whoIs(req) {
   const s = req.session || {}, p = req.path, as = String((req.query && req.query.as) || (req.body && req.body.as) || '');
@@ -1114,15 +1116,23 @@ app.get('/api/staff/settlement-account', requireStaff, requireApprovedStaff, asy
 // Any approved staff member can read and answer customer chats.
 // Replies are stored with sender 'admin' so the customer app shows them as agent messages.
 // ============================================================
+// A customer chat is "new" until the admin or any chat manager opens it (seen up to its last message).
+const supportReadKey = userId => 'r:c:' + userId + '>support';
+const withSeen = list => list.map(c => ({ ...c, unread: c.lastSender === 'user' && Date.parse(c.lastAt) > csGet(supportReadKey(c.userId)) }));
+function supportSaw(userId, messages) {
+  const last = (messages || []).reduce((t, m) => Math.max(t, Date.parse(m.createdAt) || 0), 0);
+  if (last) csSet(supportReadKey(userId), Math.min(last, Date.now()), 0);
+}
 app.get('/api/staff/chats', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
-  try { res.json({ conversations: await store.listConversations() }); }
+  try { res.json({ conversations: withSeen(await store.listConversations()) }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load conversations.' }); }
 });
 app.get('/api/staff/chats/:userId', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try {
     const user = await store.findUserById(req.params.userId);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
-    res.json({ user: { id: user.id, name: user.name, phone: user.phone }, messages: await store.messagesForUser(req.params.userId), routed: await routedFor(req.params.userId) });
+    const messages = await store.messagesForUser(req.params.userId); supportSaw(req.params.userId, messages);
+    res.json({ user: { id: user.id, name: user.name, phone: user.phone }, messages, routed: await routedFor(req.params.userId) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load conversation.' }); }
 });
 // Which chat photos were already turned into receipts: { messageId: { title, status, amount } }
@@ -1662,13 +1672,14 @@ app.post('/api/admin/escalations/:id/resolve', requireAdmin, async (req, res) =>
 // ADMIN: chat inbox
 // ============================================================
 app.get('/api/admin/chats', requireAdmin, async (req, res) => {
-  try { res.json({ conversations: await store.listConversations() }); }
+  try { res.json({ conversations: withSeen(await store.listConversations()) }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load conversations.' }); }
 });
 app.get('/api/admin/chats/:userId', requireAdmin, async (req, res) => {
   try {
     const user = await store.findUserById(req.params.userId);
-    res.json({ user, messages: await store.messagesForUser(req.params.userId) });
+    const messages = await store.messagesForUser(req.params.userId); supportSaw(req.params.userId, messages);
+    res.json({ user, messages });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load conversation.' }); }
 });
 app.post('/api/admin/chats/:userId/send', requireAdmin, async (req, res) => {
