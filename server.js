@@ -33,6 +33,7 @@ app.use(express.json({ limit: '10mb' })); // receipts + settlement screenshots t
 // Sessions are kept in the database (table "sessions"), so a restart or the server going to sleep does not
 // sign anyone out. If the table is not there yet, they are kept in memory like before.
 const SESSION_DAYS = 60, ADMIN_DAYS = 400;
+const ADMIN_VER = crypto.createHash('sha256').update('azaplug-admin:' + ADMIN_PASSWORD).digest('hex').slice(0, 16);
 class SavedSessions extends session.Store {
   constructor() { super(); this.mem = new Map(); this.saved = new Map(); }
   get(sid, cb) {
@@ -60,6 +61,16 @@ app.use(session({
   rolling: true,
   cookie: { maxAge: 864e5 * SESSION_DAYS, sameSite: 'lax', httpOnly: true, secure: 'auto' }
 }));
+
+// Admin sign-ins belong to the current ADMIN_PASSWORD: change it on Render and every other admin sign-in ends.
+app.use((req, res, next) => {
+  const s = req.session;
+  if (s && s.isAdmin) {
+    if (s.adminVer === undefined) s.adminVer = ADMIN_VER;            // signed in before this rule: keep them in
+    else if (s.adminVer !== ADMIN_VER) { s.isAdmin = false; s.adminVer = undefined; }
+  }
+  next();
+});
 
 // ============================================================
 // CHAT STATUS: online / last seen, typing, and seen ticks.
@@ -141,7 +152,10 @@ async function peerChat(req) {
   let meStaff = null;
   if (as === 'staff') { meStaff = s.staffId ? await staffCached(s.staffId) : null; if (!meStaff || meStaff.status !== 'approved') return null; }
   if (as !== 'admin' && as !== 'staff') return null;
-  if (kind === 'customer' && id) return { chat: 'c:' + id, me: 'support', peer: 'user', peerIds: ['u:' + id] };
+  if (kind === 'customer' && id) {
+    if (meStaff && meStaff.role && meStaff.role !== 'chat' && (await roleReady())) return null; // vendors never see customers
+    return { chat: 'c:' + id, me: 'support', peer: 'user', peerIds: ['u:' + id] };
+  }
   if (kind !== 'team' || !id) return null;
   if (as === 'admin') { const o = await staffCached(id); return o && o.status === 'approved' ? { chat: teamChatKey('admin', id), me: 'admin', peer: id, peerIds: ['s:' + id] } : null; }
   if (id === 'admin') return { chat: teamChatKey(meStaff.id, 'admin'), me: meStaff.id, peer: 'admin', peerIds: ['admin'] };
@@ -191,6 +205,27 @@ const moneyLock = keyFn => (req, res, next) => {
   }));
 };
 const ADMIN_MONEY = moneyLock(() => 'admin-money');
+
+// Notifications may only be sent to the real phone/browser push services.
+const PUSH_HOSTS = /(^|\.)(fcm\.googleapis\.com|android\.googleapis\.com|push\.services\.mozilla\.com|push\.apple\.com|notify\.windows\.com)$/i;
+function pushOk(url) { try { const u = new URL(String(url || '')); return u.protocol === 'https:' && PUSH_HOSTS.test(u.hostname); } catch (e) { return false; } }
+
+// Customer chats are for chat managers only (vendors never see customers). Staff without a department yet keep access.
+async function requireChatRole(req, res, next) {
+  if ((await roleReady()) && req.staff && req.staff.role && req.staff.role !== 'chat') return res.status(403).json({ error: 'Only chat managers can open customer chats.' });
+  next();
+}
+
+// Sign-up checks: sensible lengths, a real-looking phone number, and at most 5 new accounts per device each hour.
+const PHONE_OK = p => /^\+?\d{10,15}$/.test(String(p || '').replace(/[\s-]/g, ''));
+function signupProblem(req, b) {
+  if (ipBlocked('signup', req)) return 'Too many new accounts from this device. Try again later.';
+  if (!PHONE_OK(b.phone)) return 'Enter a valid phone number.';
+  if (String(b.name || '').trim().length > 60) return 'Name is too long.';
+  if (b.bankName !== undefined && String(b.bankName).trim().length > 60) return 'Bank name is too long.';
+  if (b.accountNumber !== undefined && String(b.accountNumber).trim().length > 30) return 'Account number is too long.';
+  return null;
+}
 
 // ============================================================
 // LOGIN GUARDS: limits per device/network, so nobody can keep guessing.
@@ -280,6 +315,7 @@ app.post('/api/register', async (req, res) => {
       return res.status(400).json({ error: 'All fields are required.' });
     }
     if (badPin(password)) return res.status(400).json({ error: badPin(password) });
+    const sp = signupProblem(req, req.body); if (sp) return res.status(400).json({ error: sp });
     if (await store.findUserByPhone(String(phone).trim())) {
       return res.status(409).json({ error: 'An account with this phone number already exists.' });
     }
@@ -290,6 +326,7 @@ app.post('/api/register', async (req, res) => {
       accountNumber: String(accountNumber).trim(), bankName: String(bankName).trim(),
       passwordHash: bcrypt.hashSync(password, 10), email: email.value
     });
+    ipFail('signup', req, 5, 60);
     req.session.userId = user.id;
     res.json({ ok: true, status: user.status });
   } catch (err) {
@@ -342,9 +379,16 @@ app.put('/api/me', requireUser, async (req, res) => {
   try {
     const { name, bankName, accountNumber } = req.body || {};
     if (!name || !bankName || !accountNumber) return res.status(400).json({ error: 'Name, bank name and account number are required.' });
+    if (String(name).trim().length > 60 || String(bankName).trim().length > 60 || String(accountNumber).trim().length > 30) return res.status(400).json({ error: 'One of the details is too long.' });
+    const before = await store.findUserById(req.session.userId);
     await store.updateUser(req.session.userId, {
       name: String(name).trim(), bankName: String(bankName).trim(), accountNumber: String(accountNumber).trim()
     });
+    // A changed payout account is the first thing someone does with a stolen account: warn the owner and the admin.
+    if (before && (before.accountNumber !== String(accountNumber).trim() || before.bankName !== String(bankName).trim())) {
+      csSet('bank:' + before.id, Date.now(), 0);
+      notify(before.id, 'tx', 'Payout account changed', `Your withdrawal account is now ${String(bankName).trim()} ${String(accountNumber).trim()}. If you did not do this, contact AZAPLUG support right away.`, { go: 'chat' });
+    }
     res.json({ ok: true });
   } catch (err) {
     console.error('Update me error:', err);
@@ -360,6 +404,8 @@ app.post('/api/staff/register', async (req, res) => {
     const { name, phone, password } = req.body || {};
     if (!name || !phone || !password) return res.status(400).json({ error: 'All fields are required.' });
     if (badPin(password)) return res.status(400).json({ error: badPin(password) });
+    const sp = signupProblem(req, req.body); if (sp) return res.status(400).json({ error: sp });
+    ipFail('signup', req, 5, 60);
     if (await store.findStaffByPhone(String(phone).trim())) {
       return res.status(409).json({ error: 'A staff account with this phone number already exists.' });
     }
@@ -450,7 +496,7 @@ app.post('/api/admin/login', (req, res) => {
     totpUsed = st; // each code works only once
   }
   const wasAdmin = !!req.session.isAdmin;
-  req.session.isAdmin = true;
+  req.session.isAdmin = true; req.session.adminVer = ADMIN_VER;
   // The admin stays signed in on this device: 400 days (the longest a browser keeps a sign-in), renewed every time
   // the app is used, so the password and Google Authenticator code are only needed on a new device or after "Log out".
   req.session.cookie.maxAge = ADMIN_DAYS * 864e5;
@@ -470,7 +516,7 @@ app.post('/api/admin/2fa/check', requireAdmin, (req, res) => {
   if (!totpCheck(secret, (req.body || {}).code, 0)) return res.status(400).json({ error: 'That code is not right. Make sure the time on your phone is set automatically, then type the newest code.' });
   res.json({ ok: true, on: !!ADMIN_TOTP, secret: ADMIN_TOTP ? undefined : secret });
 });
-app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; res.json({ ok: true }); });
+app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; req.session.adminVer = undefined; res.json({ ok: true }); });
 
 // ============================================================
 // LOGIN EXTRAS: 6-digit PIN, email codes, forgot PIN, fingerprint
@@ -535,9 +581,13 @@ const maskEmail = e => e.replace(/^(.{2})[^@]*(@.*)$/, '$1•••$2');
 // --- One-time codes (kept in memory for 10 minutes)
 const codes = new Map();
 const hashCode = c => crypto.createHash('sha256').update(String(c)).digest('hex');
+const CODE_SENDS = new Map(); // key -> { n, first }
 async function issueCode(key, email, extra) {
   const old = codes.get(key);
   if (old && old.email === email && Date.now() - old.sentAt < 45000) return false;   // one was just sent: keep using it
+  let c = CODE_SENDS.get(key); if (!c || Date.now() - c.first > 3600000) c = { n: 0, first: Date.now() };
+  if (c.n >= 5) { const e = new Error('Too many codes asked for. Try again in an hour.'); e.status = 429; throw e; }
+  c.n += 1; CODE_SENDS.set(key, c);
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
   codes.set(key, { hash: hashCode(code), exp: Date.now() + 10 * 60000, n: 0, sentAt: Date.now(), email, ...(extra || {}) });
   try {
@@ -576,6 +626,8 @@ async function signupEmail(kind, b) {
 // Step 1 of sign-up: email a code.
 app.post('/api/auth/signup-code', async (req, res) => {
   try {
+    if (ipBlocked('mail', req)) return res.status(429).json({ error: 'Too many codes asked for from this device. Try again later.' });
+    ipFail('mail', req, 15, 60);
     const b0 = req.body || {}, kind = kindOf(b0), email = String(b0.email || '').trim().toLowerCase(), phone = String(b0.phone || '').trim();
     if (!(await pinReady()) || !VERIFY_ON) return res.json({ ok: true, skip: true });   // no code step: the sign-up itself checks everything
     if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
@@ -591,6 +643,8 @@ app.post('/api/auth/signup-code', async (req, res) => {
 const sessionId = (req, kind) => (kind === 'staff' ? req.session.staffId : req.session.userId);
 app.post('/api/auth/setup-code', async (req, res) => {
   try {
+    if (ipBlocked('mail', req)) return res.status(429).json({ error: 'Too many codes asked for from this device. Try again later.' });
+    ipFail('mail', req, 15, 60);
     const kind = kindOf(req.body), id = sessionId(req, kind), email = String((req.body || {}).email || '').trim().toLowerCase();
     if (!id) return res.status(401).json({ error: 'Please log in first.' });
     if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
@@ -618,6 +672,8 @@ app.post('/api/auth/setup', async (req, res) => {
 // Forgot PIN: a code goes to the email on the account, then a new PIN is chosen.
 app.post('/api/auth/forgot', async (req, res) => {
   try {
+    if (ipBlocked('mail', req)) return res.status(429).json({ error: 'Too many codes asked for from this device. Try again later.' });
+    ipFail('mail', req, 15, 60);
     const kind = kindOf(req.body), phone = String((req.body || {}).phone || '').trim();
     const acct = phone ? await findByPhone(kind, phone) : null;
     if (!acct) return res.status(404).json({ error: 'No account uses that phone number.' });
@@ -647,7 +703,8 @@ const webauthn = require('@simplewebauthn/server');
 const b64u = buf => Buffer.from(buf).toString('base64url');
 const rpOf = req => { const host = req.get('host') || 'localhost'; return { rpID: host.replace(/:\d+$/, ''), origins: ['https://' + host, 'http://' + host] }; };
 const passKind = b => (['user', 'staff', 'admin'].includes((b || {}).kind) ? b.kind : 'user');
-const passOwner = (req, kind) => (kind === 'admin' ? (req.session.isAdmin ? 'admin' : null) : kind === 'staff' ? req.session.staffId : req.session.userId) || null;
+const ADMIN_PK = 'admin:' + ADMIN_VER; // admin fingerprints stop working when ADMIN_PASSWORD changes
+const passOwner = (req, kind) => (kind === 'admin' ? (req.session.isAdmin ? ADMIN_PK : null) : kind === 'staff' ? req.session.staffId : req.session.userId) || null;
 app.post('/api/passkey/register/options', async (req, res) => {
   try {
     const kind = passKind(req.body), owner = passOwner(req, kind);
@@ -677,7 +734,7 @@ app.post('/api/passkey/register/verify', async (req, res) => {
 app.post('/api/passkey/login/options', async (req, res) => {
   try {
     const pk = await store.findPasskey(String((req.body || {}).id || ''));
-    if (!pk || pk.kind !== passKind(req.body)) return res.status(404).json({ error: 'Fingerprint login is no longer set up on this phone.', gone: true });
+    if (!pk || pk.kind !== passKind(req.body) || (pk.kind === 'admin' && pk.ownerId !== ADMIN_PK)) return res.status(404).json({ error: 'Fingerprint login is no longer set up on this phone.', gone: true });
     const options = await webauthn.generateAuthenticationOptions({ rpID: rpOf(req).rpID, allowCredentials: [{ id: pk.id }], userVerification: 'required' });
     req.session.wa = { c: options.challenge, kind: pk.kind };
     res.json(options);
@@ -687,7 +744,7 @@ app.post('/api/passkey/login/verify', async (req, res) => {
   try {
     const wa = req.session.wa; req.session.wa = null;
     const pk = await store.findPasskey(String(((req.body || {}).response || {}).id || ''));
-    if (!wa || !pk || pk.kind !== wa.kind) return res.status(400).json({ error: 'Start again.' });
+    if (!wa || !pk || pk.kind !== wa.kind || (pk.kind === 'admin' && pk.ownerId !== ADMIN_PK)) return res.status(400).json({ error: 'Start again.' });
     const rp = rpOf(req);
     const v = await webauthn.verifyAuthenticationResponse({
       response: req.body.response, expectedChallenge: wa.c, expectedOrigin: rp.origins, expectedRPID: rp.rpID, requireUserVerification: true,
@@ -695,7 +752,7 @@ app.post('/api/passkey/login/verify', async (req, res) => {
     });
     if (!v.verified) return res.status(401).json({ error: 'Your phone did not confirm it. Use your PIN.' });
     store.updatePasskeyCounter(pk.id, v.authenticationInfo.newCounter).catch(() => {});
-    if (pk.kind === 'admin') { req.session.isAdmin = true; return res.json({ ok: true }); }
+    if (pk.kind === 'admin') { req.session.isAdmin = true; req.session.adminVer = ADMIN_VER; req.session.cookie.maxAge = ADMIN_DAYS * 864e5; return res.json({ ok: true }); }
     const acct = pk.kind === 'staff' ? await store.findStaffById(pk.ownerId) : await store.findUserById(pk.ownerId);
     if (!acct) { store.deletePasskey(pk.id).catch(() => {}); return res.status(404).json({ error: 'That account no longer exists.', gone: true }); }
     if (pk.kind === 'staff') req.session.staffId = acct.id; else req.session.userId = acct.id;
@@ -774,6 +831,8 @@ app.post('/api/trades', requireUser, requireApprovedUser, async (req, res) => {
     if (!accountId || !intendedAmount || !receiptImage) {
       return res.status(400).json({ error: 'Account, amount and receipt are all required.' });
     }
+    if (!(Number(intendedAmount) > 0) || !isFinite(Number(intendedAmount))) return res.status(400).json({ error: 'Enter the amount you sent.' });
+    if (badAttachment(receiptImage) || !/^data:image\//i.test(receiptImage)) return res.status(400).json({ error: 'Add a photo of your receipt (JPG or PNG).' });
     const settings = await store.getSettings();
     if (Number(intendedAmount) > settings.maxDeposit) {
       return res.status(400).json({ error: 'This amount is above what we can process directly through the site — please chat with us instead.' });
@@ -803,7 +862,7 @@ app.post('/api/crypto/trades', requireUser, requireApprovedUser, async (req, res
     const usd = Number(usdAmount);
     if (!COINS[coin]) return res.status(400).json({ error: 'Choose Bitcoin or USDT.' });
     if (!Number.isFinite(usd) || usd <= 0) return res.status(400).json({ error: 'Enter the amount you sent in dollars.' });
-    if (typeof receiptImage !== 'string' || !/^data:image\//i.test(receiptImage)) return res.status(400).json({ error: 'Add a screenshot of your transfer.' });
+    if (typeof receiptImage !== 'string' || !/^data:image\//i.test(receiptImage) || badAttachment(receiptImage)) return res.status(400).json({ error: 'Add a screenshot of your transfer (JPG or PNG).' });
     const trade = await store.createTrade({
       userId: req.user.id, accountId: null, staffId: null, intendedAmount: usd, receiptImage,
       accountNumberUsed: String(address || '').slice(0, 120), accountTitleUsed: COINS[coin],
@@ -939,6 +998,7 @@ app.post('/api/staff/accounts', requireStaff, requireApprovedStaff, async (req, 
   try {
     const b = req.body || {};
     if (!b.title || !b.accountNumber || !b.bankName) return res.status(400).json({ error: 'Title, account number and bank are required.' });
+    if (b.imageData && badAttachment(b.imageData)) return res.status(400).json({ error: badAttachment(b.imageData) });
     // The whole rate tier (amounts + rates) is admin-only — new accounts start at 0 until an admin sets it.
     // New accounts also start unverified (inactive) — an admin must verify before customers can see them.
     const account = await store.createAccount({
@@ -962,8 +1022,13 @@ app.put('/api/staff/accounts/:id', requireStaff, requireApprovedStaff, async (re
     delete b.lowestAmount; delete b.lowestRate; delete b.higherAmount; delete b.higherRate;
     // Verification and ownership are admin-only too — staff cannot verify their own account or reassign it.
     delete b.active; delete b.staffId;
+    if (b.imageData && badAttachment(b.imageData)) return res.status(400).json({ error: badAttachment(b.imageData) });
+    // Changing where customers send money takes the account off until the admin checks it again.
+    const changed = ['accountNumber', 'bankName', 'title'].some(k => b[k] !== undefined && String(b[k]).trim() !== String(account[k] || '').trim());
+    if (changed && account.active) b.active = false;
     await store.updateAccount(req.params.id, b);
-    res.json({ ok: true });
+    if (changed && account.active) alertTeam({ admin: true }, 'Account needs verifying again', `${req.staff.name} changed the details of ${account.title} (${account.bankName}). It is hidden from customers until you verify it.`, { admin: 'accounts' });
+    res.json({ ok: true, needsVerify: changed && account.active });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update account.' }); }
 });
 
@@ -1031,6 +1096,7 @@ app.post('/api/staff/trades/:id/settlement', requireStaff, requireApprovedStaff,
     if (!trade || trade.staffId !== req.staff.id) return res.status(403).json({ error: 'Not your trade.' });
     const { screenshot } = req.body || {};
     if (!screenshot) return res.status(400).json({ error: 'Attach a screenshot of your payment.' });
+    if (badAttachment(screenshot)) return res.status(400).json({ error: badAttachment(screenshot) });
     await store.setSettlement(trade.id, screenshot);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not save settlement proof.' }); }
@@ -1048,11 +1114,11 @@ app.get('/api/staff/settlement-account', requireStaff, requireApprovedStaff, asy
 // Any approved staff member can read and answer customer chats.
 // Replies are stored with sender 'admin' so the customer app shows them as agent messages.
 // ============================================================
-app.get('/api/staff/chats', requireStaff, requireApprovedStaff, async (req, res) => {
+app.get('/api/staff/chats', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try { res.json({ conversations: await store.listConversations() }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load conversations.' }); }
 });
-app.get('/api/staff/chats/:userId', requireStaff, requireApprovedStaff, async (req, res) => {
+app.get('/api/staff/chats/:userId', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try {
     const user = await store.findUserById(req.params.userId);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
@@ -1066,14 +1132,14 @@ async function routedFor(userId) {
   return out;
 }
 // Accounts a chat manager can send a chat receipt to.
-app.get('/api/staff/route-accounts', requireStaff, requireApprovedStaff, async (req, res) => {
+app.get('/api/staff/route-accounts', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try {
     const [accounts, staffList] = await Promise.all([store.listAllAccounts(), store.listStaff()]);
     res.json({ accounts: accounts.filter(a => a.active).map(a => ({ id: a.id, title: a.title, bankName: a.bankName, accountNumber: a.accountNumber, staffName: (staffList.find(s => s.id === a.staffId) || {}).name || 'Admin' })) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load accounts.' }); }
 });
 // Chat manager turns a receipt photo from the chat into a receipt on the account the customer paid into.
-app.post('/api/staff/chats/:userId/route', requireStaff, requireApprovedStaff, async (req, res) => {
+app.post('/api/staff/chats/:userId/route', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try {
     const { messageId, accountId, amount } = req.body || {}, n = Number(amount);
     const [user, msg, account] = await Promise.all([store.findUserById(req.params.userId), store.findMessageById(messageId), store.findAccountById(accountId)]);
@@ -1104,9 +1170,9 @@ async function teamDeleteMessage(req, res) {
     await store.deleteMessage(m.id); res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the message.' }); }
 }
-app.delete('/api/staff/chats/:userId/messages/:id', requireStaff, requireApprovedStaff, teamDeleteMessage);
+app.delete('/api/staff/chats/:userId/messages/:id', requireStaff, requireApprovedStaff, requireChatRole, teamDeleteMessage);
 app.delete('/api/admin/chats/:userId/messages/:id', requireAdmin, teamDeleteMessage);
-app.post('/api/staff/chats/:userId/send', requireStaff, requireApprovedStaff, async (req, res) => {
+app.post('/api/staff/chats/:userId/send', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try {
     const { text, imageData } = req.body || {};
     if (!text && !imageData) return res.status(400).json({ error: 'Message is empty.' });
@@ -1128,11 +1194,11 @@ async function escalationsWithNames() {
       staffName: (staffList.find(s => s.id === e.staffId) || {}).name || 'Staff' };
   });
 }
-app.get('/api/staff/escalations', requireStaff, requireApprovedStaff, async (req, res) => {
+app.get('/api/staff/escalations', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try { res.json({ escalations: await escalationsWithNames() }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load escalations.' }); }
 });
-app.post('/api/staff/chats/:userId/escalate', requireStaff, requireApprovedStaff, async (req, res) => {
+app.post('/api/staff/chats/:userId/escalate', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try {
     const reason = String((req.body || {}).reason || '').trim();
     if (!reason) return res.status(400).json({ error: 'Enter the reason for forwarding this chat.' });
@@ -1147,7 +1213,7 @@ app.post('/api/staff/chats/:userId/escalate', requireStaff, requireApprovedStaff
 });
 
 // People a staff member can forward a message to: the admin plus other approved staff (names only).
-app.get('/api/staff/recipients', requireStaff, requireApprovedStaff, async (req, res) => {
+app.get('/api/staff/recipients', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try {
     const staff = (await store.listStaff()).filter(s => s.status === 'approved' && s.id !== req.staff.id);
     res.json({ recipients: [{ id: 'admin', name: 'Admin', role: 'Admin' }].concat(staff.map(s => ({ id: s.id, name: s.name, role: 'Staff' }))) });
@@ -1276,7 +1342,7 @@ app.delete('/api/admin/team/:id/messages/:mid', requireAdmin, async (req, res) =
 
 // ---- Forward one chat message to one person (the admin or another staff member)
 const forwardSqlHint = err => (/forwards/.test(String(err && err.message)) ? 'Run the forwarded messages SQL from the README in Supabase first.' : null);
-app.post('/api/staff/chats/:userId/forward-message', requireStaff, requireApprovedStaff, async (req, res) => {
+app.post('/api/staff/chats/:userId/forward-message', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try {
     const { messageId, to } = req.body || {};
     const msg = await store.findMessageById(messageId);
@@ -1380,6 +1446,7 @@ app.post('/api/admin/accounts', requireAdmin, async (req, res) => {
   try {
     const b = req.body || {};
     if (!b.title || !b.accountNumber || !b.bankName) return res.status(400).json({ error: 'Title, account number and bank are required.' });
+    if (b.imageData && badAttachment(b.imageData)) return res.status(400).json({ error: badAttachment(b.imageData) });
     const account = await store.createAccount({
       staffId: b.staffId || null, title: b.title, accountNumber: b.accountNumber, bankName: b.bankName,
       imageData: b.imageData || null,
@@ -1517,7 +1584,8 @@ app.get('/api/admin/withdrawals', requireAdmin, async (req, res) => {
     const enriched = withdrawals.map(w => ({
       ...w,
       userName: (users.find(u => u.id === w.userId) || {}).name || 'Unknown',
-      userPhone: (users.find(u => u.id === w.userId) || {}).phone || ''
+      userPhone: (users.find(u => u.id === w.userId) || {}).phone || '',
+      bankChangedAt: csGet('bank:' + w.userId) || null   // the customer changed their payout account at this time
     }));
     res.json({ withdrawals: enriched });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load withdrawals.' }); }
@@ -1678,7 +1746,7 @@ app.get('/api/push/key', requireUser, async (req, res) => {
 app.post('/api/push/subscribe', requireUser, async (req, res) => {
   try {
     const b = req.body || {}, k = b.keys || {};
-    if (!b.endpoint || !/^https:\/\//.test(b.endpoint) || !k.p256dh || !k.auth) return res.status(400).json({ error: 'Invalid subscription.' });
+    if (!pushOk(b.endpoint) || !k.p256dh || !k.auth) return res.status(400).json({ error: 'Invalid subscription.' });
     await store.savePushSubscription({ endpoint: b.endpoint, userId: req.session.userId, p256dh: k.p256dh, auth: k.auth });
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not turn on notifications.' }); }
@@ -1730,7 +1798,7 @@ function alertTeam(who, title, body, go) {
     ]);
   }).catch(err => console.error('Team alert error:', err.message || err));
 }
-function validSub(b) { const k = (b || {}).keys || {}; return b && b.endpoint && /^https:\/\//.test(b.endpoint) && k.p256dh && k.auth; }
+function validSub(b) { const k = (b || {}).keys || {}; return b && pushOk(b.endpoint) && k.p256dh && k.auth; }
 app.get('/api/team/push/key', requireTeam, async (req, res) => {
   try {
     const keys = await pushKeys();
