@@ -20,6 +20,9 @@
 > not inside the database. Old pictures already in the database move there by themselves in the background.
 > Chat photos and voice notes older than 90 days are removed (receipts are kept forever); change this with `MEDIA_DAYS` on Render.
 >
+> **Admin two-step login (Google Authenticator):** in the admin app open **Two-Step Login**, add AZAPLUG to Google Authenticator,
+> check one code, then add `ADMIN_TOTP_SECRET` on Render with the key it shows. Lost the phone? Delete `ADMIN_TOTP_SECRET` on Render.
+>
 > > For "online", "last seen", and seen ticks in chats to be remembered after a restart, run this one line:
 > ```sql
 > create table if not exists chat_state (id text primary key, at timestamptz not null default now()); alter table chat_state enable row level security;

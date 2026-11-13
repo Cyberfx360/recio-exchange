@@ -212,6 +212,26 @@ function ipFail(kind, req, max, minutes) {
 }
 setInterval(() => { const now = Date.now(); for (const [k, t] of IP_FAILS) if (t.until < now && now - t.first > 3600000) IP_FAILS.delete(k); }, 600000);
 const sameText = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a)).digest(), crypto.createHash('sha256').update(String(b)).digest());
+// ---- Google Authenticator (2-step login) for the admin. Turned on by ADMIN_TOTP_SECRET on Render.
+// Lost your phone? Delete ADMIN_TOTP_SECRET on Render and admin login goes back to password only.
+const ADMIN_TOTP = String(process.env.ADMIN_TOTP_SECRET || '').toUpperCase().replace(/[^A-Z2-7]/g, '');
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+function b32enc(buf) { let bits = 0, val = 0, out = ''; for (const b of buf) { val = ((val << 8) | b) & 0xffff; bits += 8; while (bits >= 5) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; } } if (bits) out += B32[(val << (5 - bits)) & 31]; return out; }
+function b32dec(str) { let bits = 0, val = 0; const out = []; for (const c of String(str || '').toUpperCase().replace(/[^A-Z2-7]/g, '')) { val = ((val << 5) | B32.indexOf(c)) & 0xffff; bits += 5; if (bits >= 8) { out.push((val >>> (bits - 8)) & 255); bits -= 8; } } return Buffer.from(out); }
+function totpAt(secret, step) {
+  const msg = Buffer.alloc(8); msg.writeBigUInt64BE(BigInt(step));
+  const h = crypto.createHmac('sha1', b32dec(secret)).update(msg).digest(), o = h[19] & 15;
+  return String((((h[o] & 127) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3]) % 1000000).padStart(6, '0');
+}
+// Returns the time step the code belongs to (this one, or 30 seconds either side), or 0 if wrong / already used.
+function totpCheck(secret, code, usedStep) {
+  code = String(code || '').replace(/\D/g, '');
+  if (!secret || code.length !== 6) return 0;
+  const now = Math.floor(Date.now() / 30000);
+  for (const st of [now, now - 1, now + 1]) if (st > (usedStep || 0) && sameText(totpAt(secret, st), code)) return st;
+  return 0;
+}
+let totpUsed = 0, codeWarned = 0;
 let adminWrong = { n: 0, since: Date.now(), warned: 0 }, pinWrong = { n: 0, since: Date.now(), warned: 0 };
 function pinWatch() { // many wrong PINs across all accounts = someone may be guessing; tell the admin
   if (Date.now() - pinWrong.since > 900000) pinWrong = { n: 0, since: Date.now(), warned: pinWrong.warned };
@@ -399,14 +419,15 @@ app.get('/api/staff/me', async (req, res) => {
 // ============================================================
 // ADMIN AUTH
 // ============================================================
-// 5 wrong tries from one device/network locks admin login there for 15 minutes.
-// Many wrong tries in total sends the admin a warning notification.
+// 5 wrong tries from one device/network locks admin login on THAT device for 15 minutes (it never signs anyone out).
+// Many wrong passwords in total sends the admin a warning notification.
+// With Google Authenticator on, the password alone is not enough: the 6-digit code from the admin's phone is needed too.
 app.post('/api/admin/login', (req, res) => {
-  const mins = ipBlocked('admin', req) || ipBlocked('admin-all', { ip: 'all' });
-  if (mins) return res.status(429).json({ error: `Too many wrong tries. Admin login is paused for ${mins} minute(s).` });
-  const { password } = req.body || {};
+  const mins = ipBlocked('admin', req);
+  if (mins) return res.status(429).json({ error: `Too many wrong tries. Try again in ${mins} minute(s).` });
+  const { password, code } = req.body || {};
   if (!password || !sameText(password, ADMIN_PASSWORD)) {
-    const locked = ipFail('admin', req, 5, 15) | ipFail('admin-all', { ip: 'all' }, 20, 15); // 5 per device, 20 in total
+    const locked = ipFail('admin', req, 5, 15);
     if (Date.now() - adminWrong.since > 3600000) adminWrong = { n: 0, since: Date.now(), warned: 0 };
     adminWrong.n += 1;
     if (adminWrong.n >= 10 && Date.now() - adminWrong.warned > 3600000) {
@@ -415,10 +436,36 @@ app.post('/api/admin/login', (req, res) => {
     }
     return res.status(locked ? 429 : 401).json({ error: locked ? 'Too many wrong tries. Admin login is locked here for 15 minutes.' : 'Wrong admin password.' });
   }
+  if (ADMIN_TOTP) {
+    if (!code) return res.status(401).json({ needCode: true, error: 'Enter the 6-digit code from Google Authenticator.' });
+    // Wrong codes only happen once someone knows the password, so they are limited for everyone (10 per 15 minutes).
+    const paused = ipBlocked('admin-code', { ip: 'all' });
+    if (paused) return res.status(429).json({ needCode: true, error: `Too many wrong codes. Try again in ${paused} minute(s).` });
+    const st = totpCheck(ADMIN_TOTP, code, totpUsed);
+    if (!st) {
+      const locked = ipFail('admin', req, 5, 15) | ipFail('admin-code', { ip: 'all' }, 10, 15);
+      if (Date.now() - codeWarned > 600000) { codeWarned = Date.now(); alertTeam({ admin: true }, 'Admin password used with a wrong code', 'The right admin password was typed with a wrong Google Authenticator code. If this was not you, change ADMIN_PASSWORD on Render now.', { admin: 'dash' }); }
+      return res.status(locked ? 429 : 401).json({ needCode: true, error: locked ? 'Too many wrong codes. Try again in 15 minutes.' : 'That code is not right. Type the newest code from Google Authenticator.' });
+    }
+    totpUsed = st; // each code works only once
+  }
   const wasAdmin = !!req.session.isAdmin;
   req.session.isAdmin = true;
   if (!wasAdmin) alertTeam({ admin: true }, 'New admin sign-in', `Someone signed in to the admin app (${String(req.get('user-agent') || 'unknown device').slice(0, 80)}). If this was not you, change ADMIN_PASSWORD on Render now.`, { admin: 'dash' });
   res.json({ ok: true });
+});
+// Setting up Google Authenticator from the admin app (Admin Panel -> Two-Step Login).
+app.get('/api/admin/2fa', requireAdmin, (req, res) => {
+  if (ADMIN_TOTP) return res.json({ on: true });
+  if (!req.session.totpSetup) req.session.totpSetup = b32enc(crypto.randomBytes(20));
+  const secret = req.session.totpSetup;
+  res.json({ on: false, secret, uri: `otpauth://totp/AZAPLUG:Admin?secret=${secret}&issuer=AZAPLUG&algorithm=SHA1&digits=6&period=30` });
+});
+app.post('/api/admin/2fa/check', requireAdmin, (req, res) => {
+  const secret = ADMIN_TOTP || req.session.totpSetup;
+  if (!secret) return res.status(400).json({ error: 'Open this page again to get a new setup key.' });
+  if (!totpCheck(secret, (req.body || {}).code, 0)) return res.status(400).json({ error: 'That code is not right. Make sure the time on your phone is set automatically, then type the newest code.' });
+  res.json({ ok: true, on: !!ADMIN_TOTP, secret: ADMIN_TOTP ? undefined : secret });
 });
 app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; res.json({ ok: true }); });
 

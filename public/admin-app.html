@@ -427,6 +427,10 @@ img,svg,video{max-width:100%}
 @media (prefers-reduced-motion:reduce){#callui .cav,#callui .cb .c-green i{animation:none}}
 .pinh{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--muted);padding:12px 20px 6px}
 .pinic{color:var(--muted);display:inline-flex}.newb{background:var(--blue);color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:999px;display:inline-grid;place-items:center;padding:0 6px}
+.tfab{background:linear-gradient(135deg,#0D4DC7,#111827)!important}
+.tfk{font-family:var(--mono);font-size:15px;letter-spacing:.06em;word-break:break-all;background:#F4F7FC;border:1px dashed #C9D9FA;border-radius:12px;padding:12px;margin:8px 0}
+.tfs{display:flex;gap:12px;margin-top:16px}.tfs>i{flex:none;width:26px;height:26px;border-radius:50%;background:var(--blue);color:#fff;font-style:normal;font-weight:700;font-size:13px;display:grid;place-items:center}
+#tfqr svg{width:180px;height:180px;display:block;margin:10px auto}
 .gab{display:flex;align-items:center;gap:12px;width:100%;margin-top:12px;padding:14px 16px;border-radius:16px;color:#fff;background:linear-gradient(135deg,#F59E0B,#EF4444)}
 .gab .gai{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);display:grid;place-items:center;flex:none}.gab b{display:block;font-size:15.5px}.gab small{font-size:12.5px;opacity:.9}
 .gar{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.gar>b{width:34px;color:var(--blue);flex:none}
@@ -591,6 +595,31 @@ const acctForm=(edit)=>{const f=S.form,img=safeImg(f.imageData),fl=(id,l,v,ph,im
 const V={
 loading:()=>`<section class="screen blue"><div class="grow"></div><div class="logo-dot">${I('swap')}</div><div class="wordmark" style="margin-top:22px">AZAPLUG</div><div class="grow"></div></section>`,
 
+tfa:()=>{const t=S.tfa,k=t&&t.secret?t.secret.replace(/(.{4})/g,'$1 ').trim():'';
+ return `<section class="scr">${hd('Two-Step Login','Google Authenticator for admin sign-in','dash','')}
+ <div class="bd">${!t?'<p class="empty">Loading…</p>':t.on?`
+  <div class="card" style="padding:18px"><b style="display:flex;align-items:center;gap:8px;color:#059669;font-size:16px">${I('checkc','style="width:20px;height:20px"')}Two-step login is ON</b>
+   <p class="muted" style="font-size:13.5px;margin-top:8px">Signing in to admin needs your password and the 6-digit AZAPLUG code from Google Authenticator. Your password alone is not enough.</p></div>
+  <div class="card" style="padding:18px;margin-top:14px"><b>Test your code</b><p class="muted" style="font-size:13px;margin-top:4px">Type the code from Google Authenticator to check it works.</p>
+   <form data-form="tfaCheck" novalidate><input class="in" id="tf-c" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="margin-top:10px;font-family:var(--mono);letter-spacing:.3em"><button class="b blue" style="height:46px;margin-top:10px">Check Code</button></form></div>
+  <p class="muted" style="font-size:12.5px;margin-top:16px">Lost your phone? Sign in to Render, open Environment, delete <b>ADMIN_TOTP_SECRET</b> and save. Admin login goes back to password only. Then set it up again here.</p>`:t.done?`
+  <div class="card" style="padding:18px"><b style="display:flex;align-items:center;gap:8px;color:#059669;font-size:16px">${I('checkc','style="width:20px;height:20px"')}Code works. One last step</b>
+   <div class="tfs"><i>4</i><div><b>Add the key on Render</b><p class="muted" style="font-size:13px;margin-top:4px">Render → your service → Environment → Add Environment Variable:</p>
+   <p style="font-size:13px;margin-top:8px">Key</p><div class="tfk">ADMIN_TOTP_SECRET</div><p style="font-size:13px">Value</p><div class="tfk">${esc(t.secret)}</div>
+   <button class="b ghost" style="height:42px;border:1.5px solid var(--line)" data-copy="${esc(t.secret)}">${I('copy','style="width:15px;height:15px"')}Copy Value</button>
+   <p class="muted" style="font-size:13px;margin-top:10px">Tap Save. Render restarts in about 2 minutes, and after that admin sign-in asks for the code. You stay signed in on this phone.</p></div></div></div>
+  <p class="muted" style="font-size:12.5px;margin-top:14px">Keep this key private. Anyone with it can make your codes. Do not send it on WhatsApp.</p>`:`
+  <div class="card" style="padding:18px"><p class="muted" style="font-size:13.5px">After this, signing in to admin needs your password <b>and</b> a 6-digit code from your phone, so a stolen password is not enough.</p>
+   <div class="tfs"><i>1</i><div><b>Install Google Authenticator</b><p class="muted" style="font-size:13px;margin-top:2px">From Play Store or App Store.</p></div></div>
+   <div class="tfs"><i>2</i><div style="min-width:0;flex:1"><b>Add AZAPLUG to it</b>
+    <a class="b blue" style="height:44px;margin-top:10px;display:flex;align-items:center;justify-content:center;gap:8px;color:#fff;text-decoration:none" href="${esc(t.uri)}">${I('shielda','style="width:16px;height:16px"')}Open in Google Authenticator</a>
+    <p class="muted" style="font-size:13px;margin-top:10px">Or in the app tap <b>+</b> → <b>Enter a setup key</b>. Account: <b>AZAPLUG Admin</b>, Key:</p><div class="tfk">${esc(k)}</div>
+    <button class="b ghost" style="height:40px;border:1.5px solid var(--line)" data-copy="${esc(t.secret)}">${I('copy','style="width:15px;height:15px"')}Copy Key</button>
+    <p class="muted" style="font-size:13px;margin-top:10px">On another phone? Tap <b>+</b> → <b>Scan a QR code</b>:</p><div id="tfqr"></div></div></div>
+   <div class="tfs"><i>3</i><div style="flex:1"><b>Type the code it shows</b>
+    <form data-form="tfaCheck" novalidate><input class="in" id="tf-c" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="margin-top:10px;font-family:var(--mono);letter-spacing:.3em"><button class="b blue" style="height:46px;margin-top:10px">Check Code</button></form></div></div></div>`}
+ </div></section>`},
+
 login:()=>`<section class="screen blue">
   <div class="logo-dot" style="width:80px;height:80px;margin-top:70px">${I('swap','style="width:32px;height:32px;stroke-width:2"')}</div>
   <div class="wordmark" style="font-size:30px;margin-top:22px">AZAPLUG</div>
@@ -622,6 +651,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
   <h2 class="sh">Quick Actions</h2>
   <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
   <button class="gab" data-go="giveaway"><span class="gai">${I('gift','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Giveaways</b><small>Reward the first customers to say hi</small></span>${I('cr','style="width:18px;height:18px"')}</button>
+  <button class="gab tfab" data-go="tfa"><span class="gai">${I('shielda','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Two-Step Login</b><small>Google Authenticator code for admin sign-in</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <div class="between" style="margin:22px 0 10px"><h2 class="sh" style="margin:0">Recent Activity Feed</h2><button class="link" style="font-size:14px" data-go="receipts">View All</button></div>
   ${feed.length?feed.map(f=>`<button class="feed" data-go="${f.go}" data-id="${esc(f.id)}"><i></i><span class="grow" style="min-width:0"><b>${f.t}</b><small>${f.s} • ${ago(f.at)}</small></span><em>${f.r}</em></button>`).join(''):'<p class="empty">No activity yet</p>'}
   <p style="text-align:center;margin-top:26px"><button class="link" style="color:var(--muted);font-weight:600;font-size:14px" data-act="logout">Log out</button></p></div></section>`},
@@ -1032,7 +1062,9 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-md]'
 let poll=null;
 const typing=()=>document.activeElement&&document.activeElement.matches('input,textarea');
 const inChat=()=>S.route==='chat'||S.route==='staffChat';
-function render(){$('#app').innerHTML=V[S.route]();if(inChat())chatBottom()}
+function render(){$('#app').innerHTML=V[S.route]();if(inChat())chatBottom();if(S.route==='tfa')tfaQR()}
+function tfaQR(){const el=$('#tfqr'),t=S.tfa;if(!el||!t||!t.uri)return;const make=()=>{try{const q=qrcode(0,'M');q.addData(t.uri);q.make();el.innerHTML=q.createSvgTag({scalable:true})}catch(e){}};
+  if(window.qrcode)return make();const sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';sc.onload=make;document.head.appendChild(sc)}
 function go(r,o,pop){
   if(S.route!==r)$('#toast').classList.remove('show');
   if(!(r==='chat'||r==='staffChat')||r!==S.route){recEnd(true);vnStop()}
@@ -1046,6 +1078,7 @@ function go(r,o,pop){
       if(S.route!=='staffChat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(e=>{if(S.route==='staffChat'&&!S.staffPerson){toast(e.message);go('chats')}});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
   if(r==='chat'){S.chat=[];const pull=()=>api('GET','/api/admin/chats/'+encodeURIComponent(S.id)).then(d=>{const n=sig(d.messages)!==sig(S.chat);S.chat=d.messages||[];
       if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
+  if(r==='tfa'){if(!S.tfa||!S.tfa.done)api('GET','/api/admin/2fa').then(d=>{S.tfa=d;if(S.route==='tfa')render()}).catch(e=>toast(e.message))}
   if(r==='giveaway'){loadGas();clearInterval(S.gaT);S.gaT=setInterval(()=>S.route==='giveaway'?loadGas():clearInterval(S.gaT),10000)}
   if(['dash','staff','receipts','wds','users','chats','accountsAll','rates','console','loans'].includes(r))refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{});
 }
@@ -1127,7 +1160,14 @@ const FORMS={
   async gaNew(){const startsAt=new Date(val('ga-s'));if(isNaN(startsAt))throw new Error('Choose the start date and time');
     await api('POST','/api/admin/giveaways',{title:val('ga-t'),amount:num(val('ga-a')),winners:num(val('ga-w')),keyword:val('ga-k'),startsAt:startsAt.toISOString(),announce:$('#ga-n').checked});toast('Giveaway created');await loadGas()},
   async loanLimit(){const limit=num(val('ln-lim'));await api('PUT','/api/admin/loans/limit',{limit});toast('Loan limit saved');await refresh()},
-  async login(){const password=$('#lg-pw').value;if(!password)throw new Error('Enter the admin password');await api('POST','/api/admin/login',{password});await refresh();await gateGo('dash');bioOffer()},
+  async tfaCheck(){const code=$('#tf-c').value.replace(/\D/g,'');if(code.length!==6)throw new Error('Enter the 6-digit code');const d=await api('POST','/api/admin/2fa/check',{code});
+    if(d.on){toast('Code is correct. Two-step login works.');$('#tf-c').value='';return}S.tfa={...S.tfa,done:true,secret:d.secret};render()},
+  async login(){const password=$('#lg-pw').value,ce=$('#lg-code');if(!password)throw new Error('Enter the admin password');
+    const body={password};if(ce){body.code=ce.value.replace(/\D/g,'');if(body.code.length!==6)throw new Error('Enter the 6-digit code from Google Authenticator')}
+    const r=await fetch('/api/admin/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let d={};try{d=await r.json()}catch(e){}
+    if(d.needCode&&!ce){$('#lg-pw').closest('.field').insertAdjacentHTML('afterend',`<label for="lg-code" style="display:block;font-weight:600;font-size:14px;opacity:.75;margin:18px 0 10px">Google Authenticator code</label><div class="field glass"><input id="lg-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code" style="letter-spacing:.3em;font-family:var(--mono)"></div>`);$('#lg-code').focus();toast('Open Google Authenticator and type the AZAPLUG code');return}
+    if(!r.ok){if(ce){ce.value='';ce.focus()}throw new Error(d.error||'Something went wrong. Try again.')}
+    await refresh();await gateGo('dash');bioOffer()},
   async account(){const b={title:val('f-title'),bankName:val('f-bank'),accountNumber:val('f-num'),lowestAmount:num(val('f-la')),lowestRate:num(val('f-lr')),higherAmount:num(val('f-ha')),higherRate:num(val('f-hr')),minAmount:num(val('f-min')),maxAmount:num(val('f-max')),imageData:S.form.imageData||null};
     if(!b.title||!b.bankName||!b.accountNumber)throw new Error('Country, bank name and account number are required');
     if(S.form.id){await api('PUT','/api/admin/accounts/'+S.form.id,b);toast('Account saved');const back=S.back;S.form=null;await reload(back)}
