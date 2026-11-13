@@ -22,16 +22,16 @@ function userRow(r) {
   return {
     id: r.id, name: r.name, phone: r.phone,
     accountNumber: r.account_number, bankName: r.bank_name,
-    passwordHash: r.password_hash, status: r.status,
+    passwordHash: r.password_hash, status: r.status, email: r.email || null,
     balance: Number(r.balance), createdAt: r.created_at
   };
 }
 
-async function createUser({ name, phone, accountNumber, bankName, passwordHash }) {
+async function createUser({ name, phone, accountNumber, bankName, passwordHash, email }) {
   const id = uid();
   const { error } = await supabase.from('users').insert({
     id, name, phone, account_number: accountNumber, bank_name: bankName,
-    password_hash: passwordHash, status: 'approved', balance: 0
+    password_hash: passwordHash, status: 'approved', balance: 0, ...(email ? { email } : {})
   });
   if (error) throw error;
   return findUserById(id);
@@ -94,11 +94,11 @@ async function addToBalance(id, amount) {
 // ============================================================
 
 function staffRow(r) {
-  return { id: r.id, name: r.name, phone: r.phone, passwordHash: r.password_hash, status: r.status, createdAt: r.created_at };
+  return { id: r.id, name: r.name, phone: r.phone, passwordHash: r.password_hash, status: r.status, email: r.email || null, createdAt: r.created_at };
 }
-async function createStaff({ name, phone, passwordHash }) {
+async function createStaff({ name, phone, passwordHash, email }) {
   const id = uid();
-  const { error } = await supabase.from('staff').insert({ id, name, phone, password_hash: passwordHash, status: 'pending' });
+  const { error } = await supabase.from('staff').insert({ id, name, phone, password_hash: passwordHash, status: 'pending', ...(email ? { email } : {}) });
   if (error) throw error;
   return findStaffById(id);
 }
@@ -219,6 +219,7 @@ function tradeRow(r) {
     accountNumberUsed: r.account_number_used, accountTitleUsed: r.account_title_used,
     userPayoutAccount: r.user_payout_account, userPayoutBank: r.user_payout_bank,
     settlementScreenshot: r.settlement_screenshot, settlementStatus: r.settlement_status,
+    chatMessageId: r.chat_message_id || null,   // set when a chat manager turned a chat photo into this receipt
     createdAt: r.created_at, updatedAt: r.updated_at
   };
 }
@@ -229,7 +230,8 @@ async function createTrade(t) {
     intended_amount: t.intendedAmount, receipt_image: t.receiptImage,
     status: 'checking', account_number_used: t.accountNumberUsed, account_title_used: t.accountTitleUsed,
     user_payout_account: t.userPayoutAccount, user_payout_bank: t.userPayoutBank,
-    settlement_status: 'pending'
+    settlement_status: 'pending',
+    ...(t.chatMessageId ? { chat_message_id: t.chatMessageId } : {})
   });
   if (error) throw error;
   return findTradeById(id);
@@ -326,6 +328,15 @@ async function messagesForUser(userId) {
   const { data, error } = await supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true });
   if (error) throw error;
   return data.map(msgRow);
+}
+async function findMessageById(id) {
+  const { data, error } = await supabase.from('messages').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? msgRow(data) : null;
+}
+async function deleteMessage(id) {
+  const { error } = await supabase.from('messages').delete().eq('id', id);
+  if (error) throw error;
 }
 async function listConversations() {
   const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: false });
@@ -540,7 +551,61 @@ async function setLoanLimit(n) {
   if (error) throw error;
 }
 
+// ============================================================
+// LOGIN EXTRAS: email + PIN, saved sessions, fingerprint (passkeys)
+// ============================================================
+const authTable = kind => (kind === 'staff' ? 'staff' : 'users');
+// True once the email columns exist (the PIN + email SQL was run). Until then the apps keep the old login.
+async function hasEmailColumns() {
+  const a = await supabase.from('users').select('email').limit(1);
+  const b = await supabase.from('staff').select('email').limit(1);
+  return !a.error && !b.error;
+}
+async function findByEmail(kind, email) {
+  const { data, error } = await supabase.from(authTable(kind)).select('*').ilike('email', email).limit(1);
+  if (error) throw error;
+  return data && data[0] ? (kind === 'staff' ? staffRow(data[0]) : userRow(data[0])) : null;
+}
+async function setLogin(kind, id, fields) {
+  const patch = {};
+  if (fields.email !== undefined) patch.email = fields.email;
+  if (fields.passwordHash !== undefined) patch.password_hash = fields.passwordHash;
+  const { error } = await supabase.from(authTable(kind)).update(patch).eq('id', id);
+  if (error) throw error;
+}
+async function sessionGet(sid) {
+  const { data, error } = await supabase.from('sessions').select('data, expires_at').eq('sid', sid).maybeSingle();
+  if (error) throw error;
+  return data && new Date(data.expires_at) > new Date() ? data.data : null;
+}
+async function sessionSet(sid, data, expiresAt) {
+  const { error } = await supabase.from('sessions').upsert({ sid, data, expires_at: expiresAt });
+  if (error) throw error;
+}
+async function sessionDelete(sid) {
+  const { error } = await supabase.from('sessions').delete().eq('sid', sid);
+  if (error) throw error;
+}
+async function savePasskey(p) {
+  const { error } = await supabase.from('passkeys').upsert({ id: p.id, kind: p.kind, owner_id: p.ownerId, public_key: p.publicKey, counter: p.counter || 0 });
+  if (error) throw error;
+}
+async function findPasskey(id) {
+  const { data, error } = await supabase.from('passkeys').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? { id: data.id, kind: data.kind, ownerId: data.owner_id, publicKey: data.public_key, counter: Number(data.counter) || 0 } : null;
+}
+async function updatePasskeyCounter(id, counter) {
+  const { error } = await supabase.from('passkeys').update({ counter }).eq('id', id);
+  if (error) throw error;
+}
+async function deletePasskey(id) {
+  const { error } = await supabase.from('passkeys').delete().eq('id', id);
+  if (error) throw error;
+}
+
 module.exports = {
+  hasEmailColumns, findByEmail, setLogin, sessionGet, sessionSet, sessionDelete, savePasskey, findPasskey, updatePasskeyCounter, deletePasskey,
   saveTeamPush, deleteTeamPush, listTeamPush,
   createLoan, findLoanById, listLoans, listLoansForUser, updateLoan, getLoanLimit, setLoanLimit,
   getPushKeys, savePushKeys, savePushSubscription, deletePushSubscription, listPushSubscriptions,
@@ -551,6 +616,6 @@ module.exports = {
   listAccountsPublic, listAccountsForAmount, listAllAccounts, listAccountsByStaff, findAccountById, createAccount, updateAccount, deleteAccount,
   createTrade, findTradeById, listTradesForUser, listTradesForStaff, listAllTrades, updateTradeStatus, setSettlement,
   getSettings, updateSettings,
-  addMessage, messagesForUser, listConversations,
+  addMessage, messagesForUser, listConversations, findMessageById, deleteMessage,
   createWithdrawal, findWithdrawalById, listWithdrawalsForUser, listAllWithdrawals, updateWithdrawalStatus
 };
