@@ -16,6 +16,11 @@
 > `BREVO_API_KEY` (Brevo → SMTP & API → API Keys) and `MAIL_FROM` (the sender email you verified in Brevo).
 > Until both are set, sign-up works without the email code and "Forgot PIN" tells people to contact support.
 >
+> For forwarding a single chat message to the admin or another staff member, run this one line:
+> ```sql
+> create table if not exists forwards (id uuid primary key default gen_random_uuid(), from_staff_id uuid, to_staff_id uuid, user_id uuid, message_text text, image_data text, sender text, status text not null default 'new', created_at timestamptz not null default now()); alter table forwards enable row level security;
+> ```
+>
 > For chat managers to pass a chat receipt on to an account, run this one line:
 > ```sql
 > alter table trades add column if not exists chat_message_id uuid;

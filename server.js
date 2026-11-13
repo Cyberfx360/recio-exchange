@@ -858,6 +858,52 @@ app.get('/api/staff/recipients', requireStaff, requireApprovedStaff, async (req,
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load recipients.' }); }
 });
 
+// ---- Forward one chat message to one person (the admin or another staff member)
+const forwardSqlHint = err => (/forwards/.test(String(err && err.message)) ? 'Run the forwarded messages SQL from the README in Supabase first.' : null);
+app.post('/api/staff/chats/:userId/forward-message', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const { messageId, to } = req.body || {};
+    const msg = await store.findMessageById(messageId);
+    if (!msg || msg.userId !== req.params.userId) return res.status(404).json({ error: 'That message is no longer in the chat.' });
+    let toStaff = null;
+    if (to !== 'admin') {
+      toStaff = await store.findStaffById(String(to || ''));
+      if (!toStaff || toStaff.status !== 'approved' || toStaff.id === req.staff.id) return res.status(400).json({ error: 'Choose who to forward to.' });
+    }
+    await store.createForward({ fromStaffId: req.staff.id, toStaffId: toStaff ? toStaff.id : null, userId: msg.userId, text: msg.text, imageData: msg.imageData, sender: msg.sender });
+    const what = msg.text ? String(msg.text).slice(0, 120) : isVoice(msg.imageData) ? 'A voice note' : 'A photo';
+    alertTeam(toStaff ? { toStaff: toStaff.id } : { admin: true }, `${req.staff.name} forwarded a message`, what, { admin: 'console', staff: 'inbox' });
+    res.json({ ok: true, name: toStaff ? toStaff.name : 'Admin' });
+  } catch (err) { console.error('Forward message error:', err); res.status(500).json({ error: forwardSqlHint(err) || 'Could not forward the message.' }); }
+});
+// A staff member's inbox of forwarded messages. The customer's name and number are not included.
+app.get('/api/staff/forwards', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const [list, staffList] = await Promise.all([store.listForwardsTo(req.staff.id), store.listStaff()]);
+    res.json({ forwards: list.map(f => ({ id: f.id, text: f.text, imageData: f.imageData, sender: f.sender, status: f.status, createdAt: f.createdAt, fromName: (staffList.find(s => s.id === f.fromStaffId) || {}).name || 'Staff' })) });
+  } catch (err) { if (!forwardSqlHint(err)) console.error(err); res.status(500).json({ error: forwardSqlHint(err) || 'Could not load forwarded messages.' }); }
+});
+app.post('/api/staff/forwards/:id/done', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const f = await store.findForwardById(req.params.id);
+    if (!f || f.toStaffId !== req.staff.id) return res.status(404).json({ error: 'Message not found.' });
+    await store.setForwardStatus(f.id, 'done'); res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update the message.' }); }
+});
+app.get('/api/admin/forwards', requireAdmin, async (req, res) => {
+  try {
+    const [list, staffList, users] = await Promise.all([store.listForwardsTo(null), store.listStaff(), store.listUsers()]);
+    res.json({ forwards: list.map(f => ({ ...f, fromName: (staffList.find(s => s.id === f.fromStaffId) || {}).name || 'Staff', userName: (users.find(u => u.id === f.userId) || {}).name || 'Unknown' })) });
+  } catch (err) { if (!forwardSqlHint(err)) console.error(err); res.status(500).json({ error: forwardSqlHint(err) || 'Could not load forwarded messages.' }); }
+});
+app.post('/api/admin/forwards/:id/done', requireAdmin, async (req, res) => {
+  try {
+    const f = await store.findForwardById(req.params.id);
+    if (!f || f.toStaffId) return res.status(404).json({ error: 'Message not found.' });
+    await store.setForwardStatus(f.id, 'done'); res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update the message.' }); }
+});
+
 // ============================================================
 // ADMIN: users
 // ============================================================
@@ -1256,7 +1302,7 @@ function alertTeam(who, title, body, go) {
   const g = go || {};
   store.listTeamPush().then(subs => {
     const admin = subs.filter(s => who.admin && s.portal === 'admin');
-    const staff = subs.filter(s => (who.chat && s.portal === 'chat') || (who.staffId && s.portal === 'vendor' && s.staffId === who.staffId));
+    const staff = subs.filter(s => (who.chat && s.portal === 'chat') || (who.staffId && s.portal === 'vendor' && s.staffId === who.staffId) || (who.toStaff && s.staffId === who.toStaff));
     return Promise.all([
       sendPush(admin, { title, body, go: g.admin || 'dash', app: '/admin-app.html' }, store.deleteTeamPush),
       sendPush(staff, { title, body, go: g.staff || '', app: '/staff-app.html' }, store.deleteTeamPush)
