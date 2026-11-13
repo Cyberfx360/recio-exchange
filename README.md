@@ -35,6 +35,15 @@
 > The server creates its own push key pair on first use and keeps it in `push_keys`; there are no keys to set on Render.
 > On iPhone, customers must add AZAPLUG to their Home Screen before push can be turned on (Apple's rule).
 
+> **Borrow (loans) and staff/admin alerts** need three more tables. Run this once:
+> ```sql
+> create table if not exists loans (id uuid primary key default gen_random_uuid(), user_id uuid not null references users(id) on delete cascade, amount numeric not null, outstanding numeric not null default 0, status text not null default 'pending', created_at timestamptz not null default now(), updated_at timestamptz not null default now());
+> create table if not exists loan_config (id int primary key default 1, loan_limit numeric not null default 5000);
+> create table if not exists team_push_subscriptions (endpoint text primary key, staff_id uuid references staff(id) on delete cascade, portal text not null, p256dh text not null, auth text not null, created_at timestamptz not null default now());
+> alter table loans enable row level security; alter table loan_config enable row level security; alter table team_push_subscriptions enable row level security;
+> ```
+> Loan rules: one limit for everyone (set in the admin app), one loan at a time, approval adds the money to the customer's balance, and each credited receipt repays what is owed before anything reaches the balance.
+
 Customers send money into an account you provide, upload a receipt, and your team manually
 verifies and credits their balance. Three roles: **Customer**, **Staff**, **Admin**.
 
