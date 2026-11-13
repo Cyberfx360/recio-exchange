@@ -297,6 +297,62 @@ img,svg,video{max-width:100%}
 #insb ol{margin:12px 4px 2px 22px;padding:0;font-size:13.5px;line-height:1.75;color:#E5E8EF}#insb ol svg{width:16px;height:16px;vertical-align:-3px;color:#8AB4F8}
 @keyframes insin{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}@keyframes insfade{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion:reduce){#insb,#insw{animation:none}}
+/* ---------- WhatsApp-style chat ---------- */
+.chat{background:#E9EEF5 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%230D4DC7' stroke-opacity='.035' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='20' cy='22' r='7'/%3E%3Cpath d='M70 14h18v12H70zM84 26l4 6'/%3E%3Cpath d='M14 78l10-10 10 10M24 68v18'/%3E%3Cpath d='M66 72c6-8 18-8 22 0s-10 16-11 16-17-8-11-16z'/%3E%3Cpath d='M98 52l8 8m0-8l-8 8'/%3E%3Cpath d='M40 104h14M47 97v14'/%3E%3Ccircle cx='104' cy='104' r='5'/%3E%3C/g%3E%3C/svg%3E") repeat;background-size:240px}
+.chat .chat-top,.chat>.hd{background:var(--blue);color:#fff;border:0;padding:10px 10px 10px 6px;gap:8px;min-height:62px;box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.chat .chat-top .muted,.chat>.hd p{color:rgba(255,255,255,.82)!important;font-size:12.5px}
+.chat .chat-top button,.chat .chat-top a,.chat>.hd .bk{color:#fff;background:transparent}
+.chat .chat-top .avatar,.chat .chat-top .av,.chat>.hd .av{width:40px;height:40px;font-size:15px;flex:none}
+.chat .chat-top b.h,.chat>.hd h1{color:#fff;font-size:16.5px!important;line-height:1.2}
+.wa-ic{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;color:#fff;flex:none;background:transparent}
+.wa-ic:active{background:rgba(255,255,255,.15)}.wa-ic svg{width:22px;height:22px}
+.chat .msgs{gap:2px;padding:10px 12px 14px}
+.chat .day{background:rgba(255,255,255,.92);color:#54656F;font-size:11.5px;font-weight:600;letter-spacing:.02em;margin:10px 0 8px;padding:6px 12px;border-radius:8px;box-shadow:0 1px .5px rgba(11,20,26,.13)}
+.chat .msg{position:relative;max-width:82%;padding:6px 8px 7px 9px;border-radius:9px;font-size:15px;line-height:1.38;box-shadow:0 1px .5px rgba(11,20,26,.13);margin-top:1px;word-wrap:break-word}
+.chat .msg.in{background:#fff;color:#111B21;border-bottom-left-radius:9px}
+.chat .msg.out{background:#D6E4FD;color:#111B21;border-bottom-right-radius:9px}
+.chat .msg.tl{margin-top:8px}
+.chat .msg.in.tl{border-top-left-radius:0}.chat .msg.out.tl{border-top-right-radius:0}
+.chat .msg.tl::before{content:"";position:absolute;top:0;width:10px;height:13px}
+.chat .msg.in.tl::before{left:-8px;background:#fff;clip-path:polygon(0 0,100% 0,100% 100%)}
+.chat .msg.out.tl::before{right:-8px;background:#D6E4FD;clip-path:polygon(0 0,100% 0,0 100%)}
+.chat .msg .who{color:var(--blue);font-size:12.5px;margin-bottom:1px}
+.chat .msg time{display:inline-flex;align-items:center;gap:3px;float:right;font-size:11px;color:#667781;opacity:1;margin:8px 0 -4px 10px;line-height:1;white-space:nowrap}
+.chat .msg.out time::after{content:"";width:16px;height:11px;background:#53A0F7;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M11.1.7 4.9 7.6 2.3 5 1 6.3l3.9 3.9 7.5-8.2zM15 .7 8.8 7.6l-.9-.9-1.3 1.4 2.2 2.2 7.5-8.2z'/%3E%3C/svg%3E") no-repeat center/contain;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M11.1.7 4.9 7.6 2.3 5 1 6.3l3.9 3.9 7.5-8.2zM15 .7 8.8 7.6l-.9-.9-1.3 1.4 2.2 2.2 7.5-8.2z'/%3E%3C/svg%3E") no-repeat center/contain}
+.chat .msg time .md,.chat .msg time .fw{color:#667781}
+.chat .msg img{border-radius:6px!important;margin:-2px -4px 4px -5px!important;max-width:calc(100% + 9px)!important}
+.chat .msg .svp,.chat .msg .rtd{color:#3B6FD9}
+.chat .msg.out .pl,.chat .msg.in .pl{background:var(--blue);color:#fff}.chat .msg .wave{color:var(--blue)}.chat .msg .dur{color:#667781}
+.chat .msg.call{font-weight:500}
+.chat .composer{background:transparent;border:0;padding:6px 8px calc(8px + env(safe-area-inset-bottom));gap:6px;align-items:flex-end}
+.chat .composer .inp{background:#fff;height:48px;border-radius:24px;padding:0 16px;box-shadow:0 1px .5px rgba(11,20,26,.13);color:#111B21}
+.chat .composer .inp input{font-size:16px}
+.chat .composer>label.rb{background:#fff;color:#54656F;width:48px;height:48px;box-shadow:0 1px .5px rgba(11,20,26,.13)}
+.chat .composer .rb.mic,.chat .composer .rb.send{width:48px;height:48px;box-shadow:0 1px 2px rgba(11,20,26,.2)}
+.chat .recbar .recmid{background:#fff;height:48px;border-radius:24px}
+.chat .empty{background:rgba(255,253,235,.95);color:#54656F;border-radius:8px;padding:10px 14px;align-self:center;max-width:300px;text-align:center;font-size:13px;box-shadow:0 1px .5px rgba(11,20,26,.13);margin:12px auto}
+.chat .esc{border-radius:0}
+/* ---------- In-app calls ---------- */
+#callui{position:fixed;inset:0;z-index:130;background:linear-gradient(180deg,#0B3A99,#071F55 70%);color:#fff;display:none;flex-direction:column;align-items:center;padding:calc(48px + env(safe-area-inset-top)) 20px calc(36px + env(safe-area-inset-bottom));text-align:center}
+#callui.on{display:flex}
+#callui video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;display:none}
+#callui.vid.live #call-remote{display:block}
+#callui #call-local{inset:auto 14px auto auto;top:calc(16px + env(safe-area-inset-top));width:104px;height:150px;border-radius:14px;z-index:2;box-shadow:0 8px 24px rgba(0,0,0,.4);transform:scaleX(-1)}
+#callui.vid #call-local{display:block}
+#callui .ct{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center}
+#callui.vid.live .ct{background:linear-gradient(180deg,rgba(0,0,0,.5),transparent);margin:-48px -20px 0;padding:56px 20px 30px;align-self:stretch}
+#callui .cav{width:112px;height:112px;border-radius:50%;background:rgba(255,255,255,.15);display:grid;place-items:center;font:700 38px var(--head);margin-bottom:18px;box-shadow:0 0 0 12px rgba(255,255,255,.06)}
+#callui.ringing .cav{animation:cring 1.6s ease-in-out infinite}
+#callui.vid.live .cav{display:none}
+#callui b{font:700 25px var(--head)}#callui small{display:block;margin-top:6px;font-size:15px;color:rgba(255,255,255,.8)}
+#callui .cb{position:relative;z-index:1;margin-top:auto;display:flex;gap:26px;justify-content:center;align-items:flex-end}
+#callui .cb button{background:none!important;display:flex;flex-direction:column;align-items:center;gap:8px;color:#fff;font-size:12.5px}
+#callui .cb i{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.18)}
+#callui .cb i svg{width:28px;height:28px}
+#callui .cb .c-on i{background:#fff;color:#0B3A99}
+#callui .cb .c-red i{background:#EF4444}#callui .cb .c-green i{background:#10B981;animation:cring 1.6s ease-in-out infinite}
+@keyframes cring{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.35)}50%{box-shadow:0 0 0 18px rgba(255,255,255,0)}}
+@media (prefers-reduced-motion:reduce){#callui .cav,#callui .cb .c-green i{animation:none}}
 </style>
 </head>
 <body>
@@ -753,8 +809,8 @@ rules:()=>`<section class="screen rules">
   ${fab(1)}</section>`,
 
 chat:()=>`<section class="chat">
-  <header class="chat-top"><button data-go="${S.prev||'home'}" aria-label="Back">${I('cl','style="width:24px;height:24px"')}</button><span class="avatar">AZ</span>
-   <span style="flex:1"><b class="h" style="font-size:17px;font-weight:600;display:block;line-height:1.2">AZAPLUG Support</b><small class="muted">We reply as soon as we can</small></span></header>
+  <header class="chat-top"><button data-go="${S.prev||'home'}" aria-label="Back">${I('cl','style="width:24px;height:24px"')}</button><span class="avatar" style="background:#fff;color:var(--blue)">AZ</span>
+   <span style="flex:1;min-width:0"><b class="h" style="font-size:17px;font-weight:600;display:block;line-height:1.2">AZAPLUG Support</b><small class="muted">Online · we reply fast</small></span>${callIcons('support','AZAPLUG Support')}</header>
   <div class="msgs" id="msgs">${msgsHtml()}</div>
   <form class="composer" data-form="chat"><label class="rb" aria-label="Attach photo" style="cursor:pointer">${I('clip')}<input id="c-file" type="file" accept="image/*" hidden></label>
    <span class="inp"><input id="c-in" placeholder="Type a message..." aria-label="Message" autocomplete="off"></span>
@@ -787,6 +843,7 @@ const VN={rec:null,MAX:120,id:null,audio:null};
 const VN_URL=()=>'/api/chat/send';
 const mmss=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
 const vnMime=()=>window.MediaRecorder?['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported(t))||'':'';
+const inChat=()=>S.route==='chat';
 function vnParse(src){if(typeof src!=='string')return null;
   const st=/^\/api\/media\/(?:u|staff|team)\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(?:m4a|webm|ogg|mp3)\?a=1(?:&dur=(\d+))?(?:&w=(\d+))?$/.exec(src);   // voice note kept in storage
   if(st)return {dur:+st[1]||0,w:/^[0-9]{8,64}$/.test(st[2]||'')?st[2]:'',url:src};
@@ -796,7 +853,10 @@ function vnParse(src){if(typeof src!=='string')return null;
 function voiceHtml(m){const v=vnParse(m.imageData);if(!v)return '';
   return `<div class="voice" data-vnid="${esc(m.id)}"><button type="button" class="pl" data-vn="play" aria-label="Play voice note">${I('play')}</button><span class="wave" data-vn="seek" aria-hidden="true">${(v.w||'24536475863524364758463524365746').split('').map(b=>`<i style="height:${4+b*2.6}px"></i>`).join('')}</span><span class="dur" data-d="${mmss(v.dur)}">${mmss(v.dur)}</span></div>`}
 // Repaint every voice bubble: the one that is playing shows pause, its progress and the running time.
-function vnPaint(){document.querySelectorAll('.voice[data-vnid]').forEach(el=>{const on=VN.audio&&el.dataset.vnid===String(VN.id),a=VN.audio,bars=el.querySelectorAll('.wave i'),d=el.querySelector('.dur'),pl=el.querySelector('.pl');
+// WhatsApp-style grouping: the first bubble of each run gets a little tail
+function waGroup(){const b=$('#msgs');if(!b)return;let prev=null;for(const el of b.children){if(!el.classList.contains('msg')){prev=null;continue}
+  const side=el.classList.contains('out')?'out':'in';el.classList.toggle('tl',side!==prev);prev=side}}
+function vnPaint(){waGroup();document.querySelectorAll('.voice[data-vnid]').forEach(el=>{const on=VN.audio&&el.dataset.vnid===String(VN.id),a=VN.audio,bars=el.querySelectorAll('.wave i'),d=el.querySelector('.dur'),pl=el.querySelector('.pl');
   const total=on?(VN.dur||(isFinite(a.duration)?a.duration:0)):0,frac=on&&total?Math.min(1,a.currentTime/total):0,playing=on&&!a.paused;
   bars.forEach((b,i)=>b.classList.toggle('on',on&&i<Math.round(frac*bars.length)));
   if(pl.dataset.p!==String(playing)){pl.dataset.p=String(playing);pl.innerHTML=I(playing?'pause':'play');pl.setAttribute('aria-label',(playing?'Pause':'Play')+' voice note')}
@@ -816,7 +876,7 @@ async function recStart(){if(VN.rec||VN.starting)return;const type=vnMime();
   try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}})}
   catch(e){VN.starting=false;return toast(e.name==='NotAllowedError'||e.name==='SecurityError'?'Allow the microphone for AZAPLUG in your phone settings to send voice notes':'No microphone was found')}
   VN.starting=false;const c=$('.composer');
-  if(S.route!=='chat'||!c){stream.getTracks().forEach(t=>t.stop());return}
+  if(!inChat()||!c){stream.getTracks().forEach(t=>t.stop());return}
   let rec;try{rec=new MediaRecorder(stream,{mimeType:type,audioBitsPerSecond:32000})}catch(e){stream.getTracks().forEach(t=>t.stop());return toast('Voice notes are not supported on this browser')}
   Object.assign(VN,{rec,stream,type,chunks:[],levels:[],cancel:false,t0:Date.now(),an:null,ctx:null});
   rec.ondataavailable=e=>{if(e.data&&e.data.size)VN.chunks.push(e.data)};rec.onstop=recDone;
@@ -840,7 +900,7 @@ async function recDone(){if(!VN.rec)return;const {chunks,type,secs,levels,cancel
   const top=Math.max(...w);for(let i=0;i<n;i++)w[i]=top>.02?Math.max(1,Math.round(w[i]/top*9)):0; // bars are relative to the loudest moment, so quiet voices still show a shape
   try{const b64=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]||'');fr.onerror=rej;fr.readAsDataURL(blob)});
     const imageData=`data:${type.replace(/\s/g,'')};dur=${Math.max(1,Math.round(secs))}${w.some(x=>x>0)?';w='+w.join(''):''};base64,${b64}`;
-    const d=await api('POST',VN_URL(),{imageData});S.chat.push(d.message);const box=$('#msgs');if(box&&S.route==='chat'){box.innerHTML=msgsHtml();chatBottom()}}
+    const d=await api('POST',VN_URL(),{imageData});S.chat.push(d.message);const box=$('#msgs');if(box&&inChat()){box.innerHTML=msgsHtml();chatBottom()}}
   catch(e){toast(e.message||'Could not send the voice note')}}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-vn]');if(!b)return;const k=b.dataset.vn;
   if(k==='recStart')recStart();else if(k==='recCancel')recEnd(true);else if(k==='recSend')recEnd(false);
@@ -864,7 +924,7 @@ function uiConfirm(title,text,ok){return new Promise(res=>{const d=document.crea
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-md]');if(!b)return;const id=b.dataset.md;
   if(!await uiConfirm('Delete this message?','It will be removed from the chat for everyone.','Delete'))return;
   try{await api('DELETE',MD_URL(id));if(String(VN.id)===id)vnStop();S.chat=S.chat.filter(m=>String(m.id)!==id);
-    const box=$('#msgs');if(box&&S.route==='chat'){const y=box.scrollTop;box.innerHTML=msgsHtml();vnPaint();box.scrollTop=y}toast('Message deleted')}
+    const box=$('#msgs');if(box&&inChat()){const y=box.scrollTop;box.innerHTML=msgsHtml();vnPaint();box.scrollTop=y}toast('Message deleted')}
   catch(err){toast(err.message||'Could not delete the message')}});
 let poll=null;
 function render(){$('#app').innerHTML=V[S.route]();if(S.route==='chat')chatBottom();if(S.route==='receive')drawQR()}
@@ -1008,9 +1068,93 @@ function insShow(){if(!(insAndroid||insIOS)||insStandalone()||insSkipped()||docu
   w.addEventListener('click',async e=>{if(e.target.closest('.x')||e.target===w){INS.closed=true;return insHide()}
     if(e.target.closest('.go')&&INS.ev){const ev=INS.ev;INS.ev=null;insHide();ev.prompt();try{await ev.userChoice}catch(err){}}});
   document.body.appendChild(w);
-  INS.t=setInterval(()=>{const hide=['chat','teamChat','lock','loading','allow','alertGate'].includes(S.route)||!notifOn()||!!document.querySelector('.cfm');w.style.display=hide?'none':''},700)}
+  INS.t=setInterval(()=>{const hide=['chat','teamChat','lock','loading','allow','alertGate'].includes(S.route)||!notifOn()||!!document.querySelector('.cfm')||!!CALL.id;w.style.display=hide?'none':''},700)}
 // Android browsers that never offer an install button (e.g. Firefox) still get the steps.
 setTimeout(()=>{if(!INS.ev)insShow()},5000);
+/* ---------- In-app calls (voice and video, like WhatsApp) ----------
+   The server only passes the call setup between the two phones (see /api/call/* in server.js). */
+const CALL={as:'user',id:null,pc:null,role:null,stream:null,video:false,since:0,poll:null,tone:null,name:'',t0:0,tick:null,muted:false,camOff:false,seen:new Set(),pending:[],busy:false,offer:null,answered:false};
+const CI={
+ phone:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
+ video:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>',
+ end:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 0 1 0-1.41C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71 0 .28-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28a11.27 11.27 0 0 0-2.67-1.85.996.996 0 0 1-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z"/></svg>',
+ mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></svg>',
+ micoff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m2 2 20 20M9 9v2a3 3 0 0 0 5.12 2.12M15 9.34V5a3 3 0 0 0-5.94-.6M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23M12 19v3"/></svg>',
+ cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8z"/><rect x="2" y="6" width="14" height="12" rx="2"/></svg>',
+ camoff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20M16 16v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L22 8v8"/></svg>'};
+const callIcons=(to,name)=>`<button type="button" class="wa-ic" data-call="${esc(to)}" data-cname="${esc(name)}" data-cvideo="1" aria-label="Video call">${CI.video}</button><button type="button" class="wa-ic" data-call="${esc(to)}" data-cname="${esc(name)}" aria-label="Voice call">${CI.phone}</button>`;
+const callReady=()=>{try{return !!S.me&&!BIO.open.includes(S.route)}catch(e){return false}};
+const callInit=n=>String(n||'?').split(/\s+/).filter(Boolean).slice(0,2).map(x=>x[0].toUpperCase()).join('')||'?';
+function callBox(){let u=document.getElementById('callui');if(u)return u;u=document.createElement('div');u.id='callui';u.setAttribute('role','dialog');u.setAttribute('aria-modal','true');
+  u.innerHTML='<video id="call-remote" autoplay playsinline></video><video id="call-local" autoplay playsinline muted></video><div class="ct"><span class="cav" id="cui-av"></span><b id="cui-name"></b><small id="cui-st"></small></div><div class="cb" id="cui-btns"></div>';
+  u.addEventListener('click',e=>{const b=e.target.closest('[data-ck]');if(!b)return;const k=b.dataset.ck;
+    if(k==='accept')callAccept();else if(k==='decline')callDecline();else if(k==='end')callEnd('Call ended');
+    else if(k==='mute'){CALL.muted=!CALL.muted;(CALL.stream?CALL.stream.getAudioTracks():[]).forEach(t=>t.enabled=!CALL.muted);callUI()}
+    else if(k==='cam'){CALL.camOff=!CALL.camOff;(CALL.stream?CALL.stream.getVideoTracks():[]).forEach(t=>t.enabled=!CALL.camOff);callUI()}});
+  document.body.appendChild(u);return u}
+function callUI(st){const u=callBox();if(st)CALL.ui=st;st=CALL.ui;u.className='on'+(CALL.video?' vid':'')+(st==='active'?' live':'')+(st==='incoming'||st==='calling'?' ringing':'');
+  $('#cui-av').textContent=callInit(CALL.name);$('#cui-name').textContent=CALL.name;
+  const kind=CALL.video?'video':'voice',secs=CALL.t0?Math.floor((Date.now()-CALL.t0)/1000):0;
+  $('#cui-st').textContent=st==='incoming'?`Incoming ${kind} call`:st==='calling'?(CALL.id?'Ringing…':'Calling…'):st==='connecting'?'Connecting…':st==='active'?Math.floor(secs/60)+':'+String(secs%60).padStart(2,'0'):'';
+  const btn=(k,icon,label,cls)=>`<button type="button" data-ck="${k}" class="${cls||''}" aria-label="${label}"><i>${icon}</i>${label}</button>`;
+  $('#cui-btns').innerHTML=st==='incoming'?btn('decline',CI.end,'Decline','c-red')+btn('accept',CALL.video?CI.video:CI.phone,'Accept','c-green')
+    :btn('mute',CALL.muted?CI.micoff:CI.mic,CALL.muted?'Unmute':'Mute',CALL.muted?'c-on':'')+(CALL.video?btn('cam',CALL.camOff?CI.camoff:CI.cam,CALL.camOff?'Camera on':'Camera off',CALL.camOff?'c-on':''):'')+btn('end',CI.end,'End','c-red')}
+// Ring sounds made in the browser (no sound files needed)
+let CALL_AC=null;
+function callTone(kind){clearInterval(CALL.tone);CALL.tone=null;try{navigator.vibrate&&navigator.vibrate(0)}catch(e){}if(!kind)return;
+  try{CALL_AC=CALL_AC||new (window.AudioContext||window.webkitAudioContext)();CALL_AC.resume&&CALL_AC.resume()}catch(e){CALL_AC=null}
+  const p=kind==='ring'?{f:[880,660],on:.35,every:1600}:{f:[425],on:1,every:3000};
+  const play=()=>{if(kind==='ring')try{navigator.vibrate&&navigator.vibrate([400,200,400])}catch(e){}if(!CALL_AC)return;
+    p.f.forEach((f,i)=>{const o=CALL_AC.createOscillator(),g=CALL_AC.createGain(),t=CALL_AC.currentTime+i*(p.on+.08);o.frequency.value=f;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.12,t+.03);g.gain.setValueAtTime(.12,t+p.on);g.gain.exponentialRampToValueAtTime(.0001,t+p.on+.05);o.connect(g);g.connect(CALL_AC.destination);o.start(t);o.stop(t+p.on+.1)})};
+  play();CALL.tone=setInterval(play,p.every)}
+async function callIce(){try{return (await api('GET','/api/call/ice?as='+CALL.as)).iceServers}catch(e){return [{urls:'stun:stun.l.google.com:19302'}]}}
+const callSendIce=c=>api('POST','/api/call/'+CALL.id+'/ice',{as:CALL.as,c}).catch(()=>{});
+async function callMedia(){return navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:CALL.video?{facingMode:'user',width:{ideal:640},height:{ideal:480}}:false})}
+async function callPC(){const pc=new RTCPeerConnection({iceServers:await callIce()});CALL.pc=pc;
+  pc.onicecandidate=e=>{if(!e.candidate)return;const c=e.candidate.toJSON();CALL.id?callSendIce(c):CALL.pending.push(c)};
+  pc.ontrack=e=>{const st=e.streams[0]||new MediaStream([e.track]),el=$('#call-remote');if(el&&el.srcObject!==st){el.srcObject=st;el.play().catch(()=>{})}};
+  pc.onconnectionstatechange=()=>{const s=pc.connectionState;if(s==='connected'&&CALL.ui!=='active'){CALL.t0=Date.now();callTone(null);callUI('active');clearInterval(CALL.tick);CALL.tick=setInterval(()=>CALL.ui==='active'&&callUI(),1000)}
+    if(s==='failed')callEnd('The call could not connect. Check your internet and try again.')};
+  CALL.stream.getTracks().forEach(t=>pc.addTrack(t,CALL.stream));const lv=$('#call-local');if(lv&&CALL.video){lv.srcObject=CALL.stream;lv.play().catch(()=>{})}
+  return pc}
+function callMediaError(e){return e&&e.name==='NotAllowedError'?'Allow the microphone'+(CALL.video?' and camera':'')+' for AZAPLUG to make calls':'No microphone'+(CALL.video?' or camera':'')+' was found'}
+async function callStart(to,name,video){if(CALL.id||CALL.busy)return;
+  if(!window.RTCPeerConnection||!navigator.mediaDevices)return toast('Calls are not supported on this browser');
+  CALL.busy=true;Object.assign(CALL,{name,video:!!video,role:'a',since:0,pending:[],answered:false,muted:false,camOff:false,t0:0});callUI('calling');
+  try{CALL.stream=await callMedia()}catch(e){CALL.busy=false;callCleanup();return toast(callMediaError(e))}
+  try{const pc=await callPC(),off=await pc.createOffer();await pc.setLocalDescription(off);
+    const d=await api('POST','/api/call/start',{as:CALL.as,to,video:!!video,sdp:{type:off.type,sdp:off.sdp}});
+    CALL.id=d.id;CALL.pending.forEach(callSendIce);CALL.pending=[];callUI('calling');callTone('back');callLoop()}
+  catch(e){callCleanup();toast(e.message||'Could not start the call')}
+  CALL.busy=false}
+function callLoop(){clearInterval(CALL.poll);CALL.poll=setInterval(async()=>{const id=CALL.id;if(!id)return;let d;
+  try{d=await api('GET','/api/call/'+id+'?as='+CALL.as+'&since='+CALL.since)}catch(e){return}
+  if(CALL.id!==id)return;
+  if(d.answer&&CALL.role==='a'&&!CALL.answered){CALL.answered=true;callTone(null);if(CALL.ui!=='active')callUI('connecting');try{await CALL.pc.setRemoteDescription(d.answer)}catch(e){}}
+  if(CALL.pc&&CALL.pc.remoteDescription&&d.ice&&d.ice.length){CALL.since+=d.ice.length;for(const c of d.ice){try{await CALL.pc.addIceCandidate(c)}catch(e){}}}
+  if(['ended','declined','missed','answered-elsewhere'].includes(d.state))callEnd(d.state==='declined'?'Call declined':d.state==='missed'&&CALL.role==='a'?'No answer':d.state==='answered-elsewhere'?'Answered on another device':CALL.ui==='incoming'?'Missed call':'Call ended',true)},900)}
+function callIncoming(c){if(CALL.id||CALL.busy)return;CALL.seen.add(c.id);
+  Object.assign(CALL,{id:c.id,role:'b',name:c.name,video:!!c.video,offer:c.offer,since:0,pending:[],answered:false,muted:false,camOff:false,t0:0});
+  callUI('incoming');callTone('ring');callLoop()}
+async function callAccept(){if(CALL.busy||!CALL.id)return;CALL.busy=true;callTone(null);callUI('connecting');
+  try{CALL.stream=await callMedia()}catch(e){CALL.busy=false;toast(callMediaError(e));return callDecline()}
+  try{const pc=await callPC();await pc.setRemoteDescription(CALL.offer);const ans=await pc.createAnswer();await pc.setLocalDescription(ans);
+    await api('POST','/api/call/'+CALL.id+'/accept',{as:CALL.as,sdp:{type:ans.type,sdp:ans.sdp}});CALL.pending.forEach(callSendIce);CALL.pending=[]}
+  catch(e){toast(e.message||'Could not answer the call');callCleanup()}
+  CALL.busy=false}
+function callDecline(){if(CALL.id)api('POST','/api/call/'+CALL.id+'/decline',{as:CALL.as}).catch(()=>{});callCleanup()}
+function callEnd(msg,remote){if(!remote&&CALL.id)api('POST','/api/call/'+CALL.id+'/end',{as:CALL.as}).catch(()=>{});const had=!!CALL.id;callCleanup();if(had&&msg)toast(msg);
+  if(had&&inChat()&&typeof refreshChat==='function')setTimeout(refreshChat,1200)}
+function callCleanup(){clearInterval(CALL.poll);clearInterval(CALL.tick);callTone(null);
+  if(CALL.stream)CALL.stream.getTracks().forEach(t=>t.stop());if(CALL.pc)try{CALL.pc.close()}catch(e){}
+  ['call-remote','call-local'].forEach(i=>{const v=document.getElementById(i);if(v)v.srcObject=null});
+  Object.assign(CALL,{id:null,pc:null,stream:null,role:null,offer:null,t0:0,ui:null});const u=document.getElementById('callui');if(u)u.className=''}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-call]');if(!b)return;e.preventDefault();e.stopPropagation();callStart(b.dataset.call,b.dataset.cname,!!b.dataset.cvideo)},true);
+// Look for incoming calls while the app is open (a push alert brings people back to the app when it is closed)
+async function callCheck(){if(document.visibilityState!=='visible'||CALL.id||CALL.busy||!callReady())return;
+  try{const d=await api('GET','/api/call/incoming?as='+CALL.as);const c=(d.calls||[]).find(x=>!CALL.seen.has(x.id));if(c)callIncoming(c)}catch(e){}}
+setInterval(callCheck,3000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(callCheck,300)});
+window.addEventListener('pagehide',()=>{if(CALL.id&&CALL.ui==='active')navigator.sendBeacon&&navigator.sendBeacon('/api/call/'+CALL.id+'/end',new Blob([JSON.stringify({as:CALL.as})],{type:'application/json'}))});
 BIO.login='login';BIO.open=['alertGate','loading','splash','role','login','signup','verify','setpin','forgot','reset','lock','allow'];
 const bioEnter=()=>enter();
 /* ---------- 6-digit PIN, email code, forgot PIN ---------- */

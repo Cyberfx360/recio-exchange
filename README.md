@@ -20,7 +20,15 @@
 > not inside the database. Old pictures already in the database move there by themselves in the background.
 > Chat photos and voice notes older than 90 days are removed (receipts are kept forever); change this with `MEDIA_DAYS` on Render.
 >
-> > For chat managers and vendors to message each other, run this one line (it also saves each staff member's department):
+> > For the admin to message every staff member, run this one line:
+> ```sql
+> alter table team_messages alter column from_staff_id drop not null, alter column to_staff_id drop not null;
+> ```
+> **In-app calls** work with no setup on most networks. For calls on mobile data that will not connect,
+> create a TURN key in Cloudflare (Realtime → TURN, 1,000 GB free) and add `CF_TURN_KEY_ID` and `CF_TURN_API_TOKEN` on Render
+> (or use Metered: `METERED_DOMAIN` + `METERED_API_KEY`).
+>
+> For chat managers and vendors to message each other, run this one line (it also saves each staff member's department):
 > ```sql
 > alter table staff add column if not exists role text; create table if not exists team_messages (id uuid primary key default gen_random_uuid(), from_staff_id uuid not null references staff(id) on delete cascade, to_staff_id uuid not null references staff(id) on delete cascade, message_text text, image_data text, read_at timestamptz, created_at timestamptz not null default now()); alter table team_messages enable row level security;
 > ```
