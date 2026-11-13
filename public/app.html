@@ -232,6 +232,24 @@ a.role{display:flex}
 .chat .chat-top,.chat>.hd,.chat .esc{position:static!important;flex:none}
 .chat .msgs{flex:1;min-height:0;overflow-y:auto;padding-bottom:18px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .chat .composer{position:static;transform:none;width:100%;flex:none}
+/* Voice notes */
+.voice{min-width:214px;padding:2px 0 1px}
+.voice .pl{cursor:pointer;transition:transform .12s}.voice .pl:active{transform:scale(.92)}
+.voice .wave{flex:1;height:28px;gap:2px;cursor:pointer}
+.voice .wave i{flex:1;max-width:3px;min-height:3px;opacity:.38;transition:opacity .12s}.voice .wave i.on{opacity:1}
+.voice .dur{font:500 12px var(--mono);opacity:.85;min-width:32px;text-align:right}
+.composer:not(.typing)>.tx{display:none}.composer.typing>.mic{display:none}
+.composer .rb.mic{background:var(--blue);color:#fff;box-shadow:0 6px 14px -4px rgba(13,77,199,.6)}
+.composer.rec>label,.composer.rec>.inp,.composer.rec>button{display:none}
+.recbar{display:flex;align-items:center;gap:10px;width:100%}
+.recbar .del{color:var(--red);background:#FEF2F2}
+.recmid{flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:42px;border-radius:999px;background:#FEF2F2;padding:0 14px;overflow:hidden}
+.recmid b{font:600 14px var(--mono);color:var(--slate);flex:none}
+.recmid .dot{width:10px;height:10px;border-radius:50%;background:var(--red);flex:none;animation:recp 1s ease-in-out infinite}
+.recmid .wave{flex:1;min-width:0;justify-content:flex-end;overflow:hidden;color:var(--red);height:24px}
+.recmid .wave i{flex:none}
+@keyframes recp{0%,100%{opacity:1}50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.recmid .dot{animation:none}}
 </style>
 </head>
 <body>
@@ -259,8 +277,10 @@ const P={
  phone:'<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
  info:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
  clip:'<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+ trash:'<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
  mic:'<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
  send:'<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>',
+ pause:'<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
  play:'<polygon points="6 4 20 12 6 20 6 4"/>',
  imgoff:'<line x1="2" y1="2" x2="22" y2="22"/><path d="M10.41 10.41a2 2 0 1 1-2.83-2.83"/><line x1="13.5" y1="13.5" x2="6" y2="21"/><line x1="18" y1="12" x2="21" y2="15"/><path d="M3.59 3.59A2 2 0 0 0 3 5v14a2 2 0 0 0 2 2h14c.55 0 1.05-.22 1.41-.59"/><path d="M21 15V5a2 2 0 0 0-2-2H9"/>',
  bank:'<line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/>',
@@ -667,12 +687,12 @@ chat:()=>`<section class="chat">
   <div class="msgs" id="msgs">${msgsHtml()}</div>
   <form class="composer" data-form="chat"><label class="rb" aria-label="Attach photo" style="cursor:pointer">${I('clip')}<input id="c-file" type="file" accept="image/*" hidden></label>
    <span class="inp"><input id="c-in" placeholder="Type a message..." aria-label="Message" autocomplete="off"></span>
-   <button class="rb send" aria-label="Send message">${I('send')}</button></form></section>`
+   <button type="button" class="rb mic" data-vn="recStart" aria-label="Record voice note">${I('mic')}</button><button class="rb send tx" aria-label="Send message">${I('send')}</button></form></section>`
 };
 function msgsHtml(){if(!S.chat.length)return '<p class="empty">Send us a message and we will help you.</p>';let day='';
   return S.chat.map(m=>{const d=new Date(m.createdAt),ds=fd(d),img=safeImg(m.imageData),mine=m.sender==='user';
     const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}">${mine?'':'<span class="who">AZAPLUG Agent</span>'}${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">`:''}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(d)}</time></div>`}).join('')}
+    return `${head}<div class="msg ${mine?'out':'in'}">${mine?'':'<span class="who">AZAPLUG Agent</span>'}${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">`:''}${voiceHtml(m)}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(d)}</time></div>`}).join('')}
 
 /* ---------- Render + navigation ---------- */
 /* ---------- Back gesture: each screen is a history entry, so swiping back returns to the previous screen ---------- */
@@ -687,13 +707,80 @@ window.addEventListener('popstate',e=>{if(NAV.skip){NAV.skip=false;return}const 
 function goBack(target){const st=NAV.stack;if(st.length>1&&st[st.length-2].r===target){history.back();return true}return false}
 /* ---------- Chat layout: header and message box stay put; only the messages scroll (also when the keyboard opens) ---------- */
 function fitChat(){const c=$('.chat'),v=window.visualViewport;if(!c||!v)return;c.style.height=v.height+'px';c.style.top=v.offsetTop+'px'}
-function chatBottom(){fitChat();const m=$('#msgs');if(m)m.scrollTop=m.scrollHeight}
+function chatBottom(){fitChat();vnPaint();const m=$('#msgs');if(m)m.scrollTop=m.scrollHeight}
 if(window.visualViewport){visualViewport.addEventListener('resize',chatBottom);visualViewport.addEventListener('scroll',fitChat)}
+/* ---------- Voice notes ----------
+   A voice note travels in the same field as a chat photo, as "data:audio/...;dur=SECONDS;w=WAVEFORM;base64,...".
+   dur and w are ours (length and the bar heights); they are stripped off again before the sound is played. */
+const VN={rec:null,MAX:120,id:null,audio:null};
+const VN_URL=()=>'/api/chat/send';
+const mmss=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+const vnMime=()=>window.MediaRecorder?['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported(t))||'':'';
+function vnParse(src){if(typeof src!=='string'||!/^data:audio\/[a-z0-9.+-]+[;,]/i.test(src))return null;
+  const i=src.indexOf(','),head=src.slice(5,i).split(';'),get=k=>(head.find(p=>p.startsWith(k+'='))||'').slice(k.length+1);
+  return {dur:Math.max(0,+get('dur')||0),w:/^[0-9]{8,64}$/.test(get('w'))?get('w'):'',type:head.filter(p=>!/^(dur|w)=/.test(p)&&p!=='base64').join(';'),b64:src.slice(i+1)}}
+function voiceHtml(m){const v=vnParse(m.imageData);if(!v)return '';
+  return `<div class="voice" data-vnid="${esc(m.id)}"><button type="button" class="pl" data-vn="play" aria-label="Play voice note">${I('play')}</button><span class="wave" data-vn="seek" aria-hidden="true">${(v.w||'24536475863524364758463524365746').split('').map(b=>`<i style="height:${4+b*2.6}px"></i>`).join('')}</span><span class="dur" data-d="${mmss(v.dur)}">${mmss(v.dur)}</span></div>`}
+// Repaint every voice bubble: the one that is playing shows pause, its progress and the running time.
+function vnPaint(){document.querySelectorAll('.voice[data-vnid]').forEach(el=>{const on=VN.audio&&el.dataset.vnid===String(VN.id),a=VN.audio,bars=el.querySelectorAll('.wave i'),d=el.querySelector('.dur'),pl=el.querySelector('.pl');
+  const total=on?(VN.dur||(isFinite(a.duration)?a.duration:0)):0,frac=on&&total?Math.min(1,a.currentTime/total):0,playing=on&&!a.paused;
+  bars.forEach((b,i)=>b.classList.toggle('on',on&&i<Math.round(frac*bars.length)));
+  if(pl.dataset.p!==String(playing)){pl.dataset.p=String(playing);pl.innerHTML=I(playing?'pause':'play');pl.setAttribute('aria-label',(playing?'Pause':'Play')+' voice note')}
+  d.textContent=on&&a.currentTime>0?mmss(a.currentTime):d.dataset.d})}
+function vnStop(){const a=VN.audio;if(a){a.onended=a.onerror=a.ontimeupdate=a.onplay=a.onpause=null;a.pause();if(VN.url)URL.revokeObjectURL(VN.url)}VN.audio=null;VN.id=null;VN.url=null;vnPaint()}
+function vnPlay(id,frac){const m=S.chat.find(x=>String(x.id)===String(id)),v=m&&vnParse(m.imageData);if(!v)return;
+  if(VN.audio&&String(VN.id)===String(id)){const a=VN.audio;if(frac!=null&&VN.dur){a.currentTime=frac*VN.dur;if(a.paused)a.play().catch(()=>{})}else a.paused?a.play().catch(()=>{}):a.pause();return}
+  vnStop();
+  try{const bin=atob(v.b64.replace(/\s/g,'')),u8=new Uint8Array(bin.length);for(let k=0;k<bin.length;k++)u8[k]=bin.charCodeAt(k);VN.url=URL.createObjectURL(new Blob([u8],{type:v.type}))}catch(e){return toast('This voice note is damaged')}
+  const a=new Audio(VN.url);VN.audio=a;VN.id=id;VN.dur=v.dur;
+  a.ontimeupdate=a.onplay=a.onpause=vnPaint;a.onended=vnStop;a.onerror=()=>{vnStop();toast('This voice note cannot be played on this phone')};
+  if(frac!=null&&v.dur)try{a.currentTime=frac*v.dur}catch(e){}
+  a.play().catch(()=>{})}
+async function recStart(){if(VN.rec||VN.starting)return;const type=vnMime();
+  if(!type||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return toast('Voice notes are not supported on this browser');
+  vnStop();VN.starting=true;let stream;
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}})}
+  catch(e){VN.starting=false;return toast(e.name==='NotAllowedError'||e.name==='SecurityError'?'Allow the microphone for AZAPLUG in your phone settings to send voice notes':'No microphone was found')}
+  VN.starting=false;const c=$('.composer');
+  if(S.route!=='chat'||!c){stream.getTracks().forEach(t=>t.stop());return}
+  let rec;try{rec=new MediaRecorder(stream,{mimeType:type,audioBitsPerSecond:32000})}catch(e){stream.getTracks().forEach(t=>t.stop());return toast('Voice notes are not supported on this browser')}
+  Object.assign(VN,{rec,stream,type,chunks:[],levels:[],cancel:false,t0:Date.now(),an:null,ctx:null});
+  rec.ondataavailable=e=>{if(e.data&&e.data.size)VN.chunks.push(e.data)};rec.onstop=recDone;
+  try{const AC=window.AudioContext||window.webkitAudioContext;VN.ctx=new AC();VN.an=VN.ctx.createAnalyser();VN.an.fftSize=256;VN.ctx.createMediaStreamSource(stream).connect(VN.an);VN.buf=new Uint8Array(VN.an.fftSize)}catch(e){VN.an=null}
+  rec.start();c.classList.add('rec');
+  c.insertAdjacentHTML('beforeend',`<div class="recbar"><button type="button" class="rb del" data-vn="recCancel" aria-label="Delete recording">${I('trash')}</button><span class="recmid" role="status" aria-label="Recording voice note"><i class="dot"></i><b id="rec-t">0:00</b><span class="wave" id="rec-w"></span></span><button type="button" class="rb send" data-vn="recSend" aria-label="Send voice note">${I('send')}</button></div>`);
+  VN.timer=setInterval(recTick,100)}
+function recTick(){const s=(Date.now()-VN.t0)/1000;let lv=0;
+  if(VN.an){VN.an.getByteTimeDomainData(VN.buf);let p=0;for(let k=0;k<VN.buf.length;k++)p=Math.max(p,Math.abs(VN.buf[k]-128));lv=Math.min(1,p/80)}
+  VN.levels.push(lv);const t=$('#rec-t'),w=$('#rec-w');if(t)t.textContent=mmss(s);
+  if(w)w.innerHTML=VN.levels.slice(-34).map(l=>`<i style="height:${3+l*20}px"></i>`).join('');
+  if(s>=VN.MAX){toast('Voice notes can be up to 2 minutes');recEnd(false)}}
+function recEnd(cancel){if(!VN.rec)return;VN.cancel=cancel;VN.secs=(Date.now()-VN.t0)/1000;clearInterval(VN.timer);const rec=VN.rec;
+  try{if(rec.state!=='inactive')rec.stop();else recDone()}catch(e){recDone()}}
+async function recDone(){if(!VN.rec)return;const {chunks,type,secs,levels,cancel,stream,ctx}=VN;VN.rec=null;
+  stream.getTracks().forEach(t=>t.stop());if(ctx)ctx.close().catch(()=>{});
+  const c=$('.composer');if(c){c.classList.remove('rec');const b=c.querySelector('.recbar');if(b)b.remove()}
+  if(cancel)return;if(secs<1)return toast('That was too short. Record a little longer');
+  const blob=new Blob(chunks,{type});if(!blob.size)return toast('Nothing was recorded. Try again');
+  const n=32,w=[];for(let i=0;i<n;i++){const a=Math.floor(i*levels.length/n),b=Math.max(a+1,Math.floor((i+1)*levels.length/n));w.push(Math.max(0,...levels.slice(a,b)))}
+  const top=Math.max(...w);for(let i=0;i<n;i++)w[i]=top>.02?Math.max(1,Math.round(w[i]/top*9)):0; // bars are relative to the loudest moment, so quiet voices still show a shape
+  try{const b64=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result).split(',')[1]||'');fr.onerror=rej;fr.readAsDataURL(blob)});
+    const imageData=`data:${type.replace(/\s/g,'')};dur=${Math.max(1,Math.round(secs))}${w.some(x=>x>0)?';w='+w.join(''):''};base64,${b64}`;
+    const d=await api('POST',VN_URL(),{imageData});S.chat.push(d.message);const box=$('#msgs');if(box&&S.route==='chat'){box.innerHTML=msgsHtml();chatBottom()}}
+  catch(e){toast(e.message||'Could not send the voice note')}}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-vn]');if(!b)return;const k=b.dataset.vn;
+  if(k==='recStart')recStart();else if(k==='recCancel')recEnd(true);else if(k==='recSend')recEnd(false);
+  else{const el=b.closest('.voice');if(!el)return;if(k==='seek'){const r=b.getBoundingClientRect();vnPlay(el.dataset.vnid,Math.min(.98,Math.max(0,(e.clientX-r.left)/r.width)))}else vnPlay(el.dataset.vnid)}});
+// The send arrow shows while there is text; the microphone shows when the box is empty.
+const vnSync=()=>{const i=$('#c-in');if(i)i.closest('.composer').classList.toggle('typing',!!i.value.trim())};
+document.addEventListener('input',e=>{if(e.target.id==='c-in')vnSync()});
+document.addEventListener('submit',()=>setTimeout(vnSync,0),true);
 let poll=null;
 function render(){$('#app').innerHTML=V[S.route]();if(S.route==='chat')chatBottom();if(S.route==='receive')drawQR()}
 function go(r,o,pop){
   if(r==='chat'&&S.route!=='chat'&&!pop)S.prev=S.route;
   if(S.route!==r)$('#toast').classList.remove('show');
+  if(r!=='chat'){recEnd(true);vnStop()}
   S.route=r;if(!pop)navPush(r);render();if(r!=='chat')window.scrollTo(0,0);
   clearInterval(poll);poll=null;
   if(!S.me)return;

@@ -317,6 +317,15 @@ app.get('/api/withdrawals', requireUser, requireApprovedUser, async (req, res) =
 // ============================================================
 // CUSTOMER: chat
 // ============================================================
+// A chat attachment is a photo or a voice note, sent as a data: URL. Returns an error message, or null if fine.
+function badAttachment(data) {
+  if (data === undefined || data === null || data === '') return null;
+  if (typeof data !== 'string' || !/^data:(image|audio)\/[a-z0-9.+-]+[;,]/i.test(data)) return 'Only photos and voice notes can be sent.';
+  if (/^data:audio\//i.test(data) && data.length > 2500000) return 'That voice note is too long. Keep it under 2 minutes.';
+  return null;
+}
+const isVoice = d => typeof d === 'string' && /^data:audio\//i.test(d);
+
 app.get('/api/chat/messages', requireUser, async (req, res) => {
   try { res.json({ messages: await store.messagesForUser(req.session.userId) }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load messages.' }); }
@@ -325,8 +334,9 @@ app.post('/api/chat/send', requireUser, async (req, res) => {
   try {
     const { text, imageData } = req.body || {};
     if (!text && !imageData) return res.status(400).json({ error: 'Message is empty.' });
+    if (badAttachment(imageData)) return res.status(400).json({ error: badAttachment(imageData) });
     const msg = await store.addMessage({ userId: req.session.userId, sender: 'user', text, imageData });
-    store.findUserById(req.session.userId).then(u => alertTeam({ admin: true, chat: true }, `New message from ${u ? u.name : 'a customer'}`, text ? String(text).slice(0, 140) : 'Sent a photo', { admin: 'chats', staff: 'chats' })).catch(() => {});
+    store.findUserById(req.session.userId).then(u => alertTeam({ admin: true, chat: true }, `New message from ${u ? u.name : 'a customer'}`, text ? String(text).slice(0, 140) : isVoice(imageData) ? 'Sent a voice note' : 'Sent a photo', { admin: 'chats', staff: 'chats' })).catch(() => {});
     res.json({ ok: true, message: msg });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send message.' }); }
 });
@@ -465,10 +475,11 @@ app.post('/api/staff/chats/:userId/send', requireStaff, requireApprovedStaff, as
   try {
     const { text, imageData } = req.body || {};
     if (!text && !imageData) return res.status(400).json({ error: 'Message is empty.' });
+    if (badAttachment(imageData)) return res.status(400).json({ error: badAttachment(imageData) });
     const user = await store.findUserById(req.params.userId);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
     const msg = await store.addMessage({ userId: user.id, sender: 'admin', text, imageData });
-    notify(user.id, 'chat', 'AZAPLUG Support', text ? String(text).slice(0, 140) : 'Sent you a photo', { feed: false, go: 'chat' });
+    notify(user.id, 'chat', 'AZAPLUG Support', text ? String(text).slice(0, 140) : isVoice(imageData) ? 'Sent you a voice note' : 'Sent you a photo', { feed: false, go: 'chat' });
     res.json({ ok: true, message: msg });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send message.' }); }
 });
@@ -790,8 +801,9 @@ app.post('/api/admin/chats/:userId/send', requireAdmin, async (req, res) => {
   try {
     const { text, imageData } = req.body || {};
     if (!text && !imageData) return res.status(400).json({ error: 'Message is empty.' });
+    if (badAttachment(imageData)) return res.status(400).json({ error: badAttachment(imageData) });
     const msg = await store.addMessage({ userId: req.params.userId, sender: 'admin', text, imageData });
-    notify(req.params.userId, 'chat', 'AZAPLUG Support', text ? String(text).slice(0, 140) : 'Sent you a photo', { feed: false, go: 'chat' });
+    notify(req.params.userId, 'chat', 'AZAPLUG Support', text ? String(text).slice(0, 140) : isVoice(imageData) ? 'Sent you a voice note' : 'Sent you a photo', { feed: false, go: 'chat' });
     res.json({ ok: true, message: msg });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send message.' }); }
 });
