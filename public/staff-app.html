@@ -475,7 +475,7 @@ const S={route:'loading',me:null,portal:store.get('az_portal')==='chat'?'chat':'
 const $=s=>document.querySelector(s);
 const n0=n=>Number(n||0).toLocaleString('en-NG'), naira=n=>'₦'+n0(n);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const safeImg=s=>/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+$/i.test(s||'')?s:'';
+const safeImg=s=>/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+$/i.test(s||'')||/^\/api\/media\/(u|pub|staff|team)\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(jpg|png|webp|gif)$/.test(s||'')?s:'';   // pictures come as data: or from our own storage
 const num=v=>parseFloat(String(v).replace(/[^0-9.]/g,''))||0;
 const ini=n=>(String(n||'?').trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('')||'?').toUpperCase();
 const fd=d=>new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
@@ -709,12 +709,13 @@ function msgsHtml(){if(!S.chat.length)return '<p class="empty">No messages yet</
     return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>${m.sender==='user'&&S.portal==='chat'?((S.routed||{})[m.id]?`<span class="rtd">${I('checkc','style="width:13px;height:13px"')}Sent to ${esc(S.routed[m.id].title)} · ${esc(RTS[S.routed[m.id].status]||S.routed[m.id].status)}</span><br>`:`<button class="svp" data-act="routeOpen" data-id="${esc(m.id)}">${I('send','style="width:13px;height:13px"')}Send receipt to an account</button><br>`):''}`:''}${voiceHtml(m)}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(m.createdAt)}<button class="fw" data-act="fwdMsg" data-id="${esc(m.id)}" aria-label="Forward this message">${I('fwd','style="width:13px;height:13px"')}Forward</button>${mdBtn(m)}</time></div>`}).join('')}
 
 /* ---------- Render + navigation ---------- */
-function savePic(src,name){src=safeImg(src);if(!src)return toast('No picture to save');
-  try{const i=src.indexOf(','),type=(src.slice(0,i).match(/data:([^;]+)/)||[])[1]||'image/jpeg',bin=atob(src.slice(i+1).replace(/\s/g,'')),u8=new Uint8Array(bin.length);
-    for(let k=0;k<bin.length;k++)u8[k]=bin.charCodeAt(k);
-    const file=new File([u8],name+'.'+type.split('/')[1].replace('jpeg','jpg').replace('svg+xml','svg'),{type});
+async function savePic(src,name){src=safeImg(src);if(!src)return toast('No picture to save');
+  try{let blob;
+    if(src.startsWith('/api/media/')){const r=await fetch(src,{credentials:'same-origin'});if(!r.ok)throw new Error('gone');blob=await r.blob()}
+    else{const i=src.indexOf(','),type=(src.slice(0,i).match(/data:([^;]+)/)||[])[1]||'image/jpeg',bin=atob(src.slice(i+1).replace(/\s/g,'')),u8=new Uint8Array(bin.length);for(let k=0;k<bin.length;k++)u8[k]=bin.charCodeAt(k);blob=new Blob([u8],{type})}
+    const type=blob.type||'image/jpeg',file=new File([blob],name+'.'+type.split('/')[1].replace('jpeg','jpg').replace('svg+xml','svg'),{type});
     // Phones: open the share sheet, which has "Save Image" (a plain download link does nothing on iPhone).
-    if(matchMedia('(pointer:coarse)').matches&&navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({files:[file]}).catch(e=>{if(e.name!=='AbortError')toast('Could not open the save menu')});return}
+    if(matchMedia('(pointer:coarse)').matches&&navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file]});return}catch(e){if(e.name==='AbortError')return}}
     const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);toast('Picture saved to your downloads')}
   catch(e){toast('Could not save the picture')}}
 /* ---------- Alerts on this device (push) ---------- */
@@ -770,7 +771,10 @@ const VN={rec:null,MAX:120,id:null,audio:null};
 const VN_URL=()=>(S.route==='teamChat'?'/api/staff/team/'+encodeURIComponent(S.tid)+'/send':'/api/staff/chats/'+encodeURIComponent(S.id)+'/send');
 const mmss=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
 const vnMime=()=>window.MediaRecorder?['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported(t))||'':'';
-function vnParse(src){if(typeof src!=='string'||!/^data:audio\/[a-z0-9.+-]+[;,]/i.test(src))return null;
+function vnParse(src){if(typeof src!=='string')return null;
+  const st=/^\/api\/media\/(?:u|staff|team)\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(?:m4a|webm|ogg|mp3)\?a=1(?:&dur=(\d+))?(?:&w=(\d+))?$/.exec(src);   // voice note kept in storage
+  if(st)return {dur:+st[1]||0,w:/^[0-9]{8,64}$/.test(st[2]||'')?st[2]:'',url:src};
+  if(!/^data:audio\/[a-z0-9.+-]+[;,]/i.test(src))return null;
   const i=src.indexOf(','),head=src.slice(5,i).split(';'),get=k=>(head.find(p=>p.startsWith(k+'='))||'').slice(k.length+1);
   return {dur:Math.max(0,+get('dur')||0),w:/^[0-9]{8,64}$/.test(get('w'))?get('w'):'',type:head.filter(p=>!/^(dur|w)=/.test(p)&&p!=='base64').join(';'),b64:src.slice(i+1)}}
 function voiceHtml(m){const v=vnParse(m.imageData);if(!v)return '';
@@ -785,8 +789,8 @@ function vnStop(){const a=VN.audio;if(a){a.onended=a.onerror=a.ontimeupdate=a.on
 function vnPlay(id,frac){const m=S.chat.concat(S.inbox||[]).find(x=>String(x.id)===String(id)),v=m&&vnParse(m.imageData);if(!v)return;
   if(VN.audio&&String(VN.id)===String(id)){const a=VN.audio;if(frac!=null&&VN.dur){a.currentTime=frac*VN.dur;if(a.paused)a.play().catch(()=>{})}else a.paused?a.play().catch(()=>{}):a.pause();return}
   vnStop();
-  try{const bin=atob(v.b64.replace(/\s/g,'')),u8=new Uint8Array(bin.length);for(let k=0;k<bin.length;k++)u8[k]=bin.charCodeAt(k);VN.url=URL.createObjectURL(new Blob([u8],{type:v.type}))}catch(e){return toast('This voice note is damaged')}
-  const a=new Audio(VN.url);VN.audio=a;VN.id=id;VN.dur=v.dur;
+  if(!v.url)try{const bin=atob(v.b64.replace(/\s/g,'')),u8=new Uint8Array(bin.length);for(let k=0;k<bin.length;k++)u8[k]=bin.charCodeAt(k);VN.url=URL.createObjectURL(new Blob([u8],{type:v.type}))}catch(e){return toast('This voice note is damaged')}
+  const a=new Audio(v.url||VN.url);VN.audio=a;VN.id=id;VN.dur=v.dur;
   a.ontimeupdate=a.onplay=a.onpause=vnPaint;a.onended=vnStop;a.onerror=()=>{vnStop();toast('This voice note cannot be played on this phone')};
   if(frac!=null&&v.dur)try{a.currentTime=frac*v.dur}catch(e){}
   a.play().catch(()=>{})}

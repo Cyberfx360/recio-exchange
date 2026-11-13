@@ -16,7 +16,11 @@
 > `BREVO_API_KEY` (Brevo → SMTP & API → API Keys) and `MAIL_FROM` (the sender email you verified in Brevo).
 > Until both are set, sign-up works without the email code and "Forgot PIN" tells people to contact support.
 >
-> For chat managers and vendors to message each other, run this one line (it also saves each staff member's department):
+> **Photos and voice notes** are stored in Supabase Storage (a private bucket called `media`, created automatically),
+> not inside the database. Old pictures already in the database move there by themselves in the background.
+> Chat photos and voice notes older than 90 days are removed (receipts are kept forever); change this with `MEDIA_DAYS` on Render.
+>
+> > For chat managers and vendors to message each other, run this one line (it also saves each staff member's department):
 > ```sql
 > alter table staff add column if not exists role text; create table if not exists team_messages (id uuid primary key default gen_random_uuid(), from_staff_id uuid not null references staff(id) on delete cascade, to_staff_id uuid not null references staff(id) on delete cascade, message_text text, image_data text, read_at timestamptz, created_at timestamptz not null default now()); alter table team_messages enable row level security;
 > ```

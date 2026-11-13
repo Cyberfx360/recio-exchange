@@ -81,6 +81,7 @@ async function deleteUser(id) {
   for (const table of ['escalations', 'loans', 'notifications', 'push_subscriptions']) await clearOptional(table, 'user_id', id);
   const { error } = await supabase.from('users').delete().eq('id', id);
   if (error) throw error;
+  dropMediaFolder('u/' + safeOwner(id));   // their receipts, chat photos and voice notes
 }
 async function addToBalance(id, amount) {
   const user = await findUserById(id);
@@ -142,7 +143,7 @@ async function deleteStaff(id) {
 function accountRow(r) {
   return {
     id: r.id, staffId: r.staff_id, title: r.title,
-    accountNumber: r.account_number, bankName: r.bank_name, imageData: r.image_data,
+    accountNumber: r.account_number, bankName: r.bank_name, imageData: pubMedia(r.image_data),
     lowestAmount: Number(r.lowest_amount), lowestRate: Number(r.lowest_rate),
     higherAmount: Number(r.higher_amount), higherRate: Number(r.higher_rate),
     minAmount: Number(r.min_amount), maxAmount: Number(r.max_amount),
@@ -178,6 +179,7 @@ async function findAccountById(id) {
 }
 async function createAccount(a) {
   const id = uid();
+  if (a.imageData) a = { ...a, imageData: await toRef(a.imageData, 'pub/a') };
   const { error } = await supabase.from('accounts').insert({
     id, staff_id: a.staffId || null, title: a.title, account_number: a.accountNumber, bank_name: a.bankName,
     image_data: a.imageData || null, lowest_amount: a.lowestAmount, lowest_rate: a.lowestRate,
@@ -188,6 +190,7 @@ async function createAccount(a) {
   return findAccountById(id);
 }
 async function updateAccount(id, a) {
+  if (a.imageData) a = { ...a, imageData: await toRef(a.imageData, 'pub/a') };
   const patch = { updated_at: new Date().toISOString() };
   var map = { title:'title', accountNumber:'account_number', bankName:'bank_name', imageData:'image_data',
     lowestAmount:'lowest_amount', lowestRate:'lowest_rate', higherAmount:'higher_amount', higherRate:'higher_rate',
@@ -208,6 +211,156 @@ async function deleteAccount(id) {
 }
 
 // ============================================================
+// MEDIA: photos and voice notes live in Supabase Storage (bucket "media"), not in the database.
+// The database keeps a short reference like "media:u/<userId>/<id>.jpg;dur=5;w=..." (dur/w only for voice notes).
+// The apps receive "/api/media/u/<userId>/<id>.jpg" (voice: "...m4a?a=1&dur=5&w=...") and the server streams the file.
+// If Storage is not available, pictures are kept in the database like before, so nothing breaks.
+// ============================================================
+const MEDIA_BUCKET = 'media';
+const MEDIA_EXT = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
+  'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'm4a', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mpeg': 'mp3' };
+const MEDIA_TYPE = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', m4a: 'audio/mp4', webm: 'audio/webm', ogg: 'audio/ogg', mp3: 'audio/mpeg' };
+const AUDIO_EXT = /\.(m4a|webm|ogg|mp3)$/;
+const MEDIA_PATH = /^(u|pub|staff|team)\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(jpg|png|webp|gif|m4a|webm|ogg|mp3)$/;
+let mediaOk = null, mediaRetry = 0;
+async function mediaReady() {
+  if (mediaOk === true) return true;
+  if (mediaOk === false && Date.now() < mediaRetry) return false;
+  try {
+    const got = await supabase.storage.getBucket(MEDIA_BUCKET);
+    if (got.error) {
+      const made = await supabase.storage.createBucket(MEDIA_BUCKET, { public: false, fileSizeLimit: 6 * 1024 * 1024 });
+      if (made.error && !/exist/i.test(made.error.message)) throw made.error;
+    }
+    mediaOk = true;
+  } catch (err) {
+    console.error('Supabase Storage not available, keeping pictures in the database for now:', err.message || err);
+    mediaOk = false; mediaRetry = Date.now() + 10 * 60000;
+  }
+  return mediaOk;
+}
+// "media:path;dur=5;w=..." -> { path, meta }
+function parseRef(ref) {
+  if (typeof ref !== 'string' || !ref.startsWith('media:')) return null;
+  const parts = ref.slice(6).split(';'), path = parts.shift();
+  if (!MEDIA_PATH.test(path)) return null;
+  const meta = {}; parts.forEach(p => { const [k, v] = p.split('='); if (/^(dur|w)$/.test(k) && /^\d+$/.test(v || '')) meta[k] = v; });
+  return { path, meta };
+}
+// Database value -> what the apps receive
+function pubMedia(v) {
+  const r = parseRef(v);
+  if (!r) return v;
+  if (!AUDIO_EXT.test(r.path)) return '/api/media/' + r.path;
+  return '/api/media/' + r.path + '?a=1' + (r.meta.dur ? '&dur=' + r.meta.dur : '') + (r.meta.w ? '&w=' + r.meta.w : '');
+}
+// App value (data: URL, or an /api/media/ link being reused) -> database value. Uploads new files to Storage.
+async function toRef(v, folder) {
+  if (typeof v !== 'string' || !v) return v || null;
+  if (v.startsWith('/api/media/')) {
+    const [p, q] = v.slice(11).split('?'), qs = new URLSearchParams(q || '');
+    if (!MEDIA_PATH.test(p)) return null;
+    return 'media:' + p + (qs.get('dur') ? ';dur=' + qs.get('dur') : '') + (qs.get('w') ? ';w=' + qs.get('w') : '');
+  }
+  if (v.startsWith('media:')) return v;
+  if (!v.startsWith('data:') || !(await mediaReady())) return v;
+  const i = v.indexOf(','), head = v.slice(5, i).split(';'), type = (head[0] || '').toLowerCase(), ext = MEDIA_EXT[type];
+  if (!ext || i < 0) return v;
+  const meta = head.filter(h => /^(dur|w)=\d+$/.test(h));
+  const path = `${folder}/${uid()}.${ext}`;
+  const { error } = await supabase.storage.from(MEDIA_BUCKET).upload(path, Buffer.from(v.slice(i + 1), 'base64'), { contentType: MEDIA_TYPE[ext], upsert: false });
+  if (error) { console.error('Upload to Storage failed, keeping it in the database:', error.message); return v; }
+  return 'media:' + path + (meta.length ? ';' + meta.join(';') : '');
+}
+const safeOwner = id => String(id || 'x').replace(/[^A-Za-z0-9-]/g, '').slice(0, 40) || 'x';
+async function getMediaFile(path) {
+  if (!MEDIA_PATH.test(path)) return null;
+  const { data, error } = await supabase.storage.from(MEDIA_BUCKET).download(path);
+  if (error || !data) return null;
+  return { body: Buffer.from(await data.arrayBuffer()), type: MEDIA_TYPE[path.split('.').pop()] || 'application/octet-stream' };
+}
+// Is this stored file still used by any row? (a receipt made from a chat photo shares the same file)
+async function refUsed(ref) {
+  const r = parseRef(ref); if (!r) return true;
+  const like = 'media:' + r.path + '%';
+  const checks = [
+    supabase.from('trades').select('id').or(`receipt_image.like.${like},fail_image.like.${like},settlement_screenshot.like.${like}`).limit(1),
+    supabase.from('messages').select('id').like('image_data', like).limit(1),
+    supabase.from('withdrawals').select('id').like('reason_image', like).limit(1),
+    supabase.from('accounts').select('id').like('image_data', like).limit(1),
+    supabase.from('team_messages').select('id').like('image_data', like).limit(1),
+    supabase.from('forwards').select('id').like('image_data', like).limit(1)
+  ];
+  for (const q of checks) { const { data, error } = await q; if (!error && data && data.length) return true; if (error && !/does not exist/i.test(error.message)) return true; }
+  return false;
+}
+async function dropMedia(ref) {
+  try { const r = parseRef(ref); if (r && !(await refUsed(ref))) await supabase.storage.from(MEDIA_BUCKET).remove([r.path]); }
+  catch (err) { console.error('Could not remove a stored file:', err.message); }
+}
+async function dropMediaFolder(folder) {
+  try {
+    const { data } = await supabase.storage.from(MEDIA_BUCKET).list(folder, { limit: 1000 });
+    if (data && data.length) await supabase.storage.from(MEDIA_BUCKET).remove(data.map(f => folder + '/' + f.name));
+  } catch (err) { console.error('Could not remove stored files:', err.message); }
+}
+
+// Moves pictures that are still inside the database into Storage, a few at a time (runs in the background).
+const MIGRATE = [
+  { table: 'trades', col: 'receipt_image', folder: r => 'u/' + safeOwner(r.user_id), extra: 'user_id' },
+  { table: 'trades', col: 'fail_image', folder: r => 'u/' + safeOwner(r.user_id), extra: 'user_id' },
+  { table: 'trades', col: 'settlement_screenshot', folder: () => 'staff/s' },
+  { table: 'messages', col: 'image_data', folder: r => 'u/' + safeOwner(r.user_id), extra: 'user_id' },
+  { table: 'withdrawals', col: 'reason_image', folder: r => 'u/' + safeOwner(r.user_id), extra: 'user_id' },
+  { table: 'accounts', col: 'image_data', folder: () => 'pub/a' },
+  { table: 'forwards', col: 'image_data', folder: () => 'staff/f' },
+  { table: 'team_messages', col: 'image_data', folder: r => 'team/' + safeOwner(r.from_staff_id), extra: 'from_staff_id' }
+];
+async function migrateMediaBatch() {
+  if (!(await mediaReady())) return { moved: 0, left: true };
+  let moved = 0, left = false;
+  for (const m of MIGRATE) {
+    const { data, error } = await supabase.from(m.table).select(['id', m.col].concat(m.extra ? [m.extra] : []).join(',')).like(m.col, 'data:%').limit(5);
+    if (error) continue;   // table not created yet
+    if (data.length === 5) left = true;
+    for (const row of data) {
+      const ref = await toRef(row[m.col], m.folder(row));
+      if (typeof ref === 'string' && ref.startsWith('media:')) {
+        const u = await supabase.from(m.table).update({ [m.col]: ref }).eq('id', row.id);
+        if (!u.error) moved++;
+      } else left = false;   // Storage refused: stop for now, try again later
+    }
+  }
+  return { moved, left };
+}
+async function mediaLeftInDatabase() {
+  const out = {};
+  for (const m of MIGRATE) {
+    const { count, error } = await supabase.from(m.table).select('id', { count: 'exact', head: true }).like(m.col, 'data:%');
+    if (!error && count) out[m.table + '.' + m.col] = count;
+  }
+  return out;
+}
+// Chat photos and voice notes older than `days` are removed (receipts are kept forever).
+async function cleanOldChatMedia(days) {
+  const cutoff = new Date(Date.now() - days * 864e5).toISOString();
+  let removed = 0;
+  for (const t of [{ table: 'messages', text: 'text' }, { table: 'team_messages', text: 'message_text' }, { table: 'forwards', text: 'message_text' }]) {
+    const { data, error } = await supabase.from(t.table).select(`id,image_data,${t.text}`).not('image_data', 'is', null).lt('created_at', cutoff).limit(100);
+    if (error || !data) continue;
+    for (const row of data) {
+      const voice = /^data:audio\//i.test(row.image_data) || AUDIO_EXT.test((parseRef(row.image_data) || {}).path || '');
+      const note = `${voice ? '🎤 Voice note' : '📷 Photo'} removed after ${days} days`;
+      const u = await supabase.from(t.table).update({ image_data: null, [t.text]: row[t.text] ? row[t.text] + '\n(' + note + ')' : note }).eq('id', row.id);
+      if (u.error) continue;
+      removed++;
+      if (parseRef(row.image_data)) await dropMedia(row.image_data);
+    }
+  }
+  return removed;
+}
+
+// ============================================================
 // TRADES
 // ============================================================
 
@@ -216,17 +369,18 @@ function tradeRow(r) {
     id: r.id, userId: r.user_id, accountId: r.account_id, staffId: r.staff_id,
     intendedAmount: Number(r.intended_amount), creditedAmount: r.credited_amount === null ? null : Number(r.credited_amount),
     staffCreditedAmount: r.staff_credited_amount === null ? null : Number(r.staff_credited_amount),
-    receiptImage: r.receipt_image,
-    status: r.status, failReason: r.fail_reason, failImage: r.fail_image,
+    receiptImage: pubMedia(r.receipt_image),
+    status: r.status, failReason: r.fail_reason, failImage: pubMedia(r.fail_image),
     accountNumberUsed: r.account_number_used, accountTitleUsed: r.account_title_used,
     userPayoutAccount: r.user_payout_account, userPayoutBank: r.user_payout_bank,
-    settlementScreenshot: r.settlement_screenshot, settlementStatus: r.settlement_status,
+    settlementScreenshot: pubMedia(r.settlement_screenshot), settlementStatus: r.settlement_status,
     chatMessageId: r.chat_message_id || null,   // set when a chat manager turned a chat photo into this receipt
     createdAt: r.created_at, updatedAt: r.updated_at
   };
 }
 async function createTrade(t) {
   const id = uid();
+  t = { ...t, receiptImage: await toRef(t.receiptImage, 'u/' + safeOwner(t.userId)) };
   const { error } = await supabase.from('trades').insert({
     id, user_id: t.userId, account_id: t.accountId, staff_id: t.staffId,
     intended_amount: t.intendedAmount, receipt_image: t.receiptImage,
@@ -261,7 +415,10 @@ async function listAllTrades() {
 async function updateTradeStatus(id, opts) {
   const patch = { status: opts.status, updated_at: new Date().toISOString() };
   if (opts.failReason !== undefined) patch.fail_reason = opts.failReason;
-  if (opts.failImage !== undefined) patch.fail_image = opts.failImage;
+  if (opts.failImage) {
+    const { data: row } = await supabase.from('trades').select('user_id').eq('id', id).maybeSingle();
+    patch.fail_image = await toRef(opts.failImage, 'u/' + safeOwner(row && row.user_id));
+  } else if (opts.failImage !== undefined) patch.fail_image = opts.failImage;
   if (opts.creditedAmount !== undefined) patch.credited_amount = opts.creditedAmount;
   if (opts.staffCreditedAmount !== undefined) patch.staff_credited_amount = opts.staffCreditedAmount;
   if (opts.userPayoutAccount !== undefined) patch.user_payout_account = opts.userPayoutAccount;
@@ -270,6 +427,7 @@ async function updateTradeStatus(id, opts) {
   if (error) throw error;
 }
 async function setSettlement(id, screenshot) {
+  screenshot = await toRef(screenshot, 'staff/s');
   const { error } = await supabase.from('trades').update({
     settlement_screenshot: screenshot, settlement_status: 'done', updated_at: new Date().toISOString()
   }).eq('id', id);
@@ -315,10 +473,11 @@ async function updateSettings(fields) {
 // ============================================================
 
 function msgRow(r) {
-  return { id: r.id, userId: r.user_id, sender: r.sender, text: r.text, imageData: r.image_data, createdAt: r.created_at };
+  return { id: r.id, userId: r.user_id, sender: r.sender, text: r.text, imageData: pubMedia(r.image_data), createdAt: r.created_at };
 }
 async function addMessage(m) {
   const id = uid();
+  if (m.imageData) m = { ...m, imageData: await toRef(m.imageData, 'u/' + safeOwner(m.userId)) };
   const { error } = await supabase.from('messages').insert({
     id, user_id: m.userId, sender: m.sender, text: m.text || '', image_data: m.imageData || null
   });
@@ -337,8 +496,10 @@ async function findMessageById(id) {
   return data ? msgRow(data) : null;
 }
 async function deleteMessage(id) {
+  const { data: row } = await supabase.from('messages').select('image_data').eq('id', id).maybeSingle();
   const { error } = await supabase.from('messages').delete().eq('id', id);
   if (error) throw error;
+  if (row && parseRef(row.image_data)) dropMedia(row.image_data);
 }
 async function listConversations() {
   const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: false });
@@ -351,7 +512,7 @@ async function listConversations() {
     const user = users.find(function(u){ return u && u.id === userId; });
     return {
       userId: userId, name: user ? user.name : 'Unknown', phone: user ? user.phone : '',
-      lastMessage: lastMsg.image_data ? (/^data:audio\//i.test(lastMsg.image_data) ? '🎤 Voice note' : '📷 Photo') : lastMsg.text,
+      lastMessage: lastMsg.image_data ? (/^data:audio\//i.test(lastMsg.image_data) || AUDIO_EXT.test((parseRef(lastMsg.image_data) || {}).path || '') ? '🎤 Voice note' : '📷 Photo') : lastMsg.text,
       lastSender: lastMsg.sender, lastAt: lastMsg.created_at
     };
   });
@@ -365,7 +526,7 @@ function withdrawalRow(r) {
   return {
     id: r.id, userId: r.user_id, amount: Number(r.amount),
     payoutAccount: r.payout_account, payoutBank: r.payout_bank,
-    status: r.status, reason: r.reason, reasonImage: r.reason_image,
+    status: r.status, reason: r.reason, reasonImage: pubMedia(r.reason_image),
     createdAt: r.created_at, updatedAt: r.updated_at
   };
 }
@@ -397,7 +558,10 @@ async function listAllWithdrawals() {
 async function updateWithdrawalStatus(id, opts) {
   const patch = { status: opts.status, updated_at: new Date().toISOString() };
   if (opts.reason !== undefined) patch.reason = opts.reason;
-  if (opts.reasonImage !== undefined) patch.reason_image = opts.reasonImage;
+  if (opts.reasonImage) {
+    const { data: row } = await supabase.from('withdrawals').select('user_id').eq('id', id).maybeSingle();
+    patch.reason_image = await toRef(opts.reasonImage, 'u/' + safeOwner(row && row.user_id));
+  } else if (opts.reasonImage !== undefined) patch.reason_image = opts.reasonImage;
   if (opts.payoutAccount !== undefined) patch.payout_account = opts.payoutAccount;
   if (opts.payoutBank !== undefined) patch.payout_bank = opts.payoutBank;
   const { error } = await supabase.from('withdrawals').update(patch).eq('id', id);
@@ -608,10 +772,11 @@ async function deletePasskey(id) {
 
 // Messages a chat manager passed on to one person (a staff member, or the admin when to_staff_id is null).
 function forwardRow(r) {
-  return { id: r.id, fromStaffId: r.from_staff_id, toStaffId: r.to_staff_id, userId: r.user_id, text: r.message_text, imageData: r.image_data, sender: r.sender, status: r.status, createdAt: r.created_at };
+  return { id: r.id, fromStaffId: r.from_staff_id, toStaffId: r.to_staff_id, userId: r.user_id, text: r.message_text, imageData: pubMedia(r.image_data), sender: r.sender, status: r.status, createdAt: r.created_at };
 }
 async function createForward(f) {
   const id = uid();
+  if (f.imageData) f = { ...f, imageData: await toRef(f.imageData, 'staff/f') };
   const { error } = await supabase.from('forwards').insert({ id, from_staff_id: f.fromStaffId, to_staff_id: f.toStaffId || null, user_id: f.userId, message_text: f.text || null, image_data: f.imageData || null, sender: f.sender });
   if (error) throw error;
   return id;
@@ -635,10 +800,11 @@ async function setForwardStatus(id, status) {
 
 // Staff-to-staff messages (chat manager <-> vendors).
 function teamMsgRow(r) {
-  return { id: r.id, fromStaffId: r.from_staff_id, toStaffId: r.to_staff_id, text: r.message_text, imageData: r.image_data, readAt: r.read_at, createdAt: r.created_at };
+  return { id: r.id, fromStaffId: r.from_staff_id, toStaffId: r.to_staff_id, text: r.message_text, imageData: pubMedia(r.image_data), readAt: r.read_at, createdAt: r.created_at };
 }
 async function addTeamMessage(m) {
   const id = uid();
+  if (m.imageData) m = { ...m, imageData: await toRef(m.imageData, 'team/' + safeOwner(m.fromStaffId)) };
   const { error } = await supabase.from('team_messages').insert({ id, from_staff_id: m.fromStaffId, to_staff_id: m.toStaffId, message_text: m.text || null, image_data: m.imageData || null });
   if (error) throw error;
   const { data } = await supabase.from('team_messages').select('*').eq('id', id).maybeSingle();
@@ -659,8 +825,10 @@ async function findTeamMessage(id) {
   return data ? teamMsgRow(data) : null;
 }
 async function deleteTeamMessage(id) {
+  const { data: row } = await supabase.from('team_messages').select('image_data').eq('id', id).maybeSingle();
   const { error } = await supabase.from('team_messages').delete().eq('id', id);
   if (error) throw error;
+  if (row && parseRef(row.image_data)) dropMedia(row.image_data);
 }
 
 // Staff department: 'vendor' or 'chat' (chat manager). True once the role column exists.
@@ -671,6 +839,7 @@ async function setStaffRole(id, role) {
 }
 
 module.exports = {
+  mediaReady, getMediaFile, migrateMediaBatch, mediaLeftInDatabase, cleanOldChatMedia,
   hasStaffRole, setStaffRole,
   addTeamMessage, listTeamMessagesFor, markTeamRead, findTeamMessage, deleteTeamMessage,
   createForward, listForwardsTo, findForwardById, setForwardStatus,
