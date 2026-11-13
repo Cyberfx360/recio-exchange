@@ -227,6 +227,7 @@ a.role{display:flex}
 .steps div:not(:first-child):before{content:"";position:absolute;top:6px;right:50%;width:100%;height:2px;background:#D5DBE6}
 .steps .on{color:var(--blue)}.steps .on i,.steps .on:before{background:var(--blue)!important}
 .ndot{position:absolute;top:9px;right:10px;width:9px;height:9px;border-radius:50%;background:var(--red);border:2px solid #fff}
+.steps2{text-align:left;margin:22px 8px 0;padding-left:22px;font-size:15px;line-height:1.5;color:#374151}.steps2 li{margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -348,18 +349,25 @@ async function pushOn(){
 async function pushDetach(){if(!PUSH_OK)return null;const reg=await navigator.serviceWorker.getRegistration(),sub=reg&&await reg.pushManager.getSubscription();
   if(sub)await api('POST','/api/push/unsubscribe',{endpoint:sub.endpoint}).catch(()=>{});return sub}
 async function pushOff(){const sub=await pushDetach();if(sub)await sub.unsubscribe();S.push='off'}
+const allowed=()=>PUSH_OK&&Notification.permission==='granted';
+const mustAllow=()=>S.push==='install'||S.push==='denied'||(S.push==='off'&&!allowed());
 let pbusy=false;
 async function togglePush(){if(pbusy)return;pbusy=true;
   try{if(S.push==='on'){await pushOff();toast('Push notifications turned off')}else{await pushOn();toast('Push notifications turned on')}}catch(e){toast(e.message||'Could not change notifications')}
   pbusy=false;if(S.route==='profile'||S.route==='notifications')render()}
-if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.go&&S.me&&V[e.data.go])go(e.data.go)});
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(!(e.data&&e.data.go&&S.me&&V[e.data.go]))return;if(S.route==='allow')S.after=e.data.go;else go(e.data.go)});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.route==='allow'&&!pbusy)pushState().then(()=>{if(S.route!=='allow')return;mustAllow()?render():go(S.after||'home')}).catch(()=>{})});
 
 async function enter(){
   const me=await loadMe();
   if(!me)return go('splash');
   if(me.status!=='approved'){location.href='/pending.html';return}
-  await loadAll();loadNotes();pushState().then(()=>{if(S.route==='profile'||S.route==='notifications')render()});
-  const h=location.hash.slice(1);go(h==='notifications'||h==='chat'?h:'home');
+  await loadAll();loadNotes();
+  // Customers must turn notifications on before the dashboard. Only a browser that cannot do push at all is let through.
+  await Promise.race([pushState(),new Promise(r=>setTimeout(r,2500))]).catch(()=>{});
+  const h=location.hash.slice(1);S.after=h==='notifications'||h==='chat'?h:'home';
+  if(S.push==='off'&&allowed())pushOn().catch(()=>{}); // already said yes on this device: just reconnect quietly
+  go(mustAllow()?'allow':S.after);
 }
 function compress(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onerror=rej;fr.onload=e=>{const img=new Image();img.onerror=rej;img.onload=()=>{
   const c=document.createElement('canvas'),k=Math.min(1,1000/img.width);c.width=img.width*k;c.height=img.height*k;
@@ -576,6 +584,18 @@ withdrawn:()=>{const d=S.wd,m=WS[d.status]||WS.pending;return `<section class="s
    <div><span>Status</span><span class="badge ${m[1]}">${m[0]}</span></div></div>
   <button class="btn sq" style="margin-top:28px;font-family:var(--body)" data-go="home">Back to Home</button></section>`},
 
+allow:()=>{const st=S.push,inst=st==='install',den=st==='denied';return `<section class="screen white" style="text-align:center">
+  <div class="grow"></div>
+  <div class="ok-ring" style="width:120px;height:120px"><i style="width:92px;height:92px"><b style="width:68px;height:68px">${I('bell','style="width:30px;height:30px"')}</b></i></div>
+  <h1 style="font-size:27px;font-weight:800;line-height:1.2">${den?'Notifications are blocked':'Turn on notifications'}</h1>
+  <p class="muted" style="font-size:15.5px;margin:12px 6px 0">${den?'AZAPLUG needs notifications to tell you about your money. They are switched off for AZAPLUG on this device.':'AZAPLUG tells you the moment your receipt is approved, your withdrawal is paid, or an account must no longer be used. You need to allow notifications to continue.'}</p>
+  ${inst?`<ol class="steps2"><li>Tap the <b>Share</b> button in Safari.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Open <b>AZAPLUG</b> from your Home Screen and log in.</li><li>Tap <b>Allow notifications</b> when asked.</li></ol>`
+   :den?`<ol class="steps2"><li>Open your phone or browser <b>Settings</b>.</li><li>Find <b>Notifications</b> (or Site settings) and choose <b>AZAPLUG</b>.</li><li>Switch notifications to <b>Allow</b>.</li><li>Come back here and tap <b>Check again</b>.</li></ol>`:''}
+  <div class="grow"></div>
+  ${inst?'':den?`<button class="btn" data-act="gateCheck">Check again</button>`:`<button class="btn" data-act="gateAllow">Allow notifications</button>`}
+  <button data-act="logout" style="margin-top:18px;color:var(--muted);font-weight:600;font-size:15px">Log out</button>
+  </section>`},
+
 notifications:()=>{const f=S.noteTab,rows=S.notes.filter(n=>f==='all'||(f==='tx'?n.kind==='tx':n.kind!=='tx')),snap=S.seenSnap||0,
   K={tx:['checkc','#10B981','#E4F6EE'],alert:['alertt','#EF4444','#FDE0E0'],info:['bell','#0D4DC7','#EAF1FE']};
  return `<section class="screen">
@@ -661,7 +681,13 @@ document.addEventListener('click',e=>{
   ({eye(){const i=a.parentElement.querySelector('input'),sh=i.type==='password';i.type=sh?'text':'password';a.innerHTML=I(sh?'eye':'eyeoff');a.setAttribute('aria-label',sh?'Hide password':'Show password')},
     soon(){toast('Coming soon')},
     push(){togglePush()},
-    readall(){S.seenSnap=Date.now();ls.set('az_seen',Date.now());render()},
+    async gateAllow(){if(pbusy)return;pbusy=true;let perm='default';
+      try{perm=await Notification.requestPermission()}catch(e){}
+      pbusy=false;
+      // Once the customer says yes they go straight in; the subscription finishes in the background so a slow network cannot hold them here.
+      if(perm==='granted'){go(S.after||'home');pushOn().then(()=>toast('Push notifications turned on')).catch(()=>{});return}
+      S.push=perm==='denied'?'denied':'off';toast(perm==='denied'?'Notifications are blocked on this device':'Please allow notifications to continue');render()},
+    async gateCheck(){await pushState();if(!mustAllow())return go(S.after||'home');if(S.push==='denied')toast('Still blocked. Allow notifications for AZAPLUG in Settings.');render()},
     async logout(){try{await pushDetach()}catch(e){}try{await api('POST','/api/logout')}catch(e){}S.notes=[];S.me=null;S.trades=[];S.withdrawals=[];S.chat=[];go('splash')},
     share(){const w=CRYPTO[S.coin].address;navigator.share?navigator.share({text:w}).catch(()=>{}):navigator.clipboard?.writeText(w).then(()=>toast('Address copied'))}
   })[a.dataset.act]?.();
