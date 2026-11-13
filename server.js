@@ -1623,6 +1623,35 @@ app.post('/api/team/push/unsubscribe', requireTeam, async (req, res) => {
 // balance. Repayment is automatic: each time a receipt is credited, what is owed is taken out first.
 // ============================================================
 // A customer can only borrow after this much naira has been credited to them from receipts.
+// ---- Top Traders (trust board): first 3 letters of the name + total traded through approved trades.
+let TOP = { at: 0, data: null };
+const maskName = n => { const w = String(n || '').replace(/[^\p{L}\p{N}]/gu, ''); return (w.slice(0, 3) || 'Cus').replace(/^./, c => c.toUpperCase()) + '***'; };
+const lagosMonth = d => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit' }).format(new Date(d));
+async function topTraders() {
+  if (TOP.data && Date.now() - TOP.at < 300000) return TOP.data; // worked out at most every 5 minutes
+  const [trades, users] = await Promise.all([store.listApprovedTradeTotals(), store.listUsers()]);
+  const ok = new Map(users.filter(u => u.status === 'approved').map(u => [u.id, u]));
+  const month = lagosMonth(Date.now()), all = new Map(), mon = new Map();
+  const add = (m, t) => { const v = m.get(t.userId) || { total: 0, n: 0 }; v.total += t.creditedAmount; v.n++; m.set(t.userId, v); };
+  let total = 0, count = 0;
+  for (const t of trades) {
+    if (!ok.has(t.userId) || !(t.creditedAmount > 0)) continue;
+    total += t.creditedAmount; count++; add(all, t);
+    if (lagosMonth(t.createdAt) === month) add(mon, t);
+  }
+  const rank = m => [...m.entries()].map(([id, v]) => ({ id, name: maskName(ok.get(id).name), total: Math.round(v.total), trades: v.n }))
+    .sort((a, b) => b.total - a.total).slice(0, 10);
+  TOP = { at: Date.now(), data: { month: rank(mon), all: rank(all), totalTraded: Math.round(total), trades: count, customers: all.size } };
+  return TOP.data;
+}
+app.get('/api/top-traders', requireUser, async (req, res) => {
+  try {
+    const d = await topTraders(), me = req.session.userId;
+    const out = list => list.map((r, i) => ({ rank: i + 1, name: r.name, total: r.total, trades: r.trades, me: r.id === me }));
+    res.json({ month: out(d.month), all: out(d.all), totalTraded: d.totalTraded, trades: d.trades, customers: d.customers });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load top traders.' }); }
+});
+
 const LOAN_MIN_TRADED = 70000;
 async function tradedTotal(userId) {
   return (await store.listTradesForUser(userId)).reduce((sum, t) => sum + (t.status === 'approved' && t.creditedAmount ? t.creditedAmount : 0), 0);
