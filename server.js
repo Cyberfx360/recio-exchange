@@ -613,7 +613,45 @@ function badAttachment(data) {
   if (/^data:audio\//i.test(data) && data.length > 2500000) return 'That voice note is too long. Keep it under 2 minutes.';
   return null;
 }
-const isVoice = d => typeof d === 'string' && /^data:audio\//i.test(d);
+const isVoice = d => typeof d === 'string' && (/^data:audio\//i.test(d) || /^\/api\/media\/[^?]+\?a=1/.test(d));
+const isImage = d => typeof d === 'string' && (/^data:image\//i.test(d) || /^\/api\/media\/[^?]+\.(jpg|png|webp|gif)$/.test(d));
+
+// ---- Photos and voice notes stored in Supabase Storage
+// pub/ = account pictures (anyone), u/<customerId>/ = that customer + staff + admin, staff/ and team/ = staff + admin.
+const mediaCache = new Map(); let mediaCacheSize = 0;
+function cacheMedia(path, file) {
+  if (file.body.length > 3 * 1024 * 1024) return;
+  mediaCache.set(path, file); mediaCacheSize += file.body.length;
+  while (mediaCacheSize > 40 * 1024 * 1024) { const [k, v] = mediaCache.entries().next().value; mediaCache.delete(k); mediaCacheSize -= v.body.length; }
+}
+app.get('/api/media/:scope/:owner/:file', async (req, res) => {
+  try {
+    const { scope, owner, file } = req.params, path = `${scope}/${owner}/${file}`;
+    let ok = scope === 'pub' || !!req.session.isAdmin;
+    if (!ok && req.session.staffId) { const st = await store.findStaffById(req.session.staffId); ok = !!st && st.status === 'approved'; }
+    if (!ok && scope === 'u' && req.session.userId && req.session.userId === owner) ok = true;
+    if (!ok) return res.status(403).end();
+    let f = mediaCache.get(path);
+    if (!f) { f = await store.getMediaFile(path); if (!f) return res.status(404).end(); cacheMedia(path, f); }
+    res.setHeader('Content-Type', f.type);
+    res.setHeader('Cache-Control', scope === 'pub' ? 'public, max-age=31536000, immutable' : 'private, max-age=31536000, immutable');
+    res.setHeader('Accept-Ranges', 'bytes');
+    const total = f.body.length, m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (m) {   // iPhone needs byte ranges to play audio
+      let start = m[1] === '' ? Math.max(0, total - Number(m[2])) : Number(m[1]), end = m[1] !== '' && m[2] !== '' ? Number(m[2]) : total - 1;
+      end = Math.min(end, total - 1);
+      if (start > end || start >= total) { res.setHeader('Content-Range', `bytes */${total}`); return res.status(416).end(); }
+      res.status(206).setHeader('Content-Range', `bytes ${start}-${end}/${total}`);
+      res.setHeader('Content-Length', end - start + 1); return res.end(f.body.subarray(start, end + 1));
+    }
+    res.setHeader('Content-Length', total); res.end(f.body);
+  } catch (err) { console.error('Media error:', err.message || err); res.status(500).end(); }
+});
+// How many pictures are still inside the database (they move to Storage on their own).
+app.get('/api/admin/media-status', requireAdmin, async (req, res) => {
+  try { res.json({ storage: await store.mediaReady(), stillInDatabase: await store.mediaLeftInDatabase(), keepChatMediaDays: MEDIA_DAYS }); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Could not check storage.' }); }
+});
 
 app.get('/api/chat/messages', requireUser, async (req, res) => {
   try { res.json({ messages: await store.messagesForUser(req.session.userId) }); }
@@ -789,7 +827,7 @@ app.post('/api/staff/chats/:userId/route', requireStaff, requireApprovedStaff, a
     const { messageId, accountId, amount } = req.body || {}, n = Number(amount);
     const [user, msg, account] = await Promise.all([store.findUserById(req.params.userId), store.findMessageById(messageId), store.findAccountById(accountId)]);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
-    if (!msg || msg.userId !== user.id || msg.sender !== 'user' || !/^data:image\//i.test(msg.imageData || '')) return res.status(400).json({ error: 'Pick a receipt photo the customer sent.' });
+    if (!msg || msg.userId !== user.id || msg.sender !== 'user' || !isImage(msg.imageData)) return res.status(400).json({ error: 'Pick a receipt photo the customer sent.' });
     if (!account || !account.active) return res.status(404).json({ error: 'That account is no longer available.' });
     if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'Enter the amount on the receipt.' });
     if ((await routedFor(user.id))[msg.id]) return res.status(400).json({ error: 'This receipt was already sent to an account.' });
@@ -1491,6 +1529,22 @@ app.get('/api/version', (req, res) => res.json({ v: BUILD }));
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders(res, file) { if (/\.(html|js|webmanifest)$/.test(file)) res.setHeader('Cache-Control', 'no-cache'); }
 }));
+
+// ---- Background storage jobs
+// 1) Move old pictures out of the database into Storage, a few at a time.
+// 2) Remove chat photos and voice notes older than MEDIA_DAYS (default 90). Receipts are never removed.
+const MEDIA_DAYS = Math.max(7, Number(process.env.MEDIA_DAYS) || 90);
+async function mediaJobs() {
+  try {
+    let total = 0;
+    for (let i = 0; i < 40; i++) { const r = await store.migrateMediaBatch(); total += r.moved; if (!r.left) break; }
+    if (total) console.log(`Moved ${total} pictures from the database to Storage.`);
+    const removed = await store.cleanOldChatMedia(MEDIA_DAYS);
+    if (removed) console.log(`Removed ${removed} chat photos/voice notes older than ${MEDIA_DAYS} days.`);
+  } catch (err) { console.error('Storage job error:', err.message || err); }
+}
+setTimeout(mediaJobs, 20000);
+setInterval(mediaJobs, 30 * 60000);
 
 app.listen(PORT, () => {
   console.log(`\nRECIO EXCHANGE backend running at http://localhost:${PORT}`);
