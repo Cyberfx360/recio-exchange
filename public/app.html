@@ -353,6 +353,8 @@ img,svg,video{max-width:100%}
 #callui .cb .c-red i{background:#EF4444}#callui .cb .c-green i{background:#10B981;animation:cring 1.6s ease-in-out infinite}
 @keyframes cring{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.35)}50%{box-shadow:0 0 0 18px rgba(255,255,255,0)}}
 @media (prefers-reduced-motion:reduce){#callui .cav,#callui .cb .c-green i{animation:none}}
+.gaw{display:flex;align-items:center;gap:12px;margin-top:16px;padding:14px;border-radius:16px;color:#fff;background:linear-gradient(135deg,#F59E0B,#EF4444);box-shadow:0 10px 24px -12px rgba(239,68,68,.7)}
+.gaw .gai{font-size:28px;flex:none}.gaw b{font-size:15.5px}.gaw p{font-size:13.5px;margin-top:2px;line-height:1.4}.gaw>button{background:#fff;color:#B91C1C;font-weight:800;font-size:13.5px;padding:10px 14px;border-radius:999px;flex:none}
 </style>
 </head>
 <body>
@@ -399,6 +401,7 @@ const P={
  shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
  shielda:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
  finger:'<path d="M2 12C2 6.5 6.5 2 12 2a10 10 0 0 1 8 4"/><path d="M5 19.5C5.5 18 6 15 6 12c0-.7.12-1.37.34-2"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .13-5.35 0-6"/><path d="M9 6.8a6 6 0 0 1 9 5.2c0 .47 0 1.17-.02 2"/>',
+ dl:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
  adl:'<line x1="17" y1="7" x2="7" y2="17"/><polyline points="17 17 7 17 7 7"/>',
  trend:'<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',
  cc:'<path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/>',
@@ -473,11 +476,13 @@ async function pushOn(){
   const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(publicKey)});
   await api('POST','/api/push/subscribe',sub.toJSON());S.push='on';
 }
+// Turns notifications on, trying again a few times on a weak network. Resolves true/false.
+async function pushRetry(){for(let i=0;i<3;i++){try{await Promise.race([pushOn(),new Promise((_,rej)=>setTimeout(()=>rej(new Error('slow')),9000))]);return true}catch(e){if(S.push==='denied')return false;await new Promise(r=>setTimeout(r,1200))}}return false}
 async function pushDetach(){if(!PUSH_OK)return null;const reg=await navigator.serviceWorker.getRegistration(),sub=reg&&await reg.pushManager.getSubscription();
   if(sub)await api('POST','/api/push/unsubscribe',{endpoint:sub.endpoint}).catch(()=>{});return sub}
 async function pushOff(){const sub=await pushDetach();if(sub)await sub.unsubscribe();S.push='off'}
 const allowed=()=>PUSH_OK&&Notification.permission==='granted';
-const mustAllow=()=>S.push==='install'||S.push==='denied'||(S.push==='off'&&!allowed());
+const mustAllow=()=>S.push!=='on';   // nobody reaches their account until notifications are really on (saved on our server)
 let pbusy=false;
 async function togglePush(){if(S.push==='on')return toast('Notifications are needed to use AZAPLUG, so they stay on');if(pbusy)return;pbusy=true;
   try{if(S.push==='on'){await pushOff();toast('Push notifications turned off')}else{await pushOn();toast('Push notifications turned on')}}catch(e){toast(e.message||'Could not change notifications')}
@@ -492,18 +497,26 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 const csGet=()=>{const c=CRYPTO[S.coin],u=num(S.cusd||'');return !c.rate?'The admin will confirm the naira amount.':u?`You get about ${naira(u*c.rate)} at $1 = ${naira(c.rate)}`:`Today's rate: $1 = ${naira(c.rate)}`};
 document.addEventListener('input',e=>{if(e.target.id==='cs-a'){S.cusd=e.target.value;const p=$('#cs-get');if(p)p.textContent=csGet()}});
 document.addEventListener('change',async e=>{const t=e.target;if(t.id==='cs-file'&&t.files[0]){try{S.cimg=await compress(t.files[0]);render()}catch(err){toast('Could not read that photo')}}});
+async function loadGiveaway(){try{const d=await api('GET','/api/giveaway');const was=JSON.stringify(S.ga||null);S.ga=d.giveaway?d:null;if(S.route==='home'&&JSON.stringify(S.ga)!==was&&!document.activeElement.matches('input,select'))render()}catch(e){}}
+const gaWhen=t=>{const d=new Date(t),today=new Date().toDateString()===d.toDateString();return (today?'Today':d.toLocaleDateString('en-NG',{weekday:'short',day:'numeric',month:'short'}))+' at '+d.toLocaleTimeString('en-NG',{hour:'numeric',minute:'2-digit'})};
+function gaCard(){const d=S.ga;if(!d)return '';const g=d.giveaway,m=d.mine;
+  const body=m?(m.won?`🎉 You are winner #${m.position}! ${m.credited?naira(g.amount)+' has been added to your balance.':naira(g.amount)+' will be added to your balance soon.'}`:'All spots were taken this time. Keep notifications on for the next one.')
+    :g.live?(g.spotsLeft?`It's live! Be among the first ${g.winners} to say "<b>${esc(g.keyword)}</b>" in chat. <b>${g.spotsLeft}</b> spot${g.spotsLeft===1?'':'s'} left.`:'All spots have been taken. Watch out for the next one!')
+    :`${gaWhen(g.startsAt)}, the first ${g.winners} people to say "<b>${esc(g.keyword)}</b>" in chat win ${naira(g.amount)}.`;
+  const need=!m&&!insStandalone()?`<small style="display:block;margin-top:6px;opacity:.9">You must use the installed app. <button class="link" style="color:#fff;text-decoration:underline;font-size:inherit" data-act="install">Install now</button></small>`:'';
+  return `<div class="gaw"><span class="gai">🎁</span><div class="grow" style="min-width:0"><b>${esc(g.title)}</b><p>${body}</p>${need}</div>${g.live&&g.spotsLeft&&!m?`<button data-go="chat">Say ${esc(g.keyword)}</button>`:''}</div>`}
 async function loadLoan(){try{S.loan=await api('GET','/api/loans')}catch(e){S.loan={error:e.message,loans:[],limit:0}}
   if(S.route==='loan'&&!document.activeElement.matches('input,select'))render()}
 async function enter(){
   const me=await loadMe();
   if(!me)return go('splash');
   if(me.needsPin)return go('setpin');
-  if(me.status!=='approved'){location.href='/pending.html';return}
+  if(me.status!=='approved')return go('blocked');
   await loadAll();loadNotes();
   // Customers must turn notifications on before the dashboard. Only a browser that cannot do push at all is let through.
   await Promise.race([pushState(),new Promise(r=>setTimeout(r,2500))]).catch(()=>{});
   const h=location.hash.slice(1);S.after=h==='notifications'||h==='chat'?h:'home';
-  if(S.push==='off'&&allowed())pushOn().catch(()=>{}); // already said yes on this device: just reconnect quietly
+  if(S.push==='off'&&allowed())await pushRetry(); // already said yes on this device: finish turning them on first
   go(mustAllow()?'allow':S.after);
 }
 function compress(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onerror=rej;fr.onload=e=>{const img=new Image();img.onerror=rej;img.onload=()=>{
@@ -594,6 +607,7 @@ home:()=>{const list=S.homeTab==='trades'
    ${bell()}</span></div>
   <div class="balance"><small>Balance</small><div class="amt">${naira(S.me.balance)}</div>
    <div class="pills"><button class="on" data-go="accounts">Get Account</button><button data-go="withdraw">Withdraw</button><button data-go="rules">Rules</button><button data-go="loan">Borrow</button></div></div>
+  ${gaCard()}
   <button class="btn sq" style="margin:16px 0 20px;font-family:var(--body);font-weight:600" data-go="send">Send Receipt</button>
   <div class="seg" role="tablist"><button class="${S.homeTab==='trades'?'on':''}" data-set="homeTab:trades">Trades</button><button class="${S.homeTab==='withdrawals'?'on':''}" data-set="homeTab:withdrawals">Withdrawals</button></div>
   <div class="sec-h"><h3>Recent Transactions</h3><button class="link" style="font-size:15px" data-go="history">See All</button></div>
@@ -735,15 +749,17 @@ withdrawn:()=>{const d=S.wd,m=WS[d.status]||WS.pending;return `<section class="s
    <div><span>Status</span><span class="badge ${m[1]}">${m[0]}</span></div></div>
   <button class="btn sq" style="margin-top:28px;font-family:var(--body)" data-go="home">Back to Home</button></section>`},
 
-allow:()=>{const st=S.push,inst=st==='install',den=st==='denied';return `<section class="screen white" style="text-align:center">
+blocked:()=>`<section class="screen white" style="text-align:center"><div class="grow"></div><h1 style="font-size:25px;font-weight:800">Account on hold</h1><p class="muted" style="font-size:15px;margin:12px 6px 0">Your AZAPLUG account is suspended. Please contact AZAPLUG support.</p><div class="grow"></div><button data-act="logout" class="btn">Log out</button></section>`,
+
+allow:()=>{const st=S.push,inst=st==='install',den=st==='denied',bad=st==='unsupported';return `<section class="screen white" style="text-align:center">
   <div class="grow"></div>
   <div class="ok-ring" style="width:120px;height:120px"><i style="width:92px;height:92px"><b style="width:68px;height:68px">${I('bell','style="width:30px;height:30px"')}</b></i></div>
-  <h1 style="font-size:27px;font-weight:800;line-height:1.2">${den?'Notifications are blocked':'Turn on notifications'}</h1>
-  <p class="muted" style="font-size:15.5px;margin:12px 6px 0">${den?'AZAPLUG needs notifications to tell you about your money. They are switched off for AZAPLUG on this device.':'AZAPLUG tells you the moment your receipt is approved, your withdrawal is paid, or an account must no longer be used. You need to allow notifications to continue.'}</p>
-  ${inst?`<ol class="steps2"><li>Tap the <b>Share</b> button in Safari.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Open <b>AZAPLUG</b> from your Home Screen and log in.</li><li>Tap <b>Allow notifications</b> when asked.</li></ol>`
+  <h1 style="font-size:27px;font-weight:800;line-height:1.2">${bad?'Open AZAPLUG in Chrome or Safari':den?'Notifications are blocked':'Turn on notifications'}</h1>
+  <p class="muted" style="font-size:15.5px;margin:12px 6px 0">${bad?'This browser cannot show AZAPLUG notifications (for example the browser inside WhatsApp, Instagram or Facebook). Notifications are needed to use your account.':den?'AZAPLUG needs notifications to tell you about your money. They are switched off for AZAPLUG on this device.':'AZAPLUG tells you the moment your receipt is approved, your withdrawal is paid, or an account must no longer be used. You need to allow notifications to continue.'}</p>
+  ${bad?`<ol class="steps2"><li>Tap <b>Copy link</b> below.</li><li>Open <b>Chrome</b> (Android) or <b>Safari</b> (iPhone).</li><li>Paste the link in the address bar and open it.</li><li>Log in and allow notifications.</li></ol>`:inst?`<ol class="steps2"><li>Tap the <b>Share</b> button in Safari.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Open <b>AZAPLUG</b> from your Home Screen and log in.</li><li>Tap <b>Allow notifications</b> when asked.</li></ol>`
    :den?`<ol class="steps2"><li>Open your phone or browser <b>Settings</b>.</li><li>Find <b>Notifications</b> (or Site settings) and choose <b>AZAPLUG</b>.</li><li>Switch notifications to <b>Allow</b>.</li><li>Come back here and tap <b>Check again</b>.</li></ol>`:''}
   <div class="grow"></div>
-  ${inst?'':den?`<button class="btn" data-act="gateCheck">Check again</button>`:`<button class="btn" data-act="gateAllow">Allow notifications</button>`}
+  ${bad?`<button class="btn" data-act="copyLink">Copy link</button>`:inst?'':den?`<button class="btn" data-act="gateCheck">Check again</button>`:`<button class="btn" data-act="gateAllow" ${S.gateBusy?'disabled':''}>${S.gateBusy?'Turning on…':'Allow notifications'}</button>`}
   <button data-act="logout" style="margin-top:18px;color:var(--muted);font-weight:600;font-size:15px">Log out</button>
   </section>`},
 
@@ -790,6 +806,8 @@ profile:()=>{const u=S.me,ini=u.name.trim().split(/\s+/).map(x=>x[0]).slice(0,2)
    ${pushHelp[S.push]?`<p class="muted" style="font-size:13px">${pushHelp[S.push]}</p>`:''}</div>
   <div style="height:10px"></div>
   <button class="menu" data-go="edit"><span class="ic">${I('user')}</span>Edit Profile Details<span class="chev">${I('cr')}</span></button>
+  ${insStandalone()?'':`<button class="menu" data-act="install"><span class="ic">${I('dl')}</span>Install AZAPLUG App<span class="chev">${I('cr')}</span></button>`}
+  <button class="menu" data-act="shareApp"><span class="ic">${I('share')}</span>Share AZAPLUG with Friends<span class="chev">${I('cr')}</span></button>
   <button class="menu" data-go="chat"><span class="ic">${I('help')}</span>Help &amp; Customer Support<span class="chev">${I('cr')}</span></button>
   <button class="menu danger" data-act="logout"><span class="ic">${I('logout')}</span>Log Out of Device<span class="chev">${I('cr')}</span></button>
   ${nav('profile')}</section>`},
@@ -938,6 +956,7 @@ function go(r,o,pop){
   if(r==='notifications'){S.seenSnap=seenAt();ls.set('az_seen',Date.now());render()}
   if(r==='home'||r==='notifications')loadNotes();
   if(r==='loan')loadLoan();
+  if(r==='home')loadGiveaway();
   if(r==='trade'||r==='home'||r==='history'||r==='withdraw'||r==='profile')Promise.all([loadMe(),loadAll()]).then(()=>{if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
   if(r==='accounts'||r==='send')api('GET','/api/accounts').then(d=>{S.accounts=d.accounts||[];if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
   if(r==='crypto'||r==='cryptoSend')api('GET','/api/crypto-rates').then(d=>{CRYPTO.BTC.rate=d.btc||null;CRYPTO.USDT.rate=d.usdt||null;if(S.route===r&&!(document.activeElement&&document.activeElement.matches('input')))render();else{const p=$('#cs-get');if(p)p.textContent=csGet()}}).catch(()=>{});
@@ -963,10 +982,15 @@ document.addEventListener('click',e=>{
     async gateAllow(){if(pbusy)return;pbusy=true;let perm='default';
       try{perm=await Notification.requestPermission()}catch(e){}
       pbusy=false;
-      // Once the customer says yes they go straight in; the subscription finishes in the background so a slow network cannot hold them here.
-      if(perm==='granted'){go(S.after||'home');pushOn().then(()=>toast('Push notifications turned on')).catch(()=>{});return}
+      // They only go in once notifications are really saved on our server (tried a few times on a weak network).
+      if(perm==='granted'){S.gateBusy=true;render();const ok=await pushRetry();S.gateBusy=false;if(ok){toast('Notifications turned on');return go(S.after||'home')}
+        toast('Could not finish turning on notifications. Check your internet and tap again.');return render()}
       S.push=perm==='denied'?'denied':'off';toast(perm==='denied'?'Notifications are blocked on this device':'Please allow notifications to continue');render()},
-    async gateCheck(){await pushState();if(!mustAllow())return go(S.after||'home');if(S.push==='denied')toast('Still blocked. Allow notifications for AZAPLUG in Settings.');render()},
+    copyLink(){const u=location.origin+'/app.html';(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>toast('Link copied. Paste it in Chrome or Safari')).catch(()=>prompt('Copy this link',u))},
+    install(){INS.closed=false;if(insStandalone())return toast('AZAPLUG is already installed on this phone');if(!INS.ev&&!insIOS&&!insAndroid)return toast('Open this page on your phone to install AZAPLUG');if(INS.ev||insIOS||insAndroid){insHide();insShow()}},
+    async shareApp(){const url=location.origin+'/app.html',text='Trade and get paid fast on AZAPLUG. Download the app:';try{if(navigator.share)return await navigator.share({title:'AZAPLUG',text,url})}catch(e){if(e.name==='AbortError')return}
+      try{await navigator.clipboard.writeText(text+' '+url);toast('Link copied. Paste it to share')}catch(e){prompt('Copy this link',url)}},
+    async gateCheck(){await pushState();if(S.push==='off'&&allowed())await pushRetry();if(!mustAllow())return go(S.after||'home');if(S.push==='denied')toast('Still blocked. Allow notifications for AZAPLUG in Settings.');render()},
     async logout(){try{await pushDetach()}catch(e){}try{await api('POST','/api/logout')}catch(e){}S.notes=[];S.me=null;S.trades=[];S.withdrawals=[];S.chat=[];go(lsGet(BIO.key)?'lock':'splash')},
     share(){const w=CRYPTO[S.coin].address;navigator.share?navigator.share({text:w}).catch(()=>{}):navigator.clipboard?.writeText(w).then(()=>toast('Address copied'))}
   })[a.dataset.act]?.();
@@ -1000,7 +1024,7 @@ const FORMS={
   async edit(){const b={name:val('e-n'),bankName:val('e-b'),accountNumber:val('e-a')};if(Object.values(b).some(v=>!v))throw new Error('All fields are required');
     await api('PUT','/api/me',b);await loadMe();toast('Details saved');go('profile')},
   async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';
-    const d=await api('POST','/api/chat/send',{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();chatBottom();i.focus()}
+    const d=await api('POST','/api/chat/send',{text,installed:insStandalone(),alertsOn:S.push==='on'});S.chat.push(d.message);if(d.reply)S.chat.push(d.reply);$('#msgs').innerHTML=msgsHtml();chatBottom();i.focus();if(d.reply)loadGiveaway()}
 };
 document.addEventListener('submit',async e=>{
   e.preventDefault();const f=e.target,fn=FORMS[f.dataset.form];if(!fn||f.dataset.busy)return;

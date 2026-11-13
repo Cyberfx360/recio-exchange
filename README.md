@@ -20,7 +20,12 @@
 > not inside the database. Old pictures already in the database move there by themselves in the background.
 > Chat photos and voice notes older than 90 days are removed (receipts are kept forever); change this with `MEDIA_DAYS` on Render.
 >
-> > For the admin to message every staff member, run this one line:
+> > For giveaways (Admin → Giveaway), run this one line:
+> ```sql
+> create table if not exists giveaways (id uuid primary key default gen_random_uuid(), title text not null, amount numeric not null, winners int not null, keyword text not null default 'hi', starts_at timestamptz not null, status text not null default 'open', created_at timestamptz not null default now()); create table if not exists giveaway_entries (id uuid primary key default gen_random_uuid(), giveaway_id uuid not null references giveaways(id) on delete cascade, user_id uuid not null references users(id) on delete cascade, installed boolean not null default false, alerts_on boolean not null default false, won boolean not null default false, credited boolean not null default false, created_at timestamptz not null default now(), unique (giveaway_id, user_id)); alter table giveaways enable row level security; alter table giveaway_entries enable row level security;
+> ```
+>
+> For the admin to message every staff member, run this one line:
 > ```sql
 > alter table team_messages alter column from_staff_id drop not null, alter column to_staff_id drop not null;
 > ```

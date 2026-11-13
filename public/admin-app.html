@@ -424,6 +424,9 @@ img,svg,video{max-width:100%}
 @media (prefers-reduced-motion:reduce){#callui .cav,#callui .cb .c-green i{animation:none}}
 .pinh{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--muted);padding:12px 20px 6px}
 .pinic{color:var(--muted);display:inline-flex}.newb{background:var(--blue);color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:999px;display:inline-grid;place-items:center;padding:0 6px}
+.gab{display:flex;align-items:center;gap:12px;width:100%;margin-top:12px;padding:14px 16px;border-radius:16px;color:#fff;background:linear-gradient(135deg,#F59E0B,#EF4444)}
+.gab>span:first-child{font-size:26px}.gab b{display:block;font-size:15.5px}.gab small{font-size:12.5px;opacity:.9}
+.gar{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.gar>b{width:34px;color:var(--blue);flex:none}
 </style>
 </head>
 <body>
@@ -525,6 +528,7 @@ async function api(method,url,body){
 }
 const fwBody=f=>`<div class="fwb">${safeImg(f.imageData)?`<img src="${safeImg(f.imageData)}" alt="Forwarded photo"><button class="svp" style="color:var(--blue)" data-act="savePic" data-kind="chat" data-id="${esc(f.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(f)}${esc(f.text||'').replace(/\n/g,'<br>')}</div>`;
 const fwNew=()=>(S.fwds||[]).filter(f=>f.status==='new').length;
+async function loadGas(){try{S.gas=(await api('GET','/api/admin/giveaways')).giveaways||[];S.gaErr=''}catch(e){S.gas=[];S.gaErr=e.message}if(S.route==='giveaway'&&!typing())render()}
 async function refresh(){
   const [u,s,a,t,w,st,c]=await Promise.all(['users','staff','accounts','trades','withdrawals','settings','chats'].map(x=>api('GET','/api/admin/'+x)));
   S.users=u.users||[];S.staff=s.staff||[];S.accounts=a.accounts||[];S.trades=t.trades||[];S.wds=w.withdrawals||[];S.settings=st||{};S.convos=c.conversations||[];
@@ -610,6 +614,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
   <button class="stat" data-go="users" data-tab="alertsoff"><small>Notifications On</small><b style="color:${alertsOn===S.users.length?'var(--green)':'var(--slate)'}">${alertsOn}<span style="font-size:15px;color:var(--muted);font-weight:600"> / ${S.users.length}</span></b><i style="color:${alertsOn<S.users.length?'var(--orange)':'var(--green)'}">${S.users.length-alertsOn?(S.users.length-alertsOn)+' customer'+(S.users.length-alertsOn===1?'':'s')+' without':'Every customer'}</i></button></div>
   <h2 class="sh">Quick Actions</h2>
   <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
+  <button class="gab" data-go="giveaway"><span>🎁</span><span class="grow" style="text-align:left"><b>Giveaways</b><small>Reward the first customers to say hi</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <div class="between" style="margin:22px 0 10px"><h2 class="sh" style="margin:0">Recent Activity Feed</h2><button class="link" style="font-size:14px" data-go="receipts">View All</button></div>
   ${feed.length?feed.map(f=>`<button class="feed" data-go="${f.go}" data-id="${esc(f.id)}"><i></i><span class="grow" style="min-width:0"><b>${f.t}</b><small>${f.s} • ${ago(f.at)}</small></span><em>${f.r}</em></button>`).join(''):'<p class="empty">No activity yet</p>'}
   <p style="text-align:center;margin-top:26px"><button class="link" style="color:var(--muted);font-weight:600;font-size:14px" data-act="logout">Log out</button></p></div></section>`},
@@ -726,6 +731,28 @@ loans:()=>{const LS={pending:['Pending','b-checking'],active:['Approved','b-appr
     <div><small class="muted" style="display:block;font-size:12px">${l.status==='active'?'Still Owed':l.status==='repaid'?'Still Owed':'Customer Balance'}</small><b class="h" style="font-size:18px;color:${l.status==='active'?'var(--red)':'var(--green)'}">${naira(l.status==='active'||l.status==='repaid'?l.outstanding:l.userBalance)}</b></div></div>
    <button class="b soft" style="margin-top:12px" data-go="user" data-id="${esc(l.userId)}">${I('users','style="width:16px;height:16px"')}View Customer Profile</button>
    ${l.status==='pending'?`<div class="row" style="gap:10px;margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><button class="sb o-red" style="height:42px" data-act="loanDecide" data-d="decline" data-id="${esc(l.id)}">Decline</button><button class="sb blue" style="height:42px" data-act="loanDecide" data-d="approve" data-id="${esc(l.id)}">Approve</button></div>`:''}</article>`).join(''):S.loanErr?'':'<p class="empty">No loan applications yet</p>'}</div></section>`},
+
+giveaway:()=>{const list=S.gas,cur=list&&list.find(g=>g.status==='open'),past=list?list.filter(g=>g!==cur):[];
+ const when=t=>new Date(t).toLocaleString('en-NG',{weekday:'short',day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
+ const pad=n=>String(n).padStart(2,'0'),dflt=(()=>{const d=new Date();d.setHours(12,0,0,0);if(d<new Date())d.setDate(d.getDate()+1);return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T12:00`})();
+ const card=(g,open)=>{const w=g.entries.filter(e=>e.won),unpaid=w.filter(e=>!e.credited),late=g.entries.filter(e=>!e.won);
+  return `<article class="card" style="padding:16px;border-radius:14px;margin-bottom:14px"><div class="between"><b class="h" style="font-size:16.5px">${esc(g.title)}</b><span class="badge ${open?(g.live?'b-approved':'b-checking'):'b-confirmed'}">${open?(g.live?'LIVE':'SCHEDULED'):'ENDED'}</span></div>
+   <small class="muted" style="display:block;margin-top:4px">${naira(g.amount)} × ${g.winners} winners · say "${esc(g.keyword)}" · starts ${when(g.startsAt)}</small>
+   <div class="g2" style="margin:12px 0"><div class="stat" style="padding:12px"><small>Winners</small><b>${w.length}<span style="font-size:14px;color:var(--muted)"> / ${g.winners}</span></b></div><div class="stat" style="padding:12px"><small>Paid</small><b>${naira((w.length-unpaid.length)*g.amount)}</b></div></div>
+   ${unpaid.length?`<button class="b green" data-act="gaCredit" data-id="${esc(g.id)}">Credit ${unpaid.length} winner${unpaid.length===1?'':'s'} · ${naira(unpaid.length*g.amount)}</button>`:''}
+   ${w.length?`<div class="cl" style="margin-top:14px">Winners (first ${g.winners} to say ${esc(g.keyword)} in the installed app)</div>${w.map((e,i)=>`<div class="gar"><b>#${i+1}</b><span class="grow" style="min-width:0"><b style="display:block">${esc(e.name)}</b><small class="muted">${esc(e.phone)} · ${new Date(e.createdAt).toLocaleTimeString('en-NG',{hour:'numeric',minute:'2-digit',second:'2-digit'})} · 📱 App${e.alertsOn?' · 🔔':''}</small></span>${e.credited?'<span class="tagx g">Paid</span>':`<button class="mini" data-act="gaCredit" data-id="${esc(g.id)}" data-entry="${esc(e.id)}">Pay</button>`}</div>`).join('')}`:`<p class="empty" style="padding:12px 0">${g.live?'Waiting for the first "'+esc(g.keyword)+'"…':'No winners yet'}</p>`}
+   ${late.length?`<small class="muted" style="display:block;margin-top:8px">${late.length} more customer${late.length===1?'':'s'} said ${esc(g.keyword)} after the spots were filled.</small>`:''}
+   ${open?`<button class="b soft" style="margin-top:12px" data-act="gaEnd" data-id="${esc(g.id)}">End giveaway</button>`:''}</article>`};
+ return `<section class="scr">${hd('Giveaways','First customers to say hi win','dash')}<div class="bd">
+  ${S.gaErr?`<div class="warn2" style="margin-bottom:14px">${I('alertt','style="width:16px;height:16px;flex:none"')}<span>${esc(S.gaErr)}</span></div>`:!list?'<p class="empty">Loading…</p>':''}
+  ${cur?card(cur,true):list&&!S.gaErr?`<form data-form="gaNew" class="card" style="padding:16px;border-radius:14px;margin-bottom:14px" novalidate><b class="h" style="font-size:16.5px">New giveaway</b>
+   <label class="cl" for="ga-t">Title</label><input class="in" id="ga-t" value="₦1,000 Giveaway">
+   <div class="g2"><div><label class="cl" for="ga-a">Each winner gets (₦)</label><input class="in" id="ga-a" inputmode="decimal" value="1000"></div><div><label class="cl" for="ga-w">Number of winners</label><input class="in" id="ga-w" inputmode="numeric" value="30"></div></div>
+   <div class="g2"><div><label class="cl" for="ga-k">Word to say</label><input class="in" id="ga-k" value="hi"></div><div><label class="cl" for="ga-s">Starts</label><input class="in" id="ga-s" type="datetime-local" value="${dflt}"></div></div>
+   <label style="display:flex;gap:10px;align-items:center;margin-top:14px;font-size:14px"><input type="checkbox" id="ga-n" checked style="width:20px;height:20px"> Send a notification to all customers now</label>
+   <button class="b blue" style="margin-top:14px">Create Giveaway</button>
+   <small class="muted" style="display:block;margin-top:8px">Only customers using the installed app can win. Each customer can win once. Winners get an automatic reply in chat.</small></form>`:''}
+  ${past.length?`<h2 class="sh">Past giveaways</h2>${past.map(g=>card(g,false)).join('')}`:''}</div></section>`},
 
 announce:()=>`<section class="scr">${hd('Write','Announcement to all customers','dash')}
  <div class="bd"><form data-form="announce" novalidate><label class="cl" for="an-t" style="margin-top:0">Title</label><input class="in" id="an-t" maxlength="80" placeholder="e.g. New Mexico rate">
@@ -984,6 +1011,7 @@ function go(r,o,pop){
       if(S.route!=='staffChat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(e=>{if(S.route==='staffChat'&&!S.staffPerson){toast(e.message);go('chats')}});pull();poll=setInterval(pull,5000);return}
   if(r==='chat'){S.chat=[];const pull=()=>api('GET','/api/admin/chats/'+encodeURIComponent(S.id)).then(d=>{const n=sig(d.messages)!==sig(S.chat);S.chat=d.messages||[];
       if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();poll=setInterval(pull,5000);return}
+  if(r==='giveaway'){loadGas();clearInterval(S.gaT);S.gaT=setInterval(()=>S.route==='giveaway'?loadGas():clearInterval(S.gaT),10000)}
   if(['dash','staff','receipts','wds','users','chats','accountsAll','rates','console','loans'].includes(r))refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{});
 }
 async function reload(r,o){await refresh();go(r||S.route,o)}
@@ -994,6 +1022,10 @@ const ACT={
   show(el){const i=$('#lg-pw'),sh=i.type==='password';i.type=sh?'text':'password';el.textContent=sh?'HIDE':'SHOW'},
   async logout(){try{await pushDetach()}catch(e){}try{await api('POST','/api/admin/logout')}catch(e){}go(lsGet(BIO.key)?'lock':'login')},
   async staffRole(el,id){if(el.classList.contains('blue'))return;await api('PUT','/api/admin/staff/'+encodeURIComponent(id)+'/role',{role:el.dataset.role});toast('Department changed');await reload()},
+  async gaCredit(el,id){const g=S.gas.find(x=>x.id===id),only=el.dataset.entry,n=only?1:g.entries.filter(e=>e.won&&!e.credited).length;
+    if(!await ask(only?'Pay this winner?':`Pay ${n} winners?`,`${naira(n*g.amount)} will be added to ${only?'their balance':'their balances'} now. Each winner gets a notification.`,'Pay '+naira(n*g.amount)))return;
+    const d=await api('POST','/api/admin/giveaways/'+encodeURIComponent(id)+'/credit',only?{entryId:only}:{});toast(`Paid ${d.paid} winner${d.paid===1?'':'s'}`);await loadGas()},
+  async gaEnd(el,id){if(!await ask('End this giveaway?','Nobody else can win it after this. Winners not yet paid can still be paid.','End giveaway',true))return;await api('POST','/api/admin/giveaways/'+encodeURIComponent(id)+'/end');toast('Giveaway ended');await loadGas()},
   async fwDone(el,id){await api('POST','/api/admin/forwards/'+encodeURIComponent(id)+'/done');await reload()},
   async alertsOn(){try{await pushOn();toast('Alerts turned on')}catch(e){toast(e.message||'Could not turn on alerts')}render()},
   savePic(el,id){const k=el.dataset.kind,t=S.trades.find(x=>x.id===id)||{};savePic(k==='chat'?(S.chat.concat(S.fwds||[]).find(m=>m.id===id)||{}).imageData:k==='fail'?t.failImage:t.receiptImage,k==='chat'?'azaplug-chat-photo':'azaplug-receipt-'+String(id).slice(0,8))},
@@ -1057,6 +1089,8 @@ const FORMS={
   async announce(){const title=val('an-t'),body=val('an-b');if(!title||!body)throw new Error('Enter a title and a message');
     if(!await ask('Send to every customer?',`"${title}" will go to all ${S.users.length} customers and cannot be taken back.`,'Send announcement'))return;
     await api('POST','/api/admin/announce',{title,body});toast('Announcement sent');go('dash')},
+  async gaNew(){const startsAt=new Date(val('ga-s'));if(isNaN(startsAt))throw new Error('Choose the start date and time');
+    await api('POST','/api/admin/giveaways',{title:val('ga-t'),amount:num(val('ga-a')),winners:num(val('ga-w')),keyword:val('ga-k'),startsAt:startsAt.toISOString(),announce:$('#ga-n').checked});toast('Giveaway created');await loadGas()},
   async loanLimit(){const limit=num(val('ln-lim'));await api('PUT','/api/admin/loans/limit',{limit});toast('Loan limit saved');await refresh()},
   async login(){const password=$('#lg-pw').value;if(!password)throw new Error('Enter the admin password');await api('POST','/api/admin/login',{password});await refresh();await gateGo('dash');bioOffer()},
   async account(){const b={title:val('f-title'),bankName:val('f-bank'),accountNumber:val('f-num'),lowestAmount:num(val('f-la')),lowestRate:num(val('f-lr')),higherAmount:num(val('f-ha')),higherRate:num(val('f-hr')),minAmount:num(val('f-min')),maxAmount:num(val('f-max')),imageData:S.form.imageData||null};
@@ -1140,17 +1174,19 @@ function insShow(){if(!(insAndroid||insIOS)||insStandalone()||insSkipped()||docu
 setTimeout(()=>{if(!INS.ev)insShow()},5000);
 /* ---------- Alerts must be on before the dashboard (Staff and Admin) ----------
    Only a browser that cannot do push at all is let through. */
-const gateNeeded=()=>PUSH==='install'||PUSH==='denied'||(PUSH==='off'&&!(PUSH_OK&&Notification.permission==='granted'));
-async function gateGo(dest){await Promise.race([pushState(),new Promise(r=>setTimeout(r,2500))]).catch(()=>{});S.after=dest;go(gateNeeded()?'alertGate':dest)}
-V.alertGate=()=>{const den=PUSH==='denied',inst=PUSH==='install';return `<section class="ax gate"><div style="flex:1"></div><span class="gbell">${I('bell')}</span>
-  <h1>${den?'Alerts are blocked':'Turn on alerts'}</h1><p class="sub">${den?'Alerts are switched off for AZAPLUG on this device. You need them to work.':'You need alerts on to work, so you never miss a receipt, message or request.'}</p>
-  ${inst?'<ol><li>Tap the <b>Share</b> button in Safari.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Open the app from your Home Screen and log in.</li><li>Tap <b>Turn on alerts</b>.</li></ol>':den?'<ol><li>Open your phone or browser <b>Settings</b>.</li><li>Find <b>Notifications</b> (or Site settings) and choose AZAPLUG.</li><li>Switch notifications to <b>Allow</b>.</li><li>Come back and tap <b>Check again</b>.</li></ol>':''}
-  <div style="flex:1"></div>${inst?'':`<button type="button" class="btn axb" data-ax="${den?'gateCheck':'gateAllow'}">${den?'Check again':'Turn on alerts'}</button>`}<button type="button" class="axl" data-ax="gateOut">Log out</button></section>`};
+const gateNeeded=()=>PUSH!=='on';   // alerts must really be on (saved on our server)
+async function pushRetry(){for(let i=0;i<3;i++){try{await Promise.race([pushOn(),new Promise((_,rej)=>setTimeout(()=>rej(new Error('slow')),9000))]);return true}catch(e){if(PUSH==='denied')return false;await new Promise(r=>setTimeout(r,1200))}}return false}
+async function gateGo(dest){await Promise.race([pushState(),new Promise(r=>setTimeout(r,2500))]).catch(()=>{});if(PUSH==='off'&&PUSH_OK&&Notification.permission==='granted')await pushRetry();S.after=dest;go(gateNeeded()?'alertGate':dest)}
+V.alertGate=()=>{const den=PUSH==='denied',inst=PUSH==='install',bad=PUSH==='unsupported';return `<section class="ax gate"><div style="flex:1"></div><span class="gbell">${I('bell')}</span>
+  <h1>${bad?'Open in Chrome or Safari':den?'Alerts are blocked':'Turn on alerts'}</h1><p class="sub">${bad?'This browser cannot show AZAPLUG alerts (for example the browser inside WhatsApp or Instagram). You need alerts to work.':den?'Alerts are switched off for AZAPLUG on this device. You need them to work.':'You need alerts on to work, so you never miss a receipt, message or request.'}</p>
+  ${bad?'<ol><li>Tap <b>Copy link</b> below.</li><li>Open <b>Chrome</b> (Android) or <b>Safari</b> (iPhone).</li><li>Paste the link and open it, then log in.</li></ol>':inst?'<ol><li>Tap the <b>Share</b> button in Safari.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Open the app from your Home Screen and log in.</li><li>Tap <b>Turn on alerts</b>.</li></ol>':den?'<ol><li>Open your phone or browser <b>Settings</b>.</li><li>Find <b>Notifications</b> (or Site settings) and choose AZAPLUG.</li><li>Switch notifications to <b>Allow</b>.</li><li>Come back and tap <b>Check again</b>.</li></ol>':''}
+  <div style="flex:1"></div>${bad?'<button type="button" class="btn axb" data-ax="copyLink">Copy link</button>':inst?'':`<button type="button" class="btn axb" data-ax="${den?'gateCheck':'gateAllow'}" ${S.gateBusy?'disabled':''}>${den?'Check again':S.gateBusy?'Turning on…':'Turn on alerts'}</button>`}<button type="button" class="axl" data-ax="gateOut">Log out</button></section>`};
 NAV.roots.push('alertGate');
 AXA.gateAllow=async()=>{let perm='default';try{perm=await Notification.requestPermission()}catch(e){}
-  if(perm==='granted'){go(S.after||'dash');pushOn().then(()=>{toast('Alerts turned on');render()}).catch(()=>{});return}
+  if(perm==='granted'){S.gateBusy=true;render();const ok=await pushRetry();S.gateBusy=false;if(ok){toast('Alerts turned on');return go(S.after||'dash')}toast('Could not finish turning on alerts. Check your internet and tap again.');return render()}
   PUSH=perm==='denied'?'denied':'off';toast(perm==='denied'?'Alerts are blocked on this device':'Please allow alerts to continue');render()};
-AXA.gateCheck=async()=>{await pushState();if(!gateNeeded())return go(S.after||'dash');toast('Still blocked. Allow notifications for AZAPLUG in Settings.')};
+AXA.copyLink=()=>{const u=location.origin+location.pathname;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>toast('Link copied. Paste it in Chrome or Safari')).catch(()=>prompt('Copy this link',u))};
+AXA.gateCheck=async()=>{await pushState();if(PUSH==='off'&&PUSH_OK&&Notification.permission==='granted')await pushRetry();if(!gateNeeded())return go(S.after||'dash');toast('Still blocked. Allow notifications for AZAPLUG in Settings.')};
 AXA.gateOut=()=>ACT.logout();
 // Coming back to the app with alerts switched off brings the alerts screen back.
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||S.route==='alertGate'||BIO.open.includes(S.route)||!!['login','loading','lock'].includes(S.route))return;

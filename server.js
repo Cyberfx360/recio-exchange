@@ -663,6 +663,8 @@ app.post('/api/chat/send', requireUser, async (req, res) => {
     if (!text && !imageData) return res.status(400).json({ error: 'Message is empty.' });
     if (badAttachment(imageData)) return res.status(400).json({ error: badAttachment(imageData) });
     const msg = await store.addMessage({ userId: req.session.userId, sender: 'user', text, imageData });
+    const reply = text ? await giveawayEntry(req.session.userId, text, req.body || {}).catch(err => { console.error('Giveaway entry error:', err.message || err); return null; }) : null;
+    if (reply) return res.json({ ok: true, message: msg, reply });
     store.findUserById(req.session.userId).then(u => alertTeam({ admin: true, chat: true }, `New message from ${u ? u.name : 'a customer'}`, text ? String(text).slice(0, 140) : isVoice(imageData) ? 'Sent a voice note' : 'Sent a photo', { admin: 'chats', staff: 'chats' })).catch(() => {});
     res.json({ ok: true, message: msg });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send message.' }); }
@@ -1577,9 +1579,103 @@ app.post('/api/admin/loans/:id/decide', requireAdmin, async (req, res) => {
 // The apps ask for this when they come back to the screen; if it changed (a new deploy), they reload themselves.
 const BUILD = process.env.RENDER_GIT_COMMIT || String(Date.now());
 app.get('/api/version', (req, res) => res.json({ v: BUILD }));
+// The old website pages are retired: everyone goes to the new apps (which require notifications).
+const OLD_PAGES = { '/': '/app.html', '/index.html': '/app.html', '/login.html': '/app.html', '/dashboard.html': '/app.html', '/pending.html': '/app.html',
+  '/account-center.html': '/app.html', '/staff.html': '/staff-app.html', '/staff-login.html': '/staff-app.html', '/admin.html': '/admin-app.html' };
+app.get(Object.keys(OLD_PAGES), (req, res) => res.redirect(302, OLD_PAGES[req.path] + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '')));
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders(res, file) { if (/\.(html|js|webmanifest)$/.test(file)) res.setHeader('Cache-Control', 'no-cache'); }
 }));
+
+// ============================================================
+// GIVEAWAYS — the first N customers to say the keyword (e.g. "hi") in chat after the start time win.
+// They must be using the installed app (sent by the app as `installed`). The admin credits winners in one tap.
+// ============================================================
+const gaSqlHint = err => (/giveaway/.test(String(err && err.message)) ? 'Run the giveaway SQL from the README in Supabase first.' : null);
+const keywordHit = (text, kw) => new RegExp('^\\W*' + String(kw || 'hi').toLowerCase().replace(/[^a-z0-9]/g, '') + '+\\b', 'i').test(String(text).trim());
+async function currentGiveaway() {
+  const list = await store.listGiveaways();
+  return list.find(g => g.status === 'open') || null;
+}
+// Returns the automatic reply message (also saved in the chat) when the text is a giveaway entry, or null.
+async function giveawayEntry(userId, text, body) {
+  let g; try { g = await currentGiveaway(); } catch (err) { return null; }
+  if (!g || Date.now() < new Date(g.startsAt).getTime() || !keywordHit(text, g.keyword)) return null;
+  const entries = await store.listEntries(g.id);
+  if (entries.some(e => e.userId === userId)) return null;   // already answered once
+  const say = t => store.addMessage({ userId, sender: 'admin', text: t });
+  if (!body.installed) return say(`🎁 You are early for the ${g.title}! To qualify, open AZAPLUG from the app installed on your home screen (Profile → Install app), turn on notifications, then say "${g.keyword}" again.`);
+  const winnersSoFar = entries.filter(e => e.won).length;
+  const entry = await store.addEntry({ giveawayId: g.id, userId, installed: true, alertsOn: !!body.alertsOn, won: winnersSoFar < g.winners });
+  if (!entry) return null;
+  if (entry.won) {   // two people at the same second: only the first N by time keep their spot
+    const pos = (await store.listEntries(g.id)).filter(e => e.won).findIndex(e => e.id === entry.id) + 1;
+    if (pos > g.winners || pos === 0) { await store.updateEntry(entry.id, { won: false }); entry.won = false; }
+    else {
+      alertTeam({ admin: true }, `Giveaway winner #${pos}`, `A customer just won the ${g.title}.`, { admin: 'giveaway' });
+      return say(`🎉 Congratulations! You are winner #${pos} of ${g.winners} in the ${g.title}. ₦${plain(g.amount)} will be added to your balance shortly.`);
+    }
+  }
+  return say(`🎁 Thanks for joining the ${g.title}! All ${g.winners} spots are taken this time. Keep notifications on so you don't miss the next one.`);
+}
+app.get('/api/giveaway', requireUser, async (req, res) => {
+  try {
+    const g = await currentGiveaway(); if (!g) return res.json({ giveaway: null });
+    const entries = await store.listEntries(g.id), mine = entries.find(e => e.userId === req.session.userId);
+    const won = entries.filter(e => e.won);
+    res.json({ giveaway: { id: g.id, title: g.title, amount: g.amount, winners: g.winners, keyword: g.keyword, startsAt: g.startsAt, live: Date.now() >= new Date(g.startsAt).getTime(), spotsLeft: Math.max(0, g.winners - won.length) },
+      mine: mine ? { won: mine.won, position: mine.won ? won.findIndex(e => e.id === mine.id) + 1 : null, credited: mine.credited } : null });
+  } catch (err) { if (!gaSqlHint(err)) console.error(err); res.json({ giveaway: null }); }
+});
+app.get('/api/admin/giveaways', requireAdmin, async (req, res) => {
+  try {
+    const [list, users] = await Promise.all([store.listGiveaways(), store.listUsers()]);
+    const out = [];
+    for (const g of list.slice(0, 10)) {
+      const entries = await store.listEntries(g.id);
+      out.push({ ...g, live: Date.now() >= new Date(g.startsAt).getTime(),
+        entries: entries.map(e => { const u = users.find(x => x.id === e.userId) || {}; return { ...e, name: u.name || 'Deleted customer', phone: u.phone || '' }; }) });
+    }
+    res.json({ giveaways: out });
+  } catch (err) { if (!gaSqlHint(err)) console.error(err); res.status(500).json({ error: gaSqlHint(err) || 'Could not load giveaways.' }); }
+});
+app.post('/api/admin/giveaways', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {}, amount = Number(b.amount), winners = Math.round(Number(b.winners)), start = new Date(b.startsAt);
+    const keyword = String(b.keyword || 'hi').trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 20) || 'hi';
+    if (!(amount > 0)) return res.status(400).json({ error: 'Enter the amount each winner gets.' });
+    if (!(winners > 0 && winners <= 1000)) return res.status(400).json({ error: 'Enter how many winners (1 to 1000).' });
+    if (isNaN(start.getTime())) return res.status(400).json({ error: 'Choose the start date and time.' });
+    if (await currentGiveaway()) return res.status(409).json({ error: 'End the current giveaway before starting a new one.' });
+    const title = String(b.title || '').trim().slice(0, 60) || `₦${plain(amount)} Giveaway`;
+    const id = await store.createGiveaway({ title, amount, winners, keyword, startsAt: start.toISOString() });
+    if (b.announce) {
+      const when = start.toLocaleString('en-NG', { timeZone: 'Africa/Lagos', weekday: 'short', hour: 'numeric', minute: '2-digit' });
+      notify(null, 'announce', `🎁 ${title}`, `${when}: the first ${winners} people to say "${keyword}" in the AZAPLUG app chat win ₦${plain(amount)}. Use the installed app with notifications on.`, { go: 'home' });
+    }
+    res.json({ ok: true, id });
+  } catch (err) { if (!gaSqlHint(err)) console.error(err); res.status(500).json({ error: gaSqlHint(err) || 'Could not create the giveaway.' }); }
+});
+app.post('/api/admin/giveaways/:id/end', requireAdmin, async (req, res) => {
+  try { await store.setGiveawayStatus(req.params.id, 'closed'); res.json({ ok: true }); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Could not end the giveaway.' }); }
+});
+// Adds the prize to every winner not yet paid (or one winner with entryId).
+app.post('/api/admin/giveaways/:id/credit', requireAdmin, async (req, res) => {
+  try {
+    const g = (await store.listGiveaways()).find(x => x.id === req.params.id);
+    if (!g) return res.status(404).json({ error: 'Giveaway not found.' });
+    const only = (req.body || {}).entryId;
+    const todo = (await store.listEntries(g.id)).filter(e => e.won && !e.credited && (!only || e.id === only));
+    let paid = 0;
+    for (const e of todo) {
+      await store.updateEntry(e.id, { credited: true });   // mark first so a double tap can never pay twice
+      try { await store.addToBalance(e.userId, g.amount); paid++; notify(e.userId, 'trade', '🎉 Giveaway prize added', `₦${plain(g.amount)} from the ${g.title} has been added to your balance.`, { go: 'home' }); }
+      catch (err) { await store.updateEntry(e.id, { credited: false }).catch(() => {}); console.error('Giveaway credit error:', err.message); }
+    }
+    res.json({ ok: true, paid, total: paid * g.amount });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not credit the winners.' }); }
+});
 
 // ============================================================
 // IN-APP CALLS (voice and video over the internet, WebRTC)
