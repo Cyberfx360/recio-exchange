@@ -169,6 +169,7 @@ app.post('/api/staff/register', async (req, res) => {
     const email = await signupEmail('staff', req.body || {});
     if (email.error) return res.status(400).json({ error: email.error });
     const staff = await store.createStaff({
+      role: (await roleReady()) ? cleanRole((req.body || {}).department) : undefined,
       name: String(name).trim(), phone: String(phone).trim(), passwordHash: bcrypt.hashSync(password, 10), email: email.value
     });
     req.session.staffId = staff.id;
@@ -191,6 +192,8 @@ app.post('/api/staff/login', async (req, res) => {
     }
     clearLock('staff', phone);
     req.session.staffId = staff.id;
+    // Staff who signed up before departments were saved: remember the portal they log in with.
+    if (!staff.role && (await roleReady()) && ['vendor', 'chat'].includes((req.body || {}).portal)) await store.setStaffRole(staff.id, req.body.portal).catch(() => {});
     res.json({ ok: true, status: staff.status });
   } catch (err) {
     console.error('Staff login error:', err);
@@ -205,7 +208,7 @@ app.get('/api/staff/me', async (req, res) => {
     if (!req.session.staffId) return res.json({ loggedIn: false });
     const staff = await store.findStaffById(req.session.staffId);
     if (!staff) return res.json({ loggedIn: false });
-    res.json({ loggedIn: true, name: staff.name, phone: staff.phone, status: staff.status, email: staff.email, needsPin: (await pinReady()) && staff.email === null });
+    res.json({ loggedIn: true, name: staff.name, phone: staff.phone, status: staff.status, email: staff.email, role: staff.role, needsPin: (await pinReady()) && staff.email === null });
   } catch (err) {
     console.error('Staff me error:', err);
     res.status(500).json({ error: 'Something went wrong.' });
@@ -860,6 +863,75 @@ app.get('/api/staff/recipients', requireStaff, requireApprovedStaff, async (req,
     const staff = (await store.listStaff()).filter(s => s.status === 'approved' && s.id !== req.staff.id);
     res.json({ recipients: [{ id: 'admin', name: 'Admin', role: 'Admin' }].concat(staff.map(s => ({ id: s.id, name: s.name, role: 'Staff' }))) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load recipients.' }); }
+});
+
+// ---- Staff-to-staff messages: chat managers <-> vendors only (vendors cannot message vendors)
+const cleanRole = r => (r === 'chat' ? 'chat' : 'vendor');
+let roleOk = false, roleChecked = 0;
+async function roleReady() {
+  if (roleOk || Date.now() - roleChecked < 60000) return roleOk;
+  roleChecked = Date.now();
+  try { roleOk = await store.hasStaffRole(); } catch (err) { roleOk = false; }
+  return roleOk;
+}
+const canTalk = (a, b) => (a.role === 'chat' && b.role === 'vendor') || (a.role === 'vendor' && b.role === 'chat');
+async function teamCheck(req, res) {
+  if (!(await roleReady())) { res.status(500).json({ error: 'Run the staff department SQL from the README in Supabase first.' }); return null; }
+  if (!req.staff.role) { res.status(400).json({ error: 'Log out and log in again so we know your department.' }); return null; }
+  return req.staff;
+}
+app.put('/api/admin/staff/:id/role', requireAdmin, async (req, res) => {
+  try {
+    if (!(await roleReady())) return res.status(500).json({ error: 'Run the staff department SQL from the README in Supabase first.' });
+    const s = await store.findStaffById(req.params.id);
+    if (!s) return res.status(404).json({ error: 'Staff not found.' });
+    await store.setStaffRole(s.id, cleanRole((req.body || {}).role)); res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not change the department.' }); }
+});
+const teamSqlHint = err => (/team_messages/.test(String(err && err.message)) ? 'Run the team messages SQL from the README in Supabase first.' : null);
+const teamOut = (m, me) => ({ id: m.id, sender: m.fromStaffId === me ? 'me' : 'them', text: m.text, imageData: m.imageData, createdAt: m.createdAt });
+app.get('/api/staff/team', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    if (!(await teamCheck(req, res))) return;
+    const me = req.staff.id;
+    const [staff, msgs] = await Promise.all([store.listStaff(), store.listTeamMessagesFor(me)]);
+    const people = staff.filter(s => s.status === 'approved' && s.id !== me && canTalk(req.staff, s)).map(s => {
+      const mine = msgs.filter(m => m.fromStaffId === s.id || m.toStaffId === s.id), last = mine[mine.length - 1];
+      return { id: s.id, name: s.name, unread: mine.filter(m => m.fromStaffId === s.id && !m.readAt).length,
+        lastMessage: last ? (last.imageData ? (isVoice(last.imageData) ? '🎤 Voice note' : '📷 Photo') : last.text) : '', lastAt: last ? last.createdAt : null, lastMine: last ? last.fromStaffId === me : false };
+    }).sort((a, b) => String(b.lastAt || '').localeCompare(String(a.lastAt || '')) || a.name.localeCompare(b.name));
+    res.json({ people, unread: people.reduce((n, p) => n + p.unread, 0) });
+  } catch (err) { if (!teamSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || 'Could not load team messages.' }); }
+});
+app.get('/api/staff/team/:id', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    if (!(await teamCheck(req, res))) return;
+    const me = req.staff.id, other = await store.findStaffById(req.params.id);
+    if (!other || other.status !== 'approved' || other.id === me || !canTalk(req.staff, other)) return res.status(404).json({ error: 'You can only message ' + (req.staff.role === 'chat' ? 'vendors' : 'chat managers') + '.' });
+    const msgs = (await store.listTeamMessagesFor(me)).filter(m => m.fromStaffId === other.id || m.toStaffId === other.id);
+    if (msgs.some(m => m.fromStaffId === other.id && !m.readAt)) await store.markTeamRead(me, other.id);
+    res.json({ person: { id: other.id, name: other.name, phone: other.phone }, messages: msgs.map(m => teamOut(m, me)) });
+  } catch (err) { if (!teamSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || 'Could not load messages.' }); }
+});
+app.post('/api/staff/team/:id/send', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    if (!(await teamCheck(req, res))) return;
+    const me = req.staff.id, other = await store.findStaffById(req.params.id);
+    if (!other || other.status !== 'approved' || other.id === me || !canTalk(req.staff, other)) return res.status(404).json({ error: 'You can only message ' + (req.staff.role === 'chat' ? 'vendors' : 'chat managers') + '.' });
+    const text = String((req.body || {}).text || '').trim().slice(0, 4000), imageData = (req.body || {}).imageData || null;
+    if (!text && !imageData) return res.status(400).json({ error: 'Message is empty.' });
+    if (badAttachment(imageData)) return res.status(400).json({ error: badAttachment(imageData) });
+    const m = await store.addTeamMessage({ fromStaffId: me, toStaffId: other.id, text, imageData });
+    alertTeam({ toStaff: other.id }, `Message from ${req.staff.name}`, text ? text.slice(0, 120) : isVoice(imageData) ? 'Sent you a voice note' : 'Sent you a photo', { staff: 'team' });
+    res.json({ ok: true, message: teamOut(m, me) });
+  } catch (err) { if (!teamSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || 'Could not send the message.' }); }
+});
+app.delete('/api/staff/team/:id/messages/:mid', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const m = await store.findTeamMessage(req.params.mid);
+    if (!m || m.fromStaffId !== req.staff.id) return res.status(404).json({ error: 'You can only delete your own messages.' });
+    await store.deleteTeamMessage(m.id); res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the message.' }); }
 });
 
 // ---- Forward one chat message to one person (the admin or another staff member)

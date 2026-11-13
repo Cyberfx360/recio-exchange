@@ -94,11 +94,11 @@ async function addToBalance(id, amount) {
 // ============================================================
 
 function staffRow(r) {
-  return { id: r.id, name: r.name, phone: r.phone, passwordHash: r.password_hash, status: r.status, email: r.email == null ? null : r.email, createdAt: r.created_at };
+  return { id: r.id, name: r.name, phone: r.phone, passwordHash: r.password_hash, status: r.status, email: r.email == null ? null : r.email, role: r.role || null, createdAt: r.created_at };
 }
-async function createStaff({ name, phone, passwordHash, email }) {
+async function createStaff({ name, phone, passwordHash, email, role }) {
   const id = uid();
-  const { error } = await supabase.from('staff').insert({ id, name, phone, password_hash: passwordHash, status: 'pending', ...(email !== undefined ? { email } : {}) });
+  const { error } = await supabase.from('staff').insert({ id, name, phone, password_hash: passwordHash, status: 'pending', ...(email !== undefined ? { email } : {}), ...(role ? { role } : {}) });
   if (error) throw error;
   return findStaffById(id);
 }
@@ -129,6 +129,8 @@ async function deleteStaff(id) {
   }
   await clearOptional('escalations', 'staff_id', id, true);
   await clearOptional('team_push_subscriptions', 'staff_id', id);
+  await clearOptional('team_messages', 'from_staff_id', id);
+  await clearOptional('team_messages', 'to_staff_id', id);
   const { error } = await supabase.from('staff').delete().eq('id', id);
   if (error) throw error;
 }
@@ -631,7 +633,46 @@ async function setForwardStatus(id, status) {
   if (error) throw error;
 }
 
+// Staff-to-staff messages (chat manager <-> vendors).
+function teamMsgRow(r) {
+  return { id: r.id, fromStaffId: r.from_staff_id, toStaffId: r.to_staff_id, text: r.message_text, imageData: r.image_data, readAt: r.read_at, createdAt: r.created_at };
+}
+async function addTeamMessage(m) {
+  const id = uid();
+  const { error } = await supabase.from('team_messages').insert({ id, from_staff_id: m.fromStaffId, to_staff_id: m.toStaffId, message_text: m.text || null, image_data: m.imageData || null });
+  if (error) throw error;
+  const { data } = await supabase.from('team_messages').select('*').eq('id', id).maybeSingle();
+  return data ? teamMsgRow(data) : { id, ...m, createdAt: new Date().toISOString() };
+}
+async function listTeamMessagesFor(staffId) {
+  const { data, error } = await supabase.from('team_messages').select('*').or(`from_staff_id.eq.${staffId},to_staff_id.eq.${staffId}`).order('created_at', { ascending: true }).limit(2000);
+  if (error) throw error;
+  return data.map(teamMsgRow);
+}
+async function markTeamRead(toStaffId, fromStaffId) {
+  const { error } = await supabase.from('team_messages').update({ read_at: new Date().toISOString() }).eq('to_staff_id', toStaffId).eq('from_staff_id', fromStaffId).is('read_at', null);
+  if (error) throw error;
+}
+async function findTeamMessage(id) {
+  const { data, error } = await supabase.from('team_messages').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? teamMsgRow(data) : null;
+}
+async function deleteTeamMessage(id) {
+  const { error } = await supabase.from('team_messages').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// Staff department: 'vendor' or 'chat' (chat manager). True once the role column exists.
+async function hasStaffRole() { const { error } = await supabase.from('staff').select('role').limit(1); return !error; }
+async function setStaffRole(id, role) {
+  const { error } = await supabase.from('staff').update({ role }).eq('id', id);
+  if (error) throw error;
+}
+
 module.exports = {
+  hasStaffRole, setStaffRole,
+  addTeamMessage, listTeamMessagesFor, markTeamRead, findTeamMessage, deleteTeamMessage,
   createForward, listForwardsTo, findForwardById, setForwardStatus,
   hasEmailColumns, findByEmail, setLogin, sessionGet, sessionSet, sessionDelete, savePasskey, findPasskey, updatePasskeyCounter, deletePasskey,
   saveTeamPush, deleteTeamPush, listTeamPush,
