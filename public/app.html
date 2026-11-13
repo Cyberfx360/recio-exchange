@@ -633,12 +633,11 @@ home:()=>{const list=S.homeTab==='trades'
  return `<section class="screen tabs">
   <div class="between" style="margin-bottom:18px"><span class="brand">AZAPLUG</span>
    <span class="row" style="gap:12px"><button data-go="accounts" style="background:var(--blue);color:#fff;font-weight:700;font-size:14px;padding:9px 16px;border-radius:999px">Rate</button>
-   ${bell()}</span></div>
+   <button class="icon-btn" data-go="top" aria-label="Top Traders" style="color:#D97706">${I('trophy')}</button>${bell()}</span></div>
   <div class="balance"><small>Balance</small><div class="amt">${naira(S.me.balance)}</div>
    <div class="qacts">${[['accounts','bank','<em>Get </em>Account',1],['withdraw','out','Withdraw'],['rules','book','Rules'],['loan','coins','Borrow']].map(q=>`<button class="${q[3]?'on':''}" data-go="${q[0]}"><i>${I(q[1])}</i><span>${q[2]}</span></button>`).join('')}</div></div>
   ${gaCard()}
   <button class="btn sq" style="margin:16px 0 20px;font-family:var(--body);font-weight:600" data-go="send">Send Receipt</button>
-  ${topCard()}
   <div class="seg" role="tablist"><button class="${S.homeTab==='trades'?'on':''}" data-set="homeTab:trades">Trades</button><button class="${S.homeTab==='withdrawals'?'on':''}" data-set="homeTab:withdrawals">Withdrawals</button></div>
   <div class="sec-h"><h3>Recent Transactions</h3><button class="link" style="font-size:15px" data-go="history">See All</button></div>
   ${list}
@@ -662,7 +661,7 @@ accounts:()=>`<section class="screen tabs">
 
 top:()=>{const t=S.top,tab=S.topTab||'month',list=t?(tab==='month'?t.month:t.all):null;
  return `<section class="screen">
-  <div class="top left">${back('home',1)}<span class="title">Top Traders</span></div>
+  <div class="top left">${back(S.topFrom||'home',1)}<span class="title">Top Traders</span></div>
   <div class="tpb"><span>${I('trophy')}</span><div><small>Traded with AZAPLUG</small><b>${t?naira0(t.totalTraded):'…'}</b><small>${t?`${n0(t.trades)} approved trade${t.trades===1?'':'s'} · ${n0(t.customers)} customer${t.customers===1?'':'s'}`:'Loading…'}</small></div></div>
   <div class="seg" role="tablist" style="margin-top:18px"><button class="${tab==='month'?'on':''}" data-set="topTab:month">This Month</button><button class="${tab==='all'?'on':''}" data-set="topTab:all">All Time</button></div>
   <div class="tpc" style="margin-top:14px">${!list?'<p class="empty">Loading…</p>':list.length?list.map(topRow).join(''):`<p class="empty">${tab==='month'?'No approved trades this month yet. Be the first!':'No approved trades yet'}</p>`}</div>
@@ -844,6 +843,7 @@ profile:()=>{const u=S.me,ini=u.name.trim().split(/\s+/).map(x=>x[0]).slice(0,2)
    ${pushHelp[S.push]?`<p class="muted" style="font-size:13px">${pushHelp[S.push]}</p>`:''}</div>
   <div style="height:10px"></div>
   <button class="menu" data-go="edit"><span class="ic">${I('user')}</span>Edit Profile Details<span class="chev">${I('cr')}</span></button>
+  <button class="menu" data-go="top"><span class="ic">${I('trophy')}</span>Top Traders<span class="chev">${I('cr')}</span></button>
   ${insStandalone()?'':`<button class="menu" data-act="install"><span class="ic">${I('dl')}</span>Install AZAPLUG App<span class="chev">${I('cr')}</span></button>`}
   <button class="menu" data-act="shareApp"><span class="ic">${I('share')}</span>Share AZAPLUG with Friends<span class="chev">${I('cr')}</span></button>
   <button class="menu" data-go="chat"><span class="ic">${I('help')}</span>Help &amp; Customer Support<span class="chev">${I('cr')}</span></button>
@@ -902,10 +902,8 @@ setInterval(()=>{if(VN.rec)peerTyping('recording');else if(PEER.kind==='recordin
 
 /* ---------- Top Traders ---------- */
 const topRow=r=>`<div class="tpr"><span class="rk r${r.rank}">${r.rank}</span><span class="grow" style="min-width:0"><b>${esc(r.name)}${r.me?'<em>You</em>':''}</b><small>${n0(r.trades)} trade${r.trades===1?'':'s'}</small></span><b class="tpa">${naira0(r.total)}</b></div>`;
-function topCard(){const t=S.top;if(!t||!t.all.length)return '';const m=t.month.length>=3,list=(m?t.month:t.all).slice(0,3);
-  return `<div class="tpc"><div class="between" style="margin-bottom:4px"><b class="tph">${I('trophy')}Top Traders<small>${m?'this month':'all time'}</small></b><button class="link" style="font-size:14px" data-go="top">See all</button></div>${list.map(topRow).join('')}</div>`}
 let topAt=0;function loadTop(force){if(!force&&S.top&&Date.now()-topAt<60000)return;topAt=Date.now();
-  api('GET','/api/top-traders').then(d=>{S.top=d;if((S.route==='home'||S.route==='top')&&!(document.activeElement&&document.activeElement.matches('input,select')))render()}).catch(()=>{})}
+  api('GET','/api/top-traders').then(d=>{S.top=d;if(S.route==='top'&&!(document.activeElement&&document.activeElement.matches('input,select')))render()}).catch(()=>{})}
 
 /* ---------- Render + navigation ---------- */
 /* ---------- Back gesture: each screen is a history entry, so swiping back returns to the previous screen ---------- */
@@ -1030,7 +1028,8 @@ function go(r,o,pop){
   if(r==='home'||r==='notifications')loadNotes();
   if(r==='loan')loadLoan();
   if(r==='home')loadGiveaway();
-  if(r==='home'||r==='top')loadTop(r==='top');
+  if(r==='top')loadTop(true);
+  if(r!=='top')S.topFrom=r;
   if(r==='trade'||r==='home'||r==='history'||r==='withdraw'||r==='profile')Promise.all([loadMe(),loadAll()]).then(()=>{if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
   if(r==='accounts'||r==='send')api('GET','/api/accounts').then(d=>{S.accounts=d.accounts||[];if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
   if(r==='crypto'||r==='cryptoSend')api('GET','/api/crypto-rates').then(d=>{CRYPTO.BTC.rate=d.btc||null;CRYPTO.USDT.rate=d.usdt||null;if(S.route===r&&!(document.activeElement&&document.activeElement.matches('input')))render();else{const p=$('#cs-get');if(p)p.textContent=csGet()}}).catch(()=>{});
