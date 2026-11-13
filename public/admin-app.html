@@ -633,6 +633,10 @@ rates:()=>`<section class="scr">${hd('Rates &amp; Rules','Admin Controls • Str
  <div class="bd">${S.ratesTab==='rates'?`<div class="between" style="margin-bottom:12px"><b style="font-size:13.5px">Active Exchange Rates</b><small class="muted">Max limit ${naira(S.settings.maxDeposit)}</small></div>
   ${S.accounts.length?S.accounts.map(a=>`<article class="card rt2"><div class="between"><b class="h" style="font-size:14.5px">${esc(a.title)} <small class="muted" style="font:400 12px var(--body)">${esc(a.bankName)}</small></b><button data-act="acctEdit" data-from="rates" data-id="${esc(a.id)}" aria-label="Edit rates for ${esc(a.title)}" style="color:var(--blue)">${I('pen','style="width:16px;height:16px"')}</button></div>
    <div class="g2">${[['LOWER',n0(a.lowestAmount)],['Rate at lower',naira(a.lowestRate)],['HIGHER',n0(a.higherAmount)],['Rate at higher',naira(a.higherRate)],['Min Limit',naira(a.minAmount)],['Max Limit',naira(a.maxAmount)]].map(r=>`<div><small>${r[0]}</small><b>${r[1]}</b></div>`).join('')}</div></article>`).join(''):'<p class="empty">No accounts yet. Add one under Accounts.</p>'}
+  <form data-form="cryptoRates" class="card rt2" novalidate><b class="h" style="font-size:14.5px">Bitcoin &amp; USDT <small class="muted" style="font:400 12px var(--body)">naira price customers see</small></b>
+   <div class="g2" style="margin-top:8px"><div><label class="cl" for="cr-btc" style="margin-top:0">1 BTC = ₦</label><input class="in" id="cr-btc" inputmode="decimal" placeholder="Not set" value="${esc(S.settings.btcRate||'')}"></div>
+    <div><label class="cl" for="cr-usdt" style="margin-top:0">1 USDT = ₦</label><input class="in" id="cr-usdt" inputmode="decimal" placeholder="Not set" value="${esc(S.settings.usdtRate||'')}"></div></div>
+   <button class="b blue" style="margin-top:12px">Save Crypto Rates</button></form>
   <div class="pol"><b>System Policy Rules List</b><p>${esc((S.settings.rulesText||'No rules posted yet.').slice(0,220))}${(S.settings.rulesText||'').length>220?'…':''}</p><button class="link" style="font-size:13px" data-set="ratesTab:rules">+ Configure Policy Rules</button></div>`
  :`<form data-form="rules" novalidate><label class="cl" for="r-text" style="margin-top:0">Rules shown to customers</label><textarea class="in" id="r-text" rows="16">${esc(S.settings.rulesText||'')}</textarea>
   <label class="cl" for="r-max">Maximum deposit (₦)</label><input class="in" id="r-max" inputmode="decimal" value="${esc(S.settings.maxDeposit??'')}"><button class="b blue">Save Change</button></form>`}</div></section>`,
@@ -755,17 +759,17 @@ const ACT={
   async staffApprove(el,id){await api('PUT',`/api/admin/staff/${id}/approve`);toast('Staff approved');await reload()},
   async staffReject(el,id){const s=S.staff.find(x=>x.id===id);if(!await ask(s.status==='approved'?'Suspend this agent?':'Reject this staff?',`${s.name} will not be able to use the Staff portal.`,s.status==='approved'?'Suspend':'Reject',1))return;
     await api('PUT',`/api/admin/staff/${id}/reject`);toast('Staff access turned off');await reload()},
-  async staffDelete(el,id){const s=S.staff.find(x=>x.id===id);if(!await ask('Delete this staff account?',`${s.name} will be removed permanently. This cannot be undone.`,'Delete permanently',1))return;
+  async staffDelete(el,id){const s=S.staff.find(x=>x.id===id);if(!await ask('Delete this staff account?',`${s.name} will be removed permanently. Their accounts and receipts stay, and move to you (admin). This cannot be undone.`,'Delete permanently',1))return;
     await api('DELETE',`/api/admin/staff/${id}`);toast('Staff deleted');await reload('staff')},
   userEdit(el,id){go('userEdit',{id,back:S.route==='user'?'user':'users'})},
   async userSuspend(el,id){const u=S.users.find(x=>x.id===id);if(!await ask('Suspend this user?',`${u.name} will be locked out until you approve them again.`,'Suspend',1))return;
     await api('PUT',`/api/admin/users/${id}/reject`);toast('User suspended');await reload()},
   async userApprove(el,id){await api('PUT',`/api/admin/users/${id}/approve`);toast('User approved');await reload()},
-  async userDelete(el,id){const u=S.users.find(x=>x.id===id);if(!await ask('Delete this user?',`${u.name} and their account will be removed permanently. This cannot be undone.`,'Delete permanently',1))return;
+  async userDelete(el,id){const u=S.users.find(x=>x.id===id);if(!await ask('Delete this user?',`${u.name} will be removed permanently, together with their receipts, withdrawals, chat and loans.${u.balance>0?' They still have '+naira(u.balance)+' in their balance.':''} This cannot be undone.`,'Delete permanently',1))return;
     await api('DELETE',`/api/admin/users/${id}`);toast('User deleted');await reload('users')},
   acctEdit(el,id){const a=S.accounts.find(x=>x.id===id);go('accountEdit',{form:{...a},back:el.dataset.from||'accountsAll'})},
   async acctVerify(el,id){await api('PUT',`/api/admin/accounts/${id}`,{active:true});toast('Account verified. Customers can now see it.');await reload()},
-  async acctDelete(el,id){const a=S.accounts.find(x=>x.id===id);if(!await ask('Delete this account?',`${a.title} (${a.bankName}) will be removed permanently. This cannot be undone.`,'Delete permanently',1))return;
+  async acctDelete(el,id){const a=S.accounts.find(x=>x.id===id);if(!await ask('Delete this account?',`${a.title} (${a.bankName}) will be removed permanently. Receipts already sent to it are kept. This cannot be undone.`,'Delete permanently',1))return;
     await api('DELETE',`/api/admin/accounts/${id}`);toast('Account deleted');await reload()},
   async tradeMark(el,id){const status=el.dataset.status,t=S.trades.find(x=>x.id===id),body={status};
     if(status==='failed'){const r=($('#t-reason')||{}).value;if(!r||!r.trim()){toast('Enter the failure reason first');$('#t-reason')&&$('#t-reason').focus();return}
@@ -815,6 +819,7 @@ const FORMS={
     else{const d=await api('POST','/api/admin/accounts',b);S.form=null;await refresh();go('accountAdded',{done:d.account||b})}},
   async userEdit(){const b={name:val('u-n'),bankName:val('u-b'),accountNumber:val('u-a')};if(Object.values(b).some(v=>!v))throw new Error('All fields are required');
     await api('PUT','/api/admin/users/'+S.id,b);toast('User saved');await reload(S.back)},
+  async cryptoRates(){await api('PUT','/api/admin/settings',{btcRate:num(val('cr-btc'))||0,usdtRate:num(val('cr-usdt'))||0});toast('Crypto rates saved');await refresh()},
   async rules(){await api('PUT','/api/admin/settings',{rulesText:$('#r-text').value,maxDeposit:num(val('r-max'))});toast('Rules saved');await refresh()},
   async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';const d=await api('POST','/api/admin/chats/'+encodeURIComponent(S.id)+'/send',{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();chatBottom();i.focus()}
 };

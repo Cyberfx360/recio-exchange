@@ -212,6 +212,12 @@ app.get('/api/rates', async (req, res) => {
   }
 });
 
+// Naira price of 1 BTC and 1 USDT, set by the admin. 0 means not set yet.
+app.get('/api/crypto-rates', async (req, res) => {
+  try { const st = await store.getSettings(); res.json({ btc: st.btcRate || 0, usdt: st.usdtRate || 0 }); }
+  catch (err) { console.error('Crypto rates error:', err); res.status(500).json({ error: 'Could not load rates.' }); }
+});
+
 app.get('/api/rules', async (req, res) => {
   try {
     const settings = await store.getSettings();
@@ -732,8 +738,21 @@ app.get('/api/admin/settings', requireAdmin, async (req, res) => {
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load settings.' }); }
 });
 app.put('/api/admin/settings', requireAdmin, async (req, res) => {
-  try { await store.updateSettings(req.body || {}); res.json({ ok: true }); }
-  catch (err) { console.error(err); res.status(500).json({ error: 'Could not update settings.' }); }
+  try {
+    const b = req.body || {}, patch = {};
+    ['rulesText', 'settlementAccount', 'settlementBank', 'maxDeposit'].forEach(k => { if (b[k] !== undefined) patch[k] = b[k]; });
+    for (const k of ['btcRate', 'usdtRate']) {
+      if (b[k] === undefined) continue;
+      const n = Number(b[k]);
+      if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'Enter the rate as a number, like 1650.' });
+      patch[k] = n;
+    }
+    await store.updateSettings(patch); res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    const cryptoCols = /btc_rate|usdt_rate/.test(String(err && err.message));
+    res.status(500).json({ error: cryptoCols ? 'Run the BTC/USDT rates SQL from the README in Supabase first.' : 'Could not update settings.' });
+  }
 });
 
 // ============================================================

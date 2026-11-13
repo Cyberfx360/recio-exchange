@@ -8,6 +8,10 @@
 > alter table trades add column if not exists fail_image text;
 > alter table withdrawals add column if not exists reason_image text;
 > ```
+> For the Bitcoin / USDT naira rates (set under Admin → Edit Rates), also run this one line:
+> ```sql
+> alter table settings add column if not exists btc_rate numeric not null default 0, add column if not exists usdt_rate numeric not null default 0;
+> ```
 > That's it — no other schema changes, nothing else to touch in Supabase.
 
 > **Escalated chats (Admin Console)** need one more table. Run this once in the Supabase SQL Editor:
