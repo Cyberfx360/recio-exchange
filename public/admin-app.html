@@ -425,8 +425,9 @@ img,svg,video{max-width:100%}
 .pinh{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--muted);padding:12px 20px 6px}
 .pinic{color:var(--muted);display:inline-flex}.newb{background:var(--blue);color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:999px;display:inline-grid;place-items:center;padding:0 6px}
 .gab{display:flex;align-items:center;gap:12px;width:100%;margin-top:12px;padding:14px 16px;border-radius:16px;color:#fff;background:linear-gradient(135deg,#F59E0B,#EF4444)}
-.gab>span:first-child{font-size:26px}.gab b{display:block;font-size:15.5px}.gab small{font-size:12.5px;opacity:.9}
+.gab .gai{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);display:grid;place-items:center;flex:none}.gab b{display:block;font-size:15.5px}.gab small{font-size:12.5px;opacity:.9}
 .gar{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.gar>b{width:34px;color:var(--blue);flex:none}
+.cnote{display:inline-flex;vertical-align:-3px;margin-right:6px;color:#10B981}.cnote.miss{color:#EF4444}
 </style>
 </head>
 <body>
@@ -437,6 +438,9 @@ img,svg,video{max-width:100%}
 <script>
 /* ---------- Icons (20px stroke line icons, per brand guide) ---------- */
 const P={
+ gift:'<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5" rx="1"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>',
+ belloff:'<path d="M13.73 21a2 2 0 0 1-3.46 0M18.63 13A17.89 17.89 0 0 1 18 8M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14M18 8a6 6 0 0 0-9.33-5M1 1l22 22"/>',
+ mobile:'<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
  home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
  repeat:'<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
  bars:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
@@ -548,7 +552,7 @@ function ask(title,text,ok,danger){return new Promise(res=>{askResolve=res;
    <button class="b ${danger?'red':'green'}" data-ask="1">${esc(ok)}</button><button class="b ghost" data-ask="0">Cancel</button></div></div>`})}
 
 function pick(title,opts){return new Promise(res=>{askResolve=res;
-  $('#sheet').innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h3>${esc(title)}</h3><div style="max-height:48vh;overflow:auto;margin-top:10px">${opts.map(o=>`<button class="pk ${o.on?'on':''}" data-pick="${esc(o.id)}">${esc(o.label)}${o.on?' ✓':''}</button>`).join('')}</div><button class="b ghost" data-ask="0">Cancel</button></div></div>`})}
+  $('#sheet').innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h3>${esc(title)}</h3><div style="max-height:48vh;overflow:auto;margin-top:10px">${opts.map(o=>`<button class="pk ${o.on?'on':''}" data-pick="${esc(o.id)}">${esc(o.label)}${o.on?' '+I('check','style="width:16px;height:16px;vertical-align:-3px"'):''}</button>`).join('')}</div><button class="b ghost" data-ask="0">Cancel</button></div></div>`})}
 function askText(title,text,ph,ok){return new Promise(res=>{askResolve=res;
   $('#sheet').innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h3>${esc(title)}</h3><p>${esc(text)}</p><textarea class="in" id="ask-t" rows="3" placeholder="${esc(ph)}" aria-label="${esc(ph)}"></textarea>
    <button class="b green" data-ask="1">${esc(ok)}</button><button class="b ghost" data-ask="0">Cancel</button></div></div>`;$('#ask-t').focus()})}
@@ -614,7 +618,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
   <button class="stat" data-go="users" data-tab="alertsoff"><small>Notifications On</small><b style="color:${alertsOn===S.users.length?'var(--green)':'var(--slate)'}">${alertsOn}<span style="font-size:15px;color:var(--muted);font-weight:600"> / ${S.users.length}</span></b><i style="color:${alertsOn<S.users.length?'var(--orange)':'var(--green)'}">${S.users.length-alertsOn?(S.users.length-alertsOn)+' customer'+(S.users.length-alertsOn===1?'':'s')+' without':'Every customer'}</i></button></div>
   <h2 class="sh">Quick Actions</h2>
   <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
-  <button class="gab" data-go="giveaway"><span>🎁</span><span class="grow" style="text-align:left"><b>Giveaways</b><small>Reward the first customers to say hi</small></span>${I('cr','style="width:18px;height:18px"')}</button>
+  <button class="gab" data-go="giveaway"><span class="gai">${I('gift','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Giveaways</b><small>Reward the first customers to say hi</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <div class="between" style="margin:22px 0 10px"><h2 class="sh" style="margin:0">Recent Activity Feed</h2><button class="link" style="font-size:14px" data-go="receipts">View All</button></div>
   ${feed.length?feed.map(f=>`<button class="feed" data-go="${f.go}" data-id="${esc(f.id)}"><i></i><span class="grow" style="min-width:0"><b>${f.t}</b><small>${f.s} • ${ago(f.at)}</small></span><em>${f.r}</em></button>`).join(''):'<p class="empty">No activity yet</p>'}
   <p style="text-align:center;margin-top:26px"><button class="link" style="color:var(--muted);font-weight:600;font-size:14px" data-act="logout">Log out</button></p></div></section>`},
@@ -622,7 +626,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
 staff:()=>`<section class="scr">${hd('Staff','Active and Pending Recio Agents','dash')}
  <div class="bd">${search('Search staff members...')}<div id="list">
  ${S.staff.length?S.staff.map(s=>{const b=sBadge(s),st=staffStats(s);return `<article class="card sc" data-k="${esc((s.name+' '+s.phone).toLowerCase())}">
-  <button class="row" style="gap:12px;width:100%;text-align:left" data-go="staffProfile" data-id="${esc(s.id)}">${av(s.name)}<span class="grow" style="min-width:0"><b class="h" style="font-size:14.5px;display:block">${esc(s.name)}</b><small class="muted">${s.role==='chat'?'Chat Manager':s.role==='vendor'?'Vendor':'No department'} • ${st.trades} Trades • ${st.accounts} Accounts</small><small style="display:block;margin-top:2px;font-weight:600;color:${s.alerts?'var(--green)':'var(--orange)'}">${s.alerts?'🔔 Alerts on':'🔕 Alerts off'}</small></span><span class="badge ${b[1]} xs">${b[0]}</span></button>
+  <button class="row" style="gap:12px;width:100%;text-align:left" data-go="staffProfile" data-id="${esc(s.id)}">${av(s.name)}<span class="grow" style="min-width:0"><b class="h" style="font-size:14.5px;display:block">${esc(s.name)}</b><small class="muted">${s.role==='chat'?'Chat Manager':s.role==='vendor'?'Vendor':'No department'} • ${st.trades} Trades • ${st.accounts} Accounts</small><small style="display:block;margin-top:2px;font-weight:600;color:${s.alerts?'var(--green)':'var(--orange)'}">${s.alerts?I('bell','style="width:14px;height:14px;vertical-align:-2px"')+' Alerts on':I('belloff','style="width:14px;height:14px;vertical-align:-2px"')+' Alerts off'}</small></span><span class="badge ${b[1]} xs">${b[0]}</span></button>
   <div class="row" style="gap:8px;margin-top:12px"><button class="sb o-red" data-act="staffDelete" data-id="${esc(s.id)}">Delete</button>
    ${s.status==='rejected'?'':`<button class="sb orange" data-act="staffReject" data-id="${esc(s.id)}">REJECT</button>`}
    ${s.status==='approved'?'':`<button class="sb blue" data-act="staffApprove" data-id="${esc(s.id)}">${s.status==='rejected'?'Re-Approve':'Approve Staff'}</button>`}</div></article>`}).join(''):'<p class="empty">No staff yet</p>'}</div>
@@ -740,7 +744,7 @@ giveaway:()=>{const list=S.gas,cur=list&&list.find(g=>g.status==='open'),past=li
    <small class="muted" style="display:block;margin-top:4px">${naira(g.amount)} × ${g.winners} winners · say "${esc(g.keyword)}" · starts ${when(g.startsAt)}</small>
    <div class="g2" style="margin:12px 0"><div class="stat" style="padding:12px"><small>Winners</small><b>${w.length}<span style="font-size:14px;color:var(--muted)"> / ${g.winners}</span></b></div><div class="stat" style="padding:12px"><small>Paid</small><b>${naira((w.length-unpaid.length)*g.amount)}</b></div></div>
    ${unpaid.length?`<button class="b green" data-act="gaCredit" data-id="${esc(g.id)}">Credit ${unpaid.length} winner${unpaid.length===1?'':'s'} · ${naira(unpaid.length*g.amount)}</button>`:''}
-   ${w.length?`<div class="cl" style="margin-top:14px">Winners (first ${g.winners} to say ${esc(g.keyword)} in the installed app)</div>${w.map((e,i)=>`<div class="gar"><b>#${i+1}</b><span class="grow" style="min-width:0"><b style="display:block">${esc(e.name)}</b><small class="muted">${esc(e.phone)} · ${new Date(e.createdAt).toLocaleTimeString('en-NG',{hour:'numeric',minute:'2-digit',second:'2-digit'})} · 📱 App${e.alertsOn?' · 🔔':''}</small></span>${e.credited?'<span class="tagx g">Paid</span>':`<button class="mini" data-act="gaCredit" data-id="${esc(g.id)}" data-entry="${esc(e.id)}">Pay</button>`}</div>`).join('')}`:`<p class="empty" style="padding:12px 0">${g.live?'Waiting for the first "'+esc(g.keyword)+'"…':'No winners yet'}</p>`}
+   ${w.length?`<div class="cl" style="margin-top:14px">Winners (first ${g.winners} to say ${esc(g.keyword)} in the installed app)</div>${w.map((e,i)=>`<div class="gar"><b>#${i+1}</b><span class="grow" style="min-width:0"><b style="display:block">${esc(e.name)}</b><small class="muted">${esc(e.phone)} · ${new Date(e.createdAt).toLocaleTimeString('en-NG',{hour:'numeric',minute:'2-digit',second:'2-digit'})} · ${I('mobile','style="width:13px;height:13px;vertical-align:-2px"')} App${e.alertsOn?' · '+I('bell','style="width:14px;height:14px;vertical-align:-2px"'):''}</small></span>${e.credited?'<span class="tagx g">Paid</span>':`<button class="mini" data-act="gaCredit" data-id="${esc(g.id)}" data-entry="${esc(e.id)}">Pay</button>`}</div>`).join('')}`:`<p class="empty" style="padding:12px 0">${g.live?'Waiting for the first "'+esc(g.keyword)+'"…':'No winners yet'}</p>`}
    ${late.length?`<small class="muted" style="display:block;margin-top:8px">${late.length} more customer${late.length===1?'':'s'} said ${esc(g.keyword)} after the spots were filled.</small>`:''}
    ${open?`<button class="b soft" style="margin-top:12px" data-act="gaEnd" data-id="${esc(g.id)}">End giveaway</button>`:''}</article>`};
  return `<section class="scr">${hd('Giveaways','First customers to say hi win','dash')}<div class="bd">
@@ -764,9 +768,9 @@ users:()=>{const list=S.users.filter(u=>S.userTab==='all'||(S.userTab==='alertso
  return `<section class="scr"><div class="bd" style="padding-top:24px"><div class="top" style="margin-bottom:12px"><button class="icon-btn sqr" style="width:36px;height:36px" data-go="dash" aria-label="Back">${I('cl','style="width:16px;height:16px"')}</button>
    <span class="title" style="line-height:1.2">Users<small class="muted" style="display:block;font:400 12.5px var(--body)">${S.users.filter(u=>u.status==='approved').length} total approved accounts</small></span><span></span></div>
   ${search('Search users, banks, or accounts...')}
-  <div class="chips">${[['all','All Users'],['alertson','🔔 Alerts On'],['alertsoff','🔕 Alerts Off'],['approved','Approved'],['suspended','Suspended']].map(c=>`<button class="${S.userTab===c[0]?'on':''}" data-set="userTab:${c[0]}">${c[1]}</button>`).join('')}</div>
+  <div class="chips">${[['all','All Users'],['alertson','Alerts On'],['alertsoff','Alerts Off'],['approved','Approved'],['suspended','Suspended']].map(c=>`<button class="${S.userTab===c[0]?'on':''}" data-set="userTab:${c[0]}">${c[1]}</button>`).join('')}</div>
   <div id="list">${list.length?list.map(u=>{const ok=u.status==='approved';return `<article class="card uc" data-k="${esc((u.name+' '+u.phone+' '+u.bankName+' '+u.accountNumber).toLowerCase())}">
-   <button class="between" style="width:100%;text-align:left;align-items:flex-start" data-go="user" data-id="${esc(u.id)}"><span style="min-width:0"><b class="h" style="font-size:15.5px;display:block;word-break:break-word">${esc(u.name)}</b><small class="muted">Balance: <b style="color:var(--slate)">${naira(u.balance)}</b></small><small style="display:block;margin-top:3px;font-weight:600;color:${u.alerts?'var(--green)':'var(--orange)'}">${u.alerts?'🔔 Notifications on'+(u.alerts>1?' · '+u.alerts+' phones':''):'🔕 Notifications off'}</small></span><span class="badge ${ok?'b-approved':'b-failed'} xs">${ok?'APPROVED':'SUSPENDED'}</span></button>
+   <button class="between" style="width:100%;text-align:left;align-items:flex-start" data-go="user" data-id="${esc(u.id)}"><span style="min-width:0"><b class="h" style="font-size:15.5px;display:block;word-break:break-word">${esc(u.name)}</b><small class="muted">Balance: <b style="color:var(--slate)">${naira(u.balance)}</b></small><small style="display:block;margin-top:3px;font-weight:600;color:${u.alerts?'var(--green)':'var(--orange)'}">${u.alerts?I('bell','style="width:14px;height:14px;vertical-align:-2px"')+' Notifications on'+(u.alerts>1?' · '+u.alerts+' phones':''):I('belloff','style="width:14px;height:14px;vertical-align:-2px"')+' Notifications off'}</small></span><span class="badge ${ok?'b-approved':'b-failed'} xs">${ok?'APPROVED':'SUSPENDED'}</span></button>
    <div class="ur"><div><span>PHONE</span><b>${esc(u.phone)}</b></div><div><span>BANK</span><b>${esc(u.bankName)}</b></div><div><span>ACCOUNT NO</span><b style="font-weight:700">${esc(u.accountNumber)}</b></div></div>
    <div class="row" style="gap:8px"><button class="sb s-blue" data-act="userEdit" data-id="${esc(u.id)}">${I('pen','style="width:13px;height:13px"')}Edit</button>
     ${ok?`<button class="sb s-yellow" data-act="userSuspend" data-id="${esc(u.id)}">Suspend</button>`:`<button class="sb s-green" data-act="userApprove" data-id="${esc(u.id)}">Approve</button>`}
@@ -845,9 +849,9 @@ chat:()=>{const u=S.users.find(x=>x.id===S.id)||{name:'Customer',phone:''};retur
 };
 function msgsHtml(){if(!S.chat.length)return '<p class="empty">No messages yet</p>';let day='';
   if(S.route==='staffChat')return S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender==='me';const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(m.createdAt)}${mine?mdBtn(m):''}</time></div>`}).join('');
+    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}${mine?mdBtn(m):''}</time></div>`}).join('');
   return S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender!=='user';const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(m.createdAt)}${mdBtn(m)}</time></div>`}).join('')}
+    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}${mdBtn(m)}</time></div>`}).join('')}
 
 /* ---------- Render + navigation ---------- */
 async function savePic(src,name){src=safeImg(src);if(!src)return toast('No picture to save');
@@ -912,6 +916,11 @@ const VN={rec:null,MAX:120,id:null,audio:null};
 const VN_URL=()=>(S.route==='staffChat'?'/api/admin/team/'+encodeURIComponent(S.sid)+'/send':'/api/admin/chats/'+encodeURIComponent(S.id)+'/send');
 const mmss=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
 const vnMime=()=>window.MediaRecorder?['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported(t))||'':'';
+// Message text. Call notes ("Voice call · 2:31", "Missed video call") get a small icon like WhatsApp; old emoji prefixes are dropped.
+const EMO=/^[\u{1F300}-\u{1FAFF}☀-➿️\s]+/u;
+function msgText(t){t=String(t||'').replace(EMO,'');const c=/^(Missed )?(Voice|Video) call\b/i.exec(t);
+  const ic=c?`<span class="cnote ${c[1]?'miss':''}">${I(/video/i.test(c[2])?'video':'phone','style="width:15px;height:15px"')}</span>`:'';
+  return ic+esc(t).replace(/\n/g,'<br>')}
 function vnParse(src){if(typeof src!=='string')return null;
   const st=/^\/api\/media\/(?:u|staff|team)\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(?:m4a|webm|ogg|mp3)\?a=1(?:&dur=(\d+))?(?:&w=(\d+))?$/.exec(src);   // voice note kept in storage
   if(st)return {dur:+st[1]||0,w:/^[0-9]{8,64}$/.test(st[2]||'')?st[2]:'',url:src};
