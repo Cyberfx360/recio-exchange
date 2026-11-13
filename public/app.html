@@ -114,6 +114,13 @@ label.lb{display:block;font-weight:600;font-size:15px;margin:22px 0 10px}
 .balance{background:var(--blue);color:#fff;border-radius:28px;padding:22px 20px 20px;box-shadow:0 16px 30px -14px rgba(13,77,199,.7)}
 .balance small{font-size:13px;opacity:.85}
 .balance .amt{font-family:var(--head);font-weight:800;font-size:36px;line-height:1.2;margin:4px 0 16px}
+.rtb{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.rth,.rtr{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:center;padding:12px 16px}
+.rth.c2,.rtr.c2{grid-template-columns:minmax(0,1.25fr) minmax(0,2fr)}
+.rth{background:#F4F7FC;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.rtr{border-top:1px solid var(--line)}.rtn b{display:block;font-size:15px;line-height:1.25;word-break:break-word}.rtn small{display:block;font-size:12px;color:var(--blue);font-weight:600;margin-top:2px;word-break:break-word}
+.rtc b{display:block;font-family:var(--mono);font-size:15px;color:var(--slate);white-space:nowrap}.rtc small{display:block;font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:2px}
+@media (max-width:359px){.rth,.rtr{padding:11px 12px;gap:8px}.rtc b{font-size:13.5px}}
 .tpc{background:#fff;border:1px solid var(--line);border-radius:18px;padding:12px 16px 4px;margin:0 0 20px;box-shadow:0 1px 2px rgba(17,24,39,.04)}
 .tph{display:flex;align-items:center;gap:7px;font-size:15.5px;font-family:var(--head)}.tph svg{width:18px;height:18px;color:#D97706}.tph small{font-family:var(--body);font-weight:500;font-size:12px;color:var(--muted);margin-left:2px}
 .tpr{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}.tpc>.tpr:first-child{border-top:0}
@@ -632,7 +639,7 @@ home:()=>{const list=S.homeTab==='trades'
    :(S.withdrawals.length?S.withdrawals.slice(0,5).map(wdCard).join(''):'<p class="empty">No withdrawals yet</p>');
  return `<section class="screen tabs">
   <div class="between" style="margin-bottom:18px"><span class="brand">AZAPLUG</span>
-   <span class="row" style="gap:12px"><button data-go="accounts" style="background:var(--blue);color:#fff;font-weight:700;font-size:14px;padding:9px 16px;border-radius:999px">Rate</button>
+   <span class="row" style="gap:12px"><button data-go="rates" style="background:var(--blue);color:#fff;font-weight:700;font-size:14px;padding:9px 16px;border-radius:999px">Rate</button>
    <button class="icon-btn" data-go="top" aria-label="Top Traders" style="color:#D97706">${I('trophy')}</button>${bell()}</span></div>
   <div class="balance"><small>Balance</small><div class="amt">${naira(S.me.balance)}</div>
    <div class="qacts">${[['accounts','bank','<em>Get </em>Account',1],['withdraw','out','Withdraw'],['rules','book','Rules'],['loan','coins','Borrow']].map(q=>`<button class="${q[3]?'on':''}" data-go="${q[0]}"><i>${I(q[1])}</i><span>${q[2]}</span></button>`).join('')}</div></div>
@@ -658,6 +665,15 @@ accounts:()=>`<section class="screen tabs">
     :'<p class="empty">No accounts available right now. Please check back soon.</p>'}</div>
   <div class="card" style="padding:16px"><div class="cap" style="font-size:12px">Instructions</div><p class="muted" style="font-size:13px;margin-top:8px">Please make sure to copy the account number exactly as shown. Use the concept label in your bank description for faster verification.</p></div>
   ${nav('accounts')}</section>`,
+
+rates:()=>{const rows=rateRows(),c=['BTC','USDT'].filter(k=>CRYPTO[k]&&CRYPTO[k].rate);
+ return `<section class="screen">
+  <div class="top left">${back(S.rateFrom||'home',1)}<span class="title">Today's Rates</span></div>
+  <div class="rtb"><div class="rth"><span>Country</span><span>Lower</span><span>Higher</span></div>
+   ${S.accLoaded?rows.length?rows.map(r=>`<div class="rtr"><span class="rtn"><b>${esc(r.title)}</b>${r.bank?`<small>${esc(r.bank)}</small>`:''}</span>${rateCell(r.a.lowestRate,r.a.lowestAmount)}${rateCell(r.a.higherRate,r.a.higherAmount)}</div>`).join(''):'<p class="empty">No rates right now. Please check back soon.</p>':'<p class="empty">Loading…</p>'}</div>
+  ${rows.some(r=>r.bank)?'<p class="muted" style="font-size:12.5px;margin:10px 4px 0">A bank shown under a country has its own rate.</p>':''}
+  ${c.length?`<div class="rtb" style="margin-top:18px"><div class="rth c2"><span>Crypto</span><span>Rate per $1</span></div>${c.map(k=>`<div class="rtr c2"><span class="rtn"><b>${k}</b></span><span class="rtc"><b>${naira0(CRYPTO[k].rate)}</b></span></div>`).join('')}</div>`:''}
+  <button class="btn sq" style="margin:20px 0 28px;font-family:var(--body);font-weight:600" data-go="accounts">Get Account</button></section>`},
 
 top:()=>{const t=S.top,tab=S.topTab||'month',list=t?(tab==='month'?t.month:t.all):null;
  return `<section class="screen">
@@ -900,6 +916,16 @@ function peerTyping(kind){const q=peerQ();if(!q)return;const now=Date.now();if(k
 document.addEventListener('input',e=>{if(e.target.id!=='c-in')return;if(e.target.value.length<=1)PEER.typed=0;peerTyping(e.target.value.trim()?'typing':null)});
 setInterval(()=>{if(VN.rec)peerTyping('recording');else if(PEER.kind==='recording')peerTyping(null)},1000);
 
+/* ---------- Rates table ---------- */
+// One row per country. A bank whose rates differ from the country's best rates gets its own row: "Country" + bank name.
+function rateRows(){const by={},key=a=>[a.lowestAmount,a.lowestRate,a.higherAmount,a.higherRate].map(Number).join('|'),out=[];
+  S.accounts.forEach(a=>(by[a.title]=by[a.title]||[]).push(a));
+  Object.keys(by).sort((x,y)=>x.localeCompare(y)).forEach(t=>{const list=by[t].slice().sort((x,y)=>(+y.higherRate||0)-(+x.higherRate||0)||(+y.lowestRate||0)-(+x.lowestRate||0));
+    const main=list[0],done=new Set();out.push({title:t,a:main});
+    list.forEach(a=>{if(key(a)===key(main)||!(+a.lowestRate||+a.higherRate))return;const k=a.bankName+'|'+key(a);if(done.has(k))return;done.add(k);out.push({title:t,bank:a.bankName,a})})});
+  return out}
+const rateCell=(rate,amount)=>+rate?`<span class="rtc"><b>${naira0(rate)}</b><small>Amount ${n0(amount)}</small></span>`:'<span class="rtc"><small>—</small></span>';
+
 /* ---------- Top Traders ---------- */
 const topRow=r=>`<div class="tpr"><span class="rk r${r.rank}">${r.rank}</span><span class="grow" style="min-width:0"><b>${esc(r.name)}${r.me?'<em>You</em>':''}</b><small>${n0(r.trades)} trade${r.trades===1?'':'s'}</small></span><b class="tpa">${naira0(r.total)}</b></div>`;
 let topAt=0;function loadTop(force){if(!force&&S.top&&Date.now()-topAt<60000)return;topAt=Date.now();
@@ -1030,9 +1056,10 @@ function go(r,o,pop){
   if(r==='home')loadGiveaway();
   if(r==='top')loadTop(true);
   if(r!=='top')S.topFrom=r;
+  if(r!=='rates')S.rateFrom=r;
   if(r==='trade'||r==='home'||r==='history'||r==='withdraw'||r==='profile')Promise.all([loadMe(),loadAll()]).then(()=>{if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
-  if(r==='accounts'||r==='send')api('GET','/api/accounts').then(d=>{S.accounts=d.accounts||[];if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
-  if(r==='crypto'||r==='cryptoSend')api('GET','/api/crypto-rates').then(d=>{CRYPTO.BTC.rate=d.btc||null;CRYPTO.USDT.rate=d.usdt||null;if(S.route===r&&!(document.activeElement&&document.activeElement.matches('input')))render();else{const p=$('#cs-get');if(p)p.textContent=csGet()}}).catch(()=>{});
+  if(r==='accounts'||r==='send'||r==='rates')api('GET','/api/accounts').then(d=>{S.accounts=d.accounts||[];S.accLoaded=true;if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
+  if(r==='crypto'||r==='cryptoSend'||r==='rates')api('GET','/api/crypto-rates').then(d=>{CRYPTO.BTC.rate=d.btc||null;CRYPTO.USDT.rate=d.usdt||null;if(S.route===r&&!(document.activeElement&&document.activeElement.matches('input')))render();else{const p=$('#cs-get');if(p)p.textContent=csGet()}}).catch(()=>{});
   if(r==='rules')api('GET','/api/rules').then(d=>{S.rules=d.rulesText||'';if(S.route===r)render()}).catch(e=>toast(e.message));
   if(r==='chat'){const pull=()=>api('GET','/api/chat/messages').then(d=>{const n=sig(d.messages)!==sig(S.chat);S.chat=d.messages||[];
       if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000)}
