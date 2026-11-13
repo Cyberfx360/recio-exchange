@@ -172,6 +172,7 @@ label.lb{display:block;font-weight:600;font-size:15px;margin:22px 0 10px}
 .chat{padding:0;background:#E8EEF8;min-height:100dvh;display:flex;flex-direction:column}
 .chat-top{background:#fff;display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
 .avatar{width:44px;height:44px;border-radius:50%;background:var(--blue);color:#fff;display:grid;place-items:center;font-family:var(--head);font-weight:700;position:relative;flex:none}
+.avatar#pav:not(.on):after{display:none}
 .avatar:after{content:"";position:absolute;right:0;bottom:0;width:10px;height:10px;border-radius:50%;background:var(--green);border:2px solid #fff}
 .msgs{flex:1;padding:18px 16px 110px;display:flex;flex-direction:column;gap:20px}
 .day{align-self:center;background:#DDE3EE;color:#6B7280;font-size:11px;font-weight:700;padding:5px 12px;border-radius:999px;letter-spacing:.03em}
@@ -326,7 +327,10 @@ img,svg,video{max-width:100%}
 .chat .msg.out.tl::before{right:-8px;background:#D6E4FD;clip-path:polygon(0 0,100% 0,0 100%)}
 .chat .msg .who{color:var(--blue);font-size:12.5px;margin-bottom:1px}
 .chat .msg time{display:inline-flex;align-items:center;gap:3px;float:right;font-size:11px;color:#667781;opacity:1;margin:8px 0 -4px 10px;line-height:1;white-space:nowrap}
-.chat .msg.out time::after{content:"";width:16px;height:11px;background:#53A0F7;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M11.1.7 4.9 7.6 2.3 5 1 6.3l3.9 3.9 7.5-8.2zM15 .7 8.8 7.6l-.9-.9-1.3 1.4 2.2 2.2 7.5-8.2z'/%3E%3C/svg%3E") no-repeat center/contain;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M11.1.7 4.9 7.6 2.3 5 1 6.3l3.9 3.9 7.5-8.2zM15 .7 8.8 7.6l-.9-.9-1.3 1.4 2.2 2.2 7.5-8.2z'/%3E%3C/svg%3E") no-repeat center/contain}
+.chat .msg.out time::after{content:"";width:16px;height:11px;background:#8696A0;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M13.1.7 6.9 7.6 4.3 5 3 6.3l3.9 3.9 7.5-8.2z'/%3E%3C/svg%3E") no-repeat center/contain;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M13.1.7 6.9 7.6 4.3 5 3 6.3l3.9 3.9 7.5-8.2z'/%3E%3C/svg%3E") no-repeat center/contain}
+.chat .msg.out[data-tk="2"] time::after,.chat .msg.out[data-tk="3"] time::after{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M11.1.7 4.9 7.6 2.3 5 1 6.3l3.9 3.9 7.5-8.2zM15 .7 8.8 7.6l-.9-.9-1.3 1.4 2.2 2.2 7.5-8.2z'/%3E%3C/svg%3E");mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M11.1.7 4.9 7.6 2.3 5 1 6.3l3.9 3.9 7.5-8.2zM15 .7 8.8 7.6l-.9-.9-1.3 1.4 2.2 2.2 7.5-8.2z'/%3E%3C/svg%3E")}
+.chat .msg.out[data-tk="3"] time::after{background:#53A0F7}
+.tpg{font-weight:600;color:#A7F3D0}
 .chat .msg time .md,.chat .msg time .fw{color:#667781}
 .chat .msg img{border-radius:6px!important;margin:-2px -4px 4px -5px!important;max-width:calc(100% + 9px)!important}
 .chat .msg .svp,.chat .msg .rtd{color:#3B6FD9}
@@ -840,8 +844,8 @@ rules:()=>`<section class="screen rules">
   ${fab(1)}</section>`,
 
 chat:()=>`<section class="chat">
-  <header class="chat-top"><button data-go="${S.prev||'home'}" aria-label="Back">${I('cl','style="width:24px;height:24px"')}</button><span class="avatar" style="background:#fff;color:var(--blue)">AZ</span>
-   <span style="flex:1;min-width:0"><b class="h" style="font-size:17px;font-weight:600;display:block;line-height:1.2">AZAPLUG Support</b><small class="muted">Online · we reply fast</small></span>${callIcons('support','AZAPLUG Support')}</header>
+  <header class="chat-top"><button data-go="${S.prev||'home'}" aria-label="Back">${I('cl','style="width:24px;height:24px"')}</button><span class="avatar${PEER.q===peerQ()&&PEER.d&&PEER.d.online?' on':''}" id="pav" style="background:#fff;color:var(--blue)">AZ</span>
+   <span style="flex:1;min-width:0"><b class="h" style="font-size:17px;font-weight:600;display:block;line-height:1.2">AZAPLUG Support</b><small class="muted" id="pst" data-def="we reply fast">${peerTxt('we reply fast')}</small></span>${callIcons('support','AZAPLUG Support')}</header>
   <div class="msgs" id="msgs">${msgsHtml()}</div>
   <form class="composer" data-form="chat"><label class="rb" aria-label="Attach photo" style="cursor:pointer">${I('clip')}<input id="c-file" type="file" accept="image/*" hidden></label>
    <span class="inp"><input id="c-in" placeholder="Type a message..." aria-label="Message" autocomplete="off"></span>
@@ -850,7 +854,30 @@ chat:()=>`<section class="chat">
 function msgsHtml(){if(!S.chat.length)return '<p class="empty">Send us a message and we will help you.</p>';let day='';
   return S.chat.map(m=>{const d=new Date(m.createdAt),ds=fd(d),img=safeImg(m.imageData),mine=m.sender==='user';
     const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}">${mine?'':'<span class="who">AZAPLUG Agent</span>'}${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(d)}${mine?mdBtn(m):''}</time></div>`}).join('')}
+    return `${head}<div class="msg ${mine?'out':'in'}"${mine?tkAttr(m):''}>${mine?'':'<span class="who">AZAPLUG Agent</span>'}${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(d)}${mine?mdBtn(m):''}</time></div>`}).join('')}
+
+const peerQ=()=>S.route==='chat'&&S.me?'as=user&chat=support':null;
+/* ---------- Chat status: online / last seen, typing, seen ticks ---------- */
+const PEER={q:null,d:null,typed:0,kind:null};let PULLNOW=null;
+function tkOf(at){const d=PEER.q===peerQ()&&PEER.d;if(!d)return 1;return d.readAt&&at<=d.readAt?3:d.lastSeen&&at<=d.lastSeen?2:1}
+const tkAttr=m=>{const at=Date.parse(m.createdAt)||0;return ` data-at="${at}" data-tk="${tkOf(at)}"`};
+function peerTxt(def){const d=PEER.q===peerQ()&&PEER.d;if(!d)return esc(def);
+  if(d.typing)return `<b class="tpg">${d.typing==='recording'?'recording voice…':'typing…'}</b>`;if(d.online)return 'online';
+  if(d.lastSeen){const t=new Date(d.lastSeen),n=new Date(),y=new Date(n.getFullYear(),n.getMonth(),n.getDate()-1),tm=t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    return 'last seen '+(t.toDateString()===n.toDateString()?'today':t.toDateString()===y.toDateString()?'yesterday':t.toLocaleDateString('en-GB',{day:'numeric',month:'short'}))+' at '+tm}
+  return esc(def)}
+function peerPaint(){const av=$('#pav');if(av)av.classList.toggle('on',!!(PEER.d&&PEER.d.online));const el=$('#pst');if(el)el.innerHTML=peerTxt(el.dataset.def||'');
+  document.querySelectorAll('#msgs .msg.out[data-at]').forEach(m=>{const k=String(tkOf(+m.dataset.at));if(m.dataset.tk!==k)m.dataset.tk=k})}
+async function peerPull(){const q=peerQ();if(!q){PEER.q=null;PEER.d=null;return}if(document.visibilityState!=='visible')return;
+  if(PEER.q!==q){PEER.q=q;PEER.d=null}
+  const last=(S.chat||[]).reduce((a,m)=>m.createdAt&&m.createdAt>a?m.createdAt:a,'');
+  try{const d=await api('GET','/api/peer?'+q+(last?'&seen='+encodeURIComponent(last):''));if(peerQ()!==q)return;
+    const was=PEER.d&&PEER.d.typing;PEER.d=d;peerPaint();if(was&&!d.typing&&PULLNOW)PULLNOW()}catch(e){}}
+setInterval(peerPull,2000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(peerPull,200)});
+function peerTyping(kind){const q=peerQ();if(!q)return;const now=Date.now();if(kind===PEER.kind&&now-PEER.typed<2500)return;PEER.typed=now;PEER.kind=kind;
+  const p=new URLSearchParams(q);api('POST','/api/peer/typing',{as:p.get('as'),chat:p.get('chat'),id:p.get('id')||'',kind}).catch(()=>{})}
+document.addEventListener('input',e=>{if(e.target.id!=='c-in')return;if(e.target.value.length<=1)PEER.typed=0;peerTyping(e.target.value.trim()?'typing':null)});
+setInterval(()=>{if(VN.rec)peerTyping('recording');else if(PEER.kind==='recording')peerTyping(null)},1000);
 
 /* ---------- Render + navigation ---------- */
 /* ---------- Back gesture: each screen is a history entry, so swiping back returns to the previous screen ---------- */
@@ -980,7 +1007,7 @@ function go(r,o,pop){
   if(r==='crypto'||r==='cryptoSend')api('GET','/api/crypto-rates').then(d=>{CRYPTO.BTC.rate=d.btc||null;CRYPTO.USDT.rate=d.usdt||null;if(S.route===r&&!(document.activeElement&&document.activeElement.matches('input')))render();else{const p=$('#cs-get');if(p)p.textContent=csGet()}}).catch(()=>{});
   if(r==='rules')api('GET','/api/rules').then(d=>{S.rules=d.rulesText||'';if(S.route===r)render()}).catch(e=>toast(e.message));
   if(r==='chat'){const pull=()=>api('GET','/api/chat/messages').then(d=>{const n=sig(d.messages)!==sig(S.chat);S.chat=d.messages||[];
-      if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();poll=setInterval(pull,5000)}
+      if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000)}
 }
 function drawQR(){const c=CRYPTO[S.coin],el=$('#qr');if(!el||!c.address)return;
   const make=()=>{try{const q=qrcode(0,'M');q.addData(c.address);q.make();el.innerHTML=q.createSvgTag({scalable:true})}catch(e){}};

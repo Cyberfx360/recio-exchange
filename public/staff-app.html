@@ -408,7 +408,10 @@ img,svg,video{max-width:100%}
 .chat .msg.out.tl::before{right:-8px;background:#D6E4FD;clip-path:polygon(0 0,100% 0,0 100%)}
 .chat .msg .who{color:var(--blue);font-size:12.5px;margin-bottom:1px}
 .chat .msg time{display:inline-flex;align-items:center;gap:3px;float:right;font-size:11px;color:#667781;opacity:1;margin:8px 0 -4px 10px;line-height:1;white-space:nowrap}
-.chat .msg.out time::after{content:"";width:16px;height:11px;background:#53A0F7;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M11.1.7 4.9 7.6 2.3 5 1 6.3l3.9 3.9 7.5-8.2zM15 .7 8.8 7.6l-.9-.9-1.3 1.4 2.2 2.2 7.5-8.2z'/%3E%3C/svg%3E") no-repeat center/contain;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M11.1.7 4.9 7.6 2.3 5 1 6.3l3.9 3.9 7.5-8.2zM15 .7 8.8 7.6l-.9-.9-1.3 1.4 2.2 2.2 7.5-8.2z'/%3E%3C/svg%3E") no-repeat center/contain}
+.chat .msg.out time::after{content:"";width:16px;height:11px;background:#8696A0;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M13.1.7 6.9 7.6 4.3 5 3 6.3l3.9 3.9 7.5-8.2z'/%3E%3C/svg%3E") no-repeat center/contain;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M13.1.7 6.9 7.6 4.3 5 3 6.3l3.9 3.9 7.5-8.2z'/%3E%3C/svg%3E") no-repeat center/contain}
+.chat .msg.out[data-tk="2"] time::after,.chat .msg.out[data-tk="3"] time::after{-webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M11.1.7 4.9 7.6 2.3 5 1 6.3l3.9 3.9 7.5-8.2zM15 .7 8.8 7.6l-.9-.9-1.3 1.4 2.2 2.2 7.5-8.2z'/%3E%3C/svg%3E");mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 11'%3E%3Cpath d='M11.1.7 4.9 7.6 2.3 5 1 6.3l3.9 3.9 7.5-8.2zM15 .7 8.8 7.6l-.9-.9-1.3 1.4 2.2 2.2 7.5-8.2z'/%3E%3C/svg%3E")}
+.chat .msg.out[data-tk="3"] time::after{background:#53A0F7}
+.tpg{font-weight:600;color:#A7F3D0}
 .chat .msg time .md,.chat .msg time .fw{color:#667781}
 .chat .msg img{border-radius:6px!important;margin:-2px -4px 4px -5px!important;max-width:calc(100% + 9px)!important}
 .chat .msg .svp,.chat .msg .rtd{color:#3B6FD9}
@@ -711,7 +714,7 @@ chats:()=>{const wait=S.convos.filter(c=>c.lastSender==='user'),list=S.chatTab==
   <p style="text-align:center;margin-top:26px"><button class="link" style="color:var(--muted);font-weight:600;font-size:14px" data-act="logout">Log out</button></p></div></section>`},
 
 chat:()=>{const u=S.chatUser||(S.convos.find(c=>c.userId===S.id)||{name:'Customer'});return `<section class="chat">
-  <header class="hd bluef" style="position:sticky;top:0;z-index:5"><button class="bk" data-go="chats" aria-label="Back">${I('cl')}</button>${av(u.name,'wh')}<div class="grow" style="min-width:0"><h1 style="font-size:18px">${esc(u.name)}</h1><p>${esc(u.phone||'')}</p></div>${callIcons('u:'+S.id,u.name)}<button class="bk" data-go="forward" aria-label="Chat options">${I('kebab')}</button></header>
+  <header class="hd bluef" style="position:sticky;top:0;z-index:5"><button class="bk" data-go="chats" aria-label="Back">${I('cl')}</button>${av(u.name,'wh')}<div class="grow" style="min-width:0"><h1 style="font-size:18px">${esc(u.name)}</h1><p id="pst" data-def="${esc(u.phone||'')}">${peerTxt(u.phone||'')}</p></div>${callIcons('u:'+S.id,u.name)}<button class="bk" data-go="forward" aria-label="Chat options">${I('kebab')}</button></header>
   <div class="esc" id="escb">${escBanner()}</div>
   <div class="msgs" id="msgs">${msgsHtml()}</div>
   <form class="composer" data-form="chat"><label class="rb" aria-label="Attach photo" style="cursor:pointer">${I('clip')}<input id="c-file" type="file" accept="image/*" hidden></label>
@@ -732,7 +735,7 @@ team:()=>{const list=S.team||[];return `<section class="scr">${hd('Team Messages
   <span class="between"><span class="lm">${p.lastMessage?(p.lastMine?'You: ':'')+esc(p.lastMessage):'Tap to start a chat'}</span>${p.unread?`<span class="newb">${p.unread}</span>`:''}</span></span></button>`).join(''):`<p class="empty">No approved ${S.portal==='chat'?'vendors':'chat managers'} yet</p>`}</div></section>`},
 
 teamChat:()=>{const u=S.teamPerson||(S.team||[]).find(p=>p.id===S.tid)||{name:'Staff'};return `<section class="chat">
-  <header class="hd bluef" style="position:sticky;top:0;z-index:5"><button class="bk" data-go="team" aria-label="Back">${I('cl')}</button>${av(u.name,'wh')}<div class="grow" style="min-width:0"><h1 style="font-size:18px">${esc(u.name)}</h1><p>${S.tid==='admin'?'AZAPLUG Admin':S.portal==='chat'?'Vendor':'Chat Manager'}</p></div>${callIcons(S.tid==='admin'?'admin':'s:'+S.tid,u.name)}</header>
+  <header class="hd bluef" style="position:sticky;top:0;z-index:5"><button class="bk" data-go="team" aria-label="Back">${I('cl')}</button>${av(u.name,'wh')}<div class="grow" style="min-width:0"><h1 style="font-size:18px">${esc(u.name)}</h1>${(r=>`<p id="pst" data-def="${r}">${peerTxt(r)}</p>`)(S.tid==='admin'?'AZAPLUG Admin':S.portal==='chat'?'Vendor':'Chat Manager')}</div>${callIcons(S.tid==='admin'?'admin':'s:'+S.tid,u.name)}</header>
   <div class="msgs" id="msgs">${msgsHtml()}</div>
   <form class="composer" data-form="chat"><label class="rb" aria-label="Attach photo" style="cursor:pointer">${I('clip')}<input id="c-file" type="file" accept="image/*" hidden></label>
    <span class="inp"><input id="c-in" placeholder="Message ${esc(u.name)}..." aria-label="Message" autocomplete="off"></span><button type="button" class="rb mic" data-vn="recStart" aria-label="Record voice note">${I('mic')}</button><button class="rb send tx" aria-label="Send message">${I('send')}</button></form></section>`},
@@ -762,9 +765,32 @@ forward:()=>{const u=S.chatUser||{name:'Customer'},e=lastEsc(S.id);return `<sect
 const RTS={checking:'Checking',seen:'Seen',confirmed:'Confirmed',approved:'Approved',failed:'Failed'};
 function msgsHtml(){if(!S.chat.length)return '<p class="empty">No messages yet</p>';let day='';
   if(S.route==='teamChat')return S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender==='me';const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}${mine?mdBtn(m):''}</time></div>`}).join('');
+    return `${head}<div class="msg ${mine?'out':'in'}"${mine?tkAttr(m):''}>${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}${mine?mdBtn(m):''}</time></div>`}).join('');
   return S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender!=='user';const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>${m.sender==='user'&&S.portal==='chat'?((S.routed||{})[m.id]?`<span class="rtd">${I('checkc','style="width:13px;height:13px"')}Sent to ${esc(S.routed[m.id].title)} · ${esc(RTS[S.routed[m.id].status]||S.routed[m.id].status)}</span><br>`:`<button class="svp" data-act="routeOpen" data-id="${esc(m.id)}">${I('send','style="width:13px;height:13px"')}Send receipt to an account</button><br>`):''}`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}<button class="fw" data-act="fwdMsg" data-id="${esc(m.id)}" aria-label="Forward this message">${I('fwd','style="width:13px;height:13px"')}Forward</button>${mdBtn(m)}</time></div>`}).join('')}
+    return `${head}<div class="msg ${mine?'out':'in'}"${mine?tkAttr(m):''}>${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>${m.sender==='user'&&S.portal==='chat'?((S.routed||{})[m.id]?`<span class="rtd">${I('checkc','style="width:13px;height:13px"')}Sent to ${esc(S.routed[m.id].title)} · ${esc(RTS[S.routed[m.id].status]||S.routed[m.id].status)}</span><br>`:`<button class="svp" data-act="routeOpen" data-id="${esc(m.id)}">${I('send','style="width:13px;height:13px"')}Send receipt to an account</button><br>`):''}`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}<button class="fw" data-act="fwdMsg" data-id="${esc(m.id)}" aria-label="Forward this message">${I('fwd','style="width:13px;height:13px"')}Forward</button>${mdBtn(m)}</time></div>`}).join('')}
+
+const peerQ=()=>S.route==='chat'&&S.id?'as=staff&chat=customer&id='+encodeURIComponent(S.id):S.route==='teamChat'&&S.tid?'as=staff&chat=team&id='+encodeURIComponent(S.tid):null;
+/* ---------- Chat status: online / last seen, typing, seen ticks ---------- */
+const PEER={q:null,d:null,typed:0,kind:null};let PULLNOW=null;
+function tkOf(at){const d=PEER.q===peerQ()&&PEER.d;if(!d)return 1;return d.readAt&&at<=d.readAt?3:d.lastSeen&&at<=d.lastSeen?2:1}
+const tkAttr=m=>{const at=Date.parse(m.createdAt)||0;return ` data-at="${at}" data-tk="${tkOf(at)}"`};
+function peerTxt(def){const d=PEER.q===peerQ()&&PEER.d;if(!d)return esc(def);
+  if(d.typing)return `<b class="tpg">${d.typing==='recording'?'recording voice…':'typing…'}</b>`;if(d.online)return 'online';
+  if(d.lastSeen){const t=new Date(d.lastSeen),n=new Date(),y=new Date(n.getFullYear(),n.getMonth(),n.getDate()-1),tm=t.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    return 'last seen '+(t.toDateString()===n.toDateString()?'today':t.toDateString()===y.toDateString()?'yesterday':t.toLocaleDateString('en-GB',{day:'numeric',month:'short'}))+' at '+tm}
+  return esc(def)}
+function peerPaint(){const el=$('#pst');if(el)el.innerHTML=peerTxt(el.dataset.def||'');
+  document.querySelectorAll('#msgs .msg.out[data-at]').forEach(m=>{const k=String(tkOf(+m.dataset.at));if(m.dataset.tk!==k)m.dataset.tk=k})}
+async function peerPull(){const q=peerQ();if(!q){PEER.q=null;PEER.d=null;return}if(document.visibilityState!=='visible')return;
+  if(PEER.q!==q){PEER.q=q;PEER.d=null}
+  const last=(S.chat||[]).reduce((a,m)=>m.createdAt&&m.createdAt>a?m.createdAt:a,'');
+  try{const d=await api('GET','/api/peer?'+q+(last?'&seen='+encodeURIComponent(last):''));if(peerQ()!==q)return;
+    const was=PEER.d&&PEER.d.typing;PEER.d=d;peerPaint();if(was&&!d.typing&&PULLNOW)PULLNOW()}catch(e){}}
+setInterval(peerPull,2000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(peerPull,200)});
+function peerTyping(kind){const q=peerQ();if(!q)return;const now=Date.now();if(kind===PEER.kind&&now-PEER.typed<2500)return;PEER.typed=now;PEER.kind=kind;
+  const p=new URLSearchParams(q);api('POST','/api/peer/typing',{as:p.get('as'),chat:p.get('chat'),id:p.get('id')||'',kind}).catch(()=>{})}
+document.addEventListener('input',e=>{if(e.target.id!=='c-in')return;if(e.target.value.length<=1)PEER.typed=0;peerTyping(e.target.value.trim()?'typing':null)});
+setInterval(()=>{if(VN.rec)peerTyping('recording');else if(PEER.kind==='recording')peerTyping(null)},1000);
 
 /* ---------- Render + navigation ---------- */
 async function savePic(src,name){src=safeImg(src);if(!src)return toast('No picture to save');
@@ -929,9 +955,9 @@ function go(r,o,pop){
   if(r==='routeRc'){api('GET','/api/staff/route-accounts').then(d=>{S.rtAccts=d.accounts||[];if(S.route==='routeRc'&&!typing())render()}).catch(e=>{S.rtAccts=[];toast(e.message);if(S.route==='routeRc')render()});return}
   if(r==='teamChat'){if(!pop||!S.teamPerson||S.teamPerson.id!==S.tid){S.chat=[];S.teamPerson=null}
     const pull=()=>api('GET','/api/staff/team/'+encodeURIComponent(S.tid)).then(d=>{const first=!S.teamPerson,n=sig(d.messages)!==sig(S.chat);S.teamPerson=d.person;S.chat=d.messages||[];
-      if(S.route!=='teamChat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(e=>{if(S.route==='teamChat'&&!S.teamPerson){toast(e.message);go('team')}});pull();poll=setInterval(pull,5000);return}
+      if(S.route!=='teamChat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(e=>{if(S.route==='teamChat'&&!S.teamPerson){toast(e.message);go('team')}});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
   if(r==='chat'){if(from!=='forward'&&from!=='forwardMsg'&&from!=='routeRc'&&!(pop&&S.chatUser)){S.chat=[];S.chatUser=null}const pull=()=>{loadEscs().then(()=>{const b=$('#escb');if(b&&S.route==='chat')b.innerHTML=escBanner()});return api('GET','/api/staff/chats/'+encodeURIComponent(S.id)).then(d=>{const first=!S.chatUser,n=sig(d.messages)!==sig(S.chat)||JSON.stringify(d.routed||{})!==JSON.stringify(S.routed||{});S.chatUser=d.user||S.chatUser;S.chat=d.messages||[];S.routed=d.routed||{};
-      if(S.route!=='chat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{})};pull();poll=setInterval(pull,5000);return}
+      if(S.route!=='chat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{})};pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
   if(['dash','receipts','acctAll','chats','inbox','team'].includes(r))refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{});
 }
 async function reload(r,o){await refresh();go(r||S.route,o)}

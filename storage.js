@@ -889,7 +889,22 @@ async function updateEntry(id, patch) {
   if (error) throw error;
 }
 
+// ============================================================
+// CHAT STATUS (last seen + read up to) — table chat_state(id, at)
+// ============================================================
+async function listChatState() {
+  const { data, error } = await supabase.from('chat_state').select('id, at');
+  if (error) throw error;
+  return data || [];
+}
+async function saveChatState(rows) {
+  if (!rows.length) return;
+  const { error } = await supabase.from('chat_state').upsert(rows, { onConflict: 'id' });
+  if (error) throw error;
+}
+
 module.exports = {
+  listChatState, saveChatState,
   createGiveaway, listGiveaways, setGiveawayStatus, listEntries, addEntry, updateEntry,
   mediaReady, getMediaFile, migrateMediaBatch, mediaLeftInDatabase, cleanOldChatMedia,
   hasStaffRole, setStaffRole,
