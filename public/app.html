@@ -114,6 +114,14 @@ label.lb{display:block;font-weight:600;font-size:15px;margin:22px 0 10px}
 .balance{background:var(--blue);color:#fff;border-radius:28px;padding:22px 20px 20px;box-shadow:0 16px 30px -14px rgba(13,77,199,.7)}
 .balance small{font-size:13px;opacity:.85}
 .balance .amt{font-family:var(--head);font-weight:800;font-size:36px;line-height:1.2;margin:4px 0 16px}
+.qacts{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px}
+.qacts button{display:flex;flex-direction:column;align-items:center;gap:7px;color:#fff;font-weight:600;font-size:12.5px;min-width:0;padding:2px 0}
+.qacts i{width:50px;height:50px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22)}
+.qacts i svg{width:22px;height:22px}.qacts button.on i{background:#fff;color:var(--blue);border-color:#fff}
+.qacts span{white-space:nowrap;font-size:clamp(11px,3.7cqw,12.5px);letter-spacing:-.1px}.qacts em{font-style:normal}
+.qacts button:active i{transform:scale(.94)}
+@media (max-width:374px){.qacts em{display:none}}
+@media (max-width:359px){.qacts i{width:44px;height:44px}}
 .pills{display:flex;gap:8px}
 .pills button{flex:1;height:36px;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.12);color:#fff;font-weight:700;font-size:12.5px;white-space:nowrap;padding:0;min-width:0}
 .pills button:first-child{font-size:11px;flex:1.1}
@@ -354,7 +362,8 @@ img,svg,video{max-width:100%}
 @keyframes cring{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.35)}50%{box-shadow:0 0 0 18px rgba(255,255,255,0)}}
 @media (prefers-reduced-motion:reduce){#callui .cav,#callui .cb .c-green i{animation:none}}
 .gaw{display:flex;align-items:center;gap:12px;margin-top:16px;padding:14px;border-radius:16px;color:#fff;background:linear-gradient(135deg,#F59E0B,#EF4444);box-shadow:0 10px 24px -12px rgba(239,68,68,.7)}
-.gaw .gai{font-size:28px;flex:none}.gaw b{font-size:15.5px}.gaw p{font-size:13.5px;margin-top:2px;line-height:1.4}.gaw>button{background:#fff;color:#B91C1C;font-weight:800;font-size:13.5px;padding:10px 14px;border-radius:999px;flex:none}
+.gaw .gai{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.2);display:grid;place-items:center;flex:none}.gaw b{font-size:15.5px}.gaw p{font-size:13.5px;margin-top:2px;line-height:1.4}.gaw>button{background:#fff;color:#B91C1C;font-weight:800;font-size:13.5px;padding:10px 14px;border-radius:999px;flex:none}
+.cnote{display:inline-flex;vertical-align:-3px;margin-right:6px;color:#10B981}.cnote.miss{color:#EF4444}
 </style>
 </head>
 <body>
@@ -364,6 +373,10 @@ img,svg,video{max-width:100%}
 <script>
 /* ---------- Icons (20px stroke line icons, per brand guide) ---------- */
 const P={
+ gift:'<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5" rx="1"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>',
+ out:'<line x1="7" y1="17" x2="17" y2="7"/><polyline points="8 7 17 7 17 16"/>',
+ book:'<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="9" y1="7" x2="16" y2="7"/><line x1="9" y1="11" x2="14" y2="11"/>',
+ coins:'<circle cx="8" cy="8" r="6"/><path d="M18.09 10.37A6 6 0 1 1 10.34 18"/><path d="M7 6h1v4"/><path d="m16.71 13.88.7.71-2.82 2.82"/>',
  home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
  repeat:'<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
  bars:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
@@ -500,11 +513,11 @@ document.addEventListener('change',async e=>{const t=e.target;if(t.id==='cs-file
 async function loadGiveaway(){try{const d=await api('GET','/api/giveaway');const was=JSON.stringify(S.ga||null);S.ga=d.giveaway?d:null;if(S.route==='home'&&JSON.stringify(S.ga)!==was&&!document.activeElement.matches('input,select'))render()}catch(e){}}
 const gaWhen=t=>{const d=new Date(t),today=new Date().toDateString()===d.toDateString();return (today?'Today':d.toLocaleDateString('en-NG',{weekday:'short',day:'numeric',month:'short'}))+' at '+d.toLocaleTimeString('en-NG',{hour:'numeric',minute:'2-digit'})};
 function gaCard(){const d=S.ga;if(!d)return '';const g=d.giveaway,m=d.mine;
-  const body=m?(m.won?`🎉 You are winner #${m.position}! ${m.credited?naira(g.amount)+' has been added to your balance.':naira(g.amount)+' will be added to your balance soon.'}`:'All spots were taken this time. Keep notifications on for the next one.')
+  const body=m?(m.won?`You are winner #${m.position}! ${m.credited?naira(g.amount)+' has been added to your balance.':naira(g.amount)+' will be added to your balance soon.'}`:'All spots were taken this time. Keep notifications on for the next one.')
     :g.live?(g.spotsLeft?`It's live! Be among the first ${g.winners} to say "<b>${esc(g.keyword)}</b>" in chat. <b>${g.spotsLeft}</b> spot${g.spotsLeft===1?'':'s'} left.`:'All spots have been taken. Watch out for the next one!')
     :`${gaWhen(g.startsAt)}, the first ${g.winners} people to say "<b>${esc(g.keyword)}</b>" in chat win ${naira(g.amount)}.`;
   const need=!m&&!insStandalone()?`<small style="display:block;margin-top:6px;opacity:.9">You must use the installed app. <button class="link" style="color:#fff;text-decoration:underline;font-size:inherit" data-act="install">Install now</button></small>`:'';
-  return `<div class="gaw"><span class="gai">🎁</span><div class="grow" style="min-width:0"><b>${esc(g.title)}</b><p>${body}</p>${need}</div>${g.live&&g.spotsLeft&&!m?`<button data-go="chat">Say ${esc(g.keyword)}</button>`:''}</div>`}
+  return `<div class="gaw"><span class="gai">${I('gift','style="width:26px;height:26px"')}</span><div class="grow" style="min-width:0"><b>${esc(g.title)}</b><p>${body}</p>${need}</div>${g.live&&g.spotsLeft&&!m?`<button data-go="chat">Say ${esc(g.keyword)}</button>`:''}</div>`}
 async function loadLoan(){try{S.loan=await api('GET','/api/loans')}catch(e){S.loan={error:e.message,loans:[],limit:0}}
   if(S.route==='loan'&&!document.activeElement.matches('input,select'))render()}
 async function enter(){
@@ -606,7 +619,7 @@ home:()=>{const list=S.homeTab==='trades'
    <span class="row" style="gap:12px"><button data-go="accounts" style="background:var(--blue);color:#fff;font-weight:700;font-size:14px;padding:9px 16px;border-radius:999px">Rate</button>
    ${bell()}</span></div>
   <div class="balance"><small>Balance</small><div class="amt">${naira(S.me.balance)}</div>
-   <div class="pills"><button class="on" data-go="accounts">Get Account</button><button data-go="withdraw">Withdraw</button><button data-go="rules">Rules</button><button data-go="loan">Borrow</button></div></div>
+   <div class="qacts">${[['accounts','bank','<em>Get </em>Account',1],['withdraw','out','Withdraw'],['rules','book','Rules'],['loan','coins','Borrow']].map(q=>`<button class="${q[3]?'on':''}" data-go="${q[0]}"><i>${I(q[1])}</i><span>${q[2]}</span></button>`).join('')}</div></div>
   ${gaCard()}
   <button class="btn sq" style="margin:16px 0 20px;font-family:var(--body);font-weight:600" data-go="send">Send Receipt</button>
   <div class="seg" role="tablist"><button class="${S.homeTab==='trades'?'on':''}" data-set="homeTab:trades">Trades</button><button class="${S.homeTab==='withdrawals'?'on':''}" data-set="homeTab:withdrawals">Withdrawals</button></div>
@@ -624,7 +637,7 @@ accounts:()=>`<section class="screen tabs">
     <div class="mono" style="white-space:pre-wrap;line-height:2.1;word-break:break-word">${esc(a.accountNumber)}</div>
     <div style="font-family:var(--mono);font-size:10.5px;color:var(--soft)">:${esc(a.bankName)}</div>
     <div style="display:flex;justify-content:flex-end;margin-top:12px"><button class="copy" data-copy="${esc(a.accountNumber)}" aria-label="Copy account details">${I('copy')}</button></div>
-    <div class="kv"><div><span>Minimum</span><b>${naira0(a.minAmount)}</b></div><div><span>Limit</span><b>${naira0(a.maxAmount)}</b></div>
+    <div class="kv"><div><span>Minimum</span><b>${n0(a.minAmount)}</b></div><div><span>Limit</span><b>${n0(a.maxAmount)}</b></div>
      <div><span style="font-family:var(--mono)">${n0(a.lowestAmount)}</span><b>${naira0(a.lowestRate)}</b></div><div><span style="font-family:var(--mono)">${n0(a.higherAmount)}</span><b>${naira0(a.higherRate)}</b></div></div></article>`}).join('')
     :'<p class="empty">No accounts available right now. Please check back soon.</p>'}</div>
   <div class="card" style="padding:16px"><div class="cap" style="font-size:12px">Instructions</div><p class="muted" style="font-size:13px;margin-top:8px">Please make sure to copy the account number exactly as shown. Use the concept label in your bank description for faster verification.</p></div>
@@ -640,7 +653,7 @@ send:()=>{const ts=titles();if(!ts.length)return `<section class="screen"><div c
   <div class="card sum" style="margin:0 calc(var(--m) * -1);border-radius:20px;padding:16px 18px">
    <div><b style="font-family:var(--body);font-size:15px;font-weight:600">Trade summary</b><span class="badge b-draft">Draft</span></div>
    <div><span>You send</span><b id="s-send">${amt(num(S.send.amount))}</b></div><div><span>Recipient gets</span><b style="font-family:var(--body);font-size:14px;font-weight:500;color:var(--muted)">Set after review</b></div>
-   <div><span>Minimum · Limit</span><b style="font-size:15px">${naira0(a.minAmount)} · ${naira0(a.maxAmount)}</b></div></div>
+   <div><span>Minimum · Limit</span><b style="font-size:15px">${n0(a.minAmount)} · ${n0(a.maxAmount)}</b></div></div>
   <form data-form="send" novalidate>
   <label class="lb" style="margin-top:16px;font-size:14px" for="s-c">Country</label>
   <div class="field sm"><select id="s-c" style="font-family:var(--head);font-size:17px">${ts.map(t=>`<option ${t===S.send.title?'selected':''}>${esc(t)}</option>`).join('')}</select>${I('cd','style="color:#6B7280"')}</div>
@@ -837,7 +850,7 @@ chat:()=>`<section class="chat">
 function msgsHtml(){if(!S.chat.length)return '<p class="empty">Send us a message and we will help you.</p>';let day='';
   return S.chat.map(m=>{const d=new Date(m.createdAt),ds=fd(d),img=safeImg(m.imageData),mine=m.sender==='user';
     const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}">${mine?'':'<span class="who">AZAPLUG Agent</span>'}${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">`:''}${voiceHtml(m)}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(d)}${mine?mdBtn(m):''}</time></div>`}).join('')}
+    return `${head}<div class="msg ${mine?'out':'in'}">${mine?'':'<span class="who">AZAPLUG Agent</span>'}${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(d)}${mine?mdBtn(m):''}</time></div>`}).join('')}
 
 /* ---------- Render + navigation ---------- */
 /* ---------- Back gesture: each screen is a history entry, so swiping back returns to the previous screen ---------- */
@@ -862,6 +875,11 @@ const VN_URL=()=>'/api/chat/send';
 const mmss=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
 const vnMime=()=>window.MediaRecorder?['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported(t))||'':'';
 const inChat=()=>S.route==='chat';
+// Message text. Call notes ("Voice call · 2:31", "Missed video call") get a small icon like WhatsApp; old emoji prefixes are dropped.
+const EMO=/^[\u{1F300}-\u{1FAFF}☀-➿️\s]+/u;
+function msgText(t){t=String(t||'').replace(EMO,'');const c=/^(Missed )?(Voice|Video) call\b/i.exec(t);
+  const ic=c?`<span class="cnote ${c[1]?'miss':''}">${I(/video/i.test(c[2])?'video':'phone','style="width:15px;height:15px"')}</span>`:'';
+  return ic+esc(t).replace(/\n/g,'<br>')}
 function vnParse(src){if(typeof src!=='string')return null;
   const st=/^\/api\/media\/(?:u|staff|team)\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(?:m4a|webm|ogg|mp3)\?a=1(?:&dur=(\d+))?(?:&w=(\d+))?$/.exec(src);   // voice note kept in storage
   if(st)return {dur:+st[1]||0,w:/^[0-9]{8,64}$/.test(st[2]||'')?st[2]:'',url:src};

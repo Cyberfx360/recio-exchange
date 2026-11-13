@@ -933,7 +933,7 @@ const teamSqlHint = err => (/team_messages/.test(String(err && err.message)) ? '
 const sameSide = (a, b) => (a || null) === (b || null);
 const teamOut = (m, me) => ({ id: m.id, sender: sameSide(m.fromStaffId, me) ? 'me' : 'them', text: m.text, imageData: m.imageData, createdAt: m.createdAt });
 const between = (msgs, me, other) => msgs.filter(m => (sameSide(m.fromStaffId, me) && sameSide(m.toStaffId, other)) || (sameSide(m.fromStaffId, other) && sameSide(m.toStaffId, me)));
-const preview = m => (m ? (m.imageData ? (isVoice(m.imageData) ? '🎤 Voice note' : '📷 Photo') : m.text) : '');
+const preview = m => (m ? (m.imageData ? (isVoice(m.imageData) ? 'Voice note' : 'Photo') : m.text) : '');
 const adminSqlHint = err => (/from_staff_id|to_staff_id|not-null|null value/.test(String(err && err.message)) ? 'Run the admin-to-staff messages SQL from the README in Supabase first.' : null);
 function threadSummary(msgs, me, other, base) {
   const t = between(msgs, me, other), last = t[t.length - 1];
@@ -1604,7 +1604,7 @@ async function giveawayEntry(userId, text, body) {
   const entries = await store.listEntries(g.id);
   if (entries.some(e => e.userId === userId)) return null;   // already answered once
   const say = t => store.addMessage({ userId, sender: 'admin', text: t });
-  if (!body.installed) return say(`🎁 You are early for the ${g.title}! To qualify, open AZAPLUG from the app installed on your home screen (Profile → Install app), turn on notifications, then say "${g.keyword}" again.`);
+  if (!body.installed) return say(`You are early for the ${g.title}! To qualify, open AZAPLUG from the app installed on your home screen (Profile → Install app), turn on notifications, then say "${g.keyword}" again.`);
   const winnersSoFar = entries.filter(e => e.won).length;
   const entry = await store.addEntry({ giveawayId: g.id, userId, installed: true, alertsOn: !!body.alertsOn, won: winnersSoFar < g.winners });
   if (!entry) return null;
@@ -1613,10 +1613,10 @@ async function giveawayEntry(userId, text, body) {
     if (pos > g.winners || pos === 0) { await store.updateEntry(entry.id, { won: false }); entry.won = false; }
     else {
       alertTeam({ admin: true }, `Giveaway winner #${pos}`, `A customer just won the ${g.title}.`, { admin: 'giveaway' });
-      return say(`🎉 Congratulations! You are winner #${pos} of ${g.winners} in the ${g.title}. ₦${plain(g.amount)} will be added to your balance shortly.`);
+      return say(`Congratulations! You are winner #${pos} of ${g.winners} in the ${g.title}. ₦${plain(g.amount)} will be added to your balance shortly.`);
     }
   }
-  return say(`🎁 Thanks for joining the ${g.title}! All ${g.winners} spots are taken this time. Keep notifications on so you don't miss the next one.`);
+  return say(`Thanks for joining the ${g.title}! All ${g.winners} spots are taken this time. Keep notifications on so you don't miss the next one.`);
 }
 app.get('/api/giveaway', requireUser, async (req, res) => {
   try {
@@ -1651,7 +1651,7 @@ app.post('/api/admin/giveaways', requireAdmin, async (req, res) => {
     const id = await store.createGiveaway({ title, amount, winners, keyword, startsAt: start.toISOString() });
     if (b.announce) {
       const when = start.toLocaleString('en-NG', { timeZone: 'Africa/Lagos', weekday: 'short', hour: 'numeric', minute: '2-digit' });
-      notify(null, 'announce', `🎁 ${title}`, `${when}: the first ${winners} people to say "${keyword}" in the AZAPLUG app chat win ₦${plain(amount)}. Use the installed app with notifications on.`, { go: 'home' });
+      notify(null, 'announce', title, `${when}: the first ${winners} people to say "${keyword}" in the AZAPLUG app chat win ₦${plain(amount)}. Use the installed app with notifications on.`, { go: 'home' });
     }
     res.json({ ok: true, id });
   } catch (err) { if (!gaSqlHint(err)) console.error(err); res.status(500).json({ error: gaSqlHint(err) || 'Could not create the giveaway.' }); }
@@ -1670,7 +1670,7 @@ app.post('/api/admin/giveaways/:id/credit', requireAdmin, async (req, res) => {
     let paid = 0;
     for (const e of todo) {
       await store.updateEntry(e.id, { credited: true });   // mark first so a double tap can never pay twice
-      try { await store.addToBalance(e.userId, g.amount); paid++; notify(e.userId, 'trade', '🎉 Giveaway prize added', `₦${plain(g.amount)} from the ${g.title} has been added to your balance.`, { go: 'home' }); }
+      try { await store.addToBalance(e.userId, g.amount); paid++; notify(e.userId, 'trade', 'Giveaway prize added', `₦${plain(g.amount)} from the ${g.title} has been added to your balance.`, { go: 'home' }); }
       catch (err) { await store.updateEntry(e.id, { credited: false }).catch(() => {}); console.error('Giveaway credit error:', err.message); }
     }
     res.json({ ok: true, paid, total: paid * g.amount });
@@ -1763,8 +1763,8 @@ function finishCall(c, state, by) {
   const wasActive = c.state === 'active';
   c.state = wasActive ? 'ended' : state; c.endedAt = Date.now(); c.endedBy = by || null;
   if (c.userId) {   // leave a note in the customer chat, like WhatsApp
-    const kind = c.video ? 'video' : 'voice', icon = c.video ? '📹' : '📞';
-    const text = wasActive ? `${icon} ${c.video ? 'Video' : 'Voice'} call · ${mmss(c.endedAt - c.answeredAt)}` : `${icon} Missed ${kind} call`;
+    const kind = c.video ? 'video' : 'voice';
+    const text = wasActive ? `${c.video ? 'Video' : 'Voice'} call · ${mmss(c.endedAt - c.answeredAt)}` : `Missed ${kind} call`;
     store.addMessage({ userId: c.userId, sender: c.from.kind === 'user' ? 'user' : 'admin', text }).catch(err => console.error('Call note error:', err.message));
     if (!wasActive && c.from.kind !== 'user') notify(c.userId, 'chat', 'Missed call', `AZAPLUG Support tried to call you.`, { feed: false, go: 'chat' });
   }

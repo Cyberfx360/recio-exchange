@@ -443,6 +443,7 @@ img,svg,video{max-width:100%}
 #callui .cb .c-red i{background:#EF4444}#callui .cb .c-green i{background:#10B981;animation:cring 1.6s ease-in-out infinite}
 @keyframes cring{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.35)}50%{box-shadow:0 0 0 18px rgba(255,255,255,0)}}
 @media (prefers-reduced-motion:reduce){#callui .cav,#callui .cb .c-green i{animation:none}}
+.cnote{display:inline-flex;vertical-align:-3px;margin-right:6px;color:#10B981}.cnote.miss{color:#EF4444}
 </style>
 </head>
 <body>
@@ -744,7 +745,7 @@ inbox:()=>{const list=S.inbox||[];return `<section class="scr">${hd('Forwarded t
 forwardMsg:()=>{const m=S.chat.find(x=>x.id===S.fwd.mid)||{},u=S.chatUser||{name:'Customer'},list=S.recips;
  return `<section class="scr">${hd('Forward Message','Select recipient below','chat',`<button class="fbtn" data-go="chat">Cancel</button>`,'bluef')}
  <div class="bd" style="padding-left:0;padding-right:0"><div style="padding:0 20px"><div class="cl" style="margin-top:0;color:var(--muted)">Message preview</div>
-  <div class="card pv"><b>${esc(m.sender==='user'?u.name:'AZAPLUG Agent')}</b> <small class="muted">• Original Sender</small><p>${vnParse(m.imageData)?'🎤 Voice note'+(m.text?' · ':''):safeImg(m.imageData)?'📷 Photo'+(m.text?' · ':''):''}${esc(m.text||'')}</p></div>
+  <div class="card pv"><b>${esc(m.sender==='user'?u.name:'AZAPLUG Agent')}</b> <small class="muted">• Original Sender</small><p>${vnParse(m.imageData)?'Voice note'+(m.text?' · ':''):safeImg(m.imageData)?'Photo'+(m.text?' · ':''):''}${esc(m.text||'')}</p></div>
   ${search('Search admin or staff by name...')}
   <div class="between" style="margin:16px 0 8px"><span class="cl" style="margin:0;color:var(--muted)">Recipients</span><small style="color:var(--blue);font-weight:600">${list?list.length+' available':''}</small></div></div>
   <div id="list" role="radiogroup" aria-label="Recipients">${!list?'<p class="empty">Loading…</p>':list.length?list.map(r=>`<button class="rcp ${S.fwd.to===r.id?'on':''}" role="radio" aria-checked="${S.fwd.to===r.id}" data-act="pickRecip" data-id="${esc(r.id)}" data-k="${esc((r.name+' '+r.role).toLowerCase())}">${av(r.name,S.fwd.to===r.id?'solid':'')}<span class="grow" style="min-width:0"><b>${esc(r.name)}</b><small>${esc(r.role)}</small></span><i class="radio"></i></button>`).join(''):'<p class="empty">No one to forward to yet</p>'}</div>
@@ -761,9 +762,9 @@ forward:()=>{const u=S.chatUser||{name:'Customer'},e=lastEsc(S.id);return `<sect
 const RTS={checking:'Checking',seen:'Seen',confirmed:'Confirmed',approved:'Approved',failed:'Failed'};
 function msgsHtml(){if(!S.chat.length)return '<p class="empty">No messages yet</p>';let day='';
   if(S.route==='teamChat')return S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender==='me';const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(m.createdAt)}${mine?mdBtn(m):''}</time></div>`}).join('');
+    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}${mine?mdBtn(m):''}</time></div>`}).join('');
   return S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender!=='user';const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>${m.sender==='user'&&S.portal==='chat'?((S.routed||{})[m.id]?`<span class="rtd">${I('checkc','style="width:13px;height:13px"')}Sent to ${esc(S.routed[m.id].title)} · ${esc(RTS[S.routed[m.id].status]||S.routed[m.id].status)}</span><br>`:`<button class="svp" data-act="routeOpen" data-id="${esc(m.id)}">${I('send','style="width:13px;height:13px"')}Send receipt to an account</button><br>`):''}`:''}${voiceHtml(m)}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(m.createdAt)}<button class="fw" data-act="fwdMsg" data-id="${esc(m.id)}" aria-label="Forward this message">${I('fwd','style="width:13px;height:13px"')}Forward</button>${mdBtn(m)}</time></div>`}).join('')}
+    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>${m.sender==='user'&&S.portal==='chat'?((S.routed||{})[m.id]?`<span class="rtd">${I('checkc','style="width:13px;height:13px"')}Sent to ${esc(S.routed[m.id].title)} · ${esc(RTS[S.routed[m.id].status]||S.routed[m.id].status)}</span><br>`:`<button class="svp" data-act="routeOpen" data-id="${esc(m.id)}">${I('send','style="width:13px;height:13px"')}Send receipt to an account</button><br>`):''}`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}<button class="fw" data-act="fwdMsg" data-id="${esc(m.id)}" aria-label="Forward this message">${I('fwd','style="width:13px;height:13px"')}Forward</button>${mdBtn(m)}</time></div>`}).join('')}
 
 /* ---------- Render + navigation ---------- */
 async function savePic(src,name){src=safeImg(src);if(!src)return toast('No picture to save');
@@ -828,6 +829,11 @@ const VN={rec:null,MAX:120,id:null,audio:null};
 const VN_URL=()=>(S.route==='teamChat'?'/api/staff/team/'+encodeURIComponent(S.tid)+'/send':'/api/staff/chats/'+encodeURIComponent(S.id)+'/send');
 const mmss=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
 const vnMime=()=>window.MediaRecorder?['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'].find(t=>MediaRecorder.isTypeSupported(t))||'':'';
+// Message text. Call notes ("Voice call · 2:31", "Missed video call") get a small icon like WhatsApp; old emoji prefixes are dropped.
+const EMO=/^[\u{1F300}-\u{1FAFF}☀-➿️\s]+/u;
+function msgText(t){t=String(t||'').replace(EMO,'');const c=/^(Missed )?(Voice|Video) call\b/i.exec(t);
+  const ic=c?`<span class="cnote ${c[1]?'miss':''}">${I(/video/i.test(c[2])?'video':'phone','style="width:15px;height:15px"')}</span>`:'';
+  return ic+esc(t).replace(/\n/g,'<br>')}
 function vnParse(src){if(typeof src!=='string')return null;
   const st=/^\/api\/media\/(?:u|staff|team)\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(?:m4a|webm|ogg|mp3)\?a=1(?:&dur=(\d+))?(?:&w=(\d+))?$/.exec(src);   // voice note kept in storage
   if(st)return {dur:+st[1]||0,w:/^[0-9]{8,64}$/.test(st[2]||'')?st[2]:'',url:src};

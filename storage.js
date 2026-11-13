@@ -350,7 +350,7 @@ async function cleanOldChatMedia(days) {
     if (error || !data) continue;
     for (const row of data) {
       const voice = /^data:audio\//i.test(row.image_data) || AUDIO_EXT.test((parseRef(row.image_data) || {}).path || '');
-      const note = `${voice ? '🎤 Voice note' : '📷 Photo'} removed after ${days} days`;
+      const note = `${voice ? 'Voice note' : 'Photo'} removed after ${days} days`;
       const u = await supabase.from(t.table).update({ image_data: null, [t.text]: row[t.text] ? row[t.text] + '\n(' + note + ')' : note }).eq('id', row.id);
       if (u.error) continue;
       removed++;
@@ -512,7 +512,7 @@ async function listConversations() {
     const user = users.find(function(u){ return u && u.id === userId; });
     return {
       userId: userId, name: user ? user.name : 'Unknown', phone: user ? user.phone : '',
-      lastMessage: lastMsg.image_data ? (/^data:audio\//i.test(lastMsg.image_data) || AUDIO_EXT.test((parseRef(lastMsg.image_data) || {}).path || '') ? '🎤 Voice note' : '📷 Photo') : lastMsg.text,
+      lastMessage: lastMsg.image_data ? (/^data:audio\//i.test(lastMsg.image_data) || AUDIO_EXT.test((parseRef(lastMsg.image_data) || {}).path || '') ? 'Voice note' : 'Photo') : String(lastMsg.text || '').replace(/^[\u{1F300}-\u{1FAFF}\u2600-\u27BF\uFE0F\s]+/u, ''),
       lastSender: lastMsg.sender, lastAt: lastMsg.created_at
     };
   });
