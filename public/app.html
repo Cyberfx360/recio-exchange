@@ -420,11 +420,14 @@ async function pushOff(){const sub=await pushDetach();if(sub)await sub.unsubscri
 const allowed=()=>PUSH_OK&&Notification.permission==='granted';
 const mustAllow=()=>S.push==='install'||S.push==='denied'||(S.push==='off'&&!allowed());
 let pbusy=false;
-async function togglePush(){if(pbusy)return;pbusy=true;
+async function togglePush(){if(S.push==='on')return toast('Notifications are needed to use AZAPLUG, so they stay on');if(pbusy)return;pbusy=true;
   try{if(S.push==='on'){await pushOff();toast('Push notifications turned off')}else{await pushOn();toast('Push notifications turned on')}}catch(e){toast(e.message||'Could not change notifications')}
   pbusy=false;if(S.route==='profile'||S.route==='notifications')render()}
 if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.refresh&&S.me){loadNotes();const r=S.route;if(['home','history','trade','loan'].includes(r))Promise.all([loadMe(),loadAll(),r==='loan'?loadLoan():0]).then(()=>{if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{})}
   if(!(e.data&&e.data.go&&S.me&&V[e.data.go]))return;if(S.route==='allow')S.after=e.data.go;else go(e.data.go)});
+// Coming back to the app with notifications switched off brings the notifications screen back.
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||pbusy||!S.me||S.route==='allow'||BIO.open.includes(S.route))return;
+  pushState().then(()=>{if(mustAllow()&&S.route!=='allow'&&!BIO.open.includes(S.route)){S.after=S.route;go('allow')}}).catch(()=>{})});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.route==='allow'&&!pbusy)pushState().then(()=>{if(S.route!=='allow')return;mustAllow()?render():go(S.after||'home')}).catch(()=>{})});
 
 const csGet=()=>{const c=CRYPTO[S.coin],u=num(S.cusd||'');return !c.rate?'The admin will confirm the naira amount.':u?`You get about ${naira(u*c.rate)} at $1 = ${naira(c.rate)}`:`Today's rate: $1 = ${naira(c.rate)}`};
@@ -979,21 +982,23 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
   if(BIO.away&&Date.now()-BIO.away>300000&&lsGet(BIO.key)&&!BIO.open.includes(S.route)&&!VN.rec){go('lock');bioUnlock(true)}});
 /* ---------- "Install AZAPLUG" banner for Android ----------
    Chrome only shows its own install bar once; this banner shows every time until the app is installed
-   (closing it hides it for a day). Browsers without an install button get the menu steps instead. */
+   (closing it hides it until the app is opened again). It only shows once notifications are on.
+   Browsers without an install button get the menu steps instead. */
 const INS={ev:null,key:'az_ins_skip_'+location.pathname,name:'AZAPLUG'};
 const insAndroid=/android/i.test(navigator.userAgent);
 const insStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-const insSkipped=()=>{try{return Date.now()-(+localStorage.getItem(INS.key)||0)<864e5}catch(e){return false}};
+const insSkipped=()=>INS.closed===true;
+const notifOn=()=>!('Notification' in window)||Notification.permission==='granted';
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();INS.ev=e;insShow()});
 window.addEventListener('appinstalled',()=>{INS.ev=null;insHide();toast(INS.name+' is installed. Open it from your home screen')});
 function insHide(){const b=document.getElementById('insb');if(b)b.remove();clearInterval(INS.t)}
 function insShow(){if(!insAndroid||insStandalone()||insSkipped()||document.getElementById('insb'))return;
   const b=document.createElement('div');b.id='insb';b.setAttribute('role','dialog');b.setAttribute('aria-label','Install '+INS.name);
   b.innerHTML=`<img src="/icon-192.png" alt=""><span class="t"><b>Install ${esc(INS.name)}</b><small>${INS.ev?'Add the app to your home screen for faster access and alerts.':'Tap the <b>⋮</b> menu, then <b>Install app</b> or <b>Add to Home screen</b>.'}</small></span>${INS.ev?'<button type="button" class="go">Install</button>':''}<button type="button" class="x" aria-label="Close">×</button>`;
-  b.addEventListener('click',async e=>{if(e.target.closest('.x')){try{localStorage.setItem(INS.key,Date.now())}catch(err){}return insHide()}
-    if(e.target.closest('.go')&&INS.ev){const ev=INS.ev;INS.ev=null;insHide();ev.prompt();try{const c=await ev.userChoice;if(c.outcome!=='accepted')localStorage.setItem(INS.key,Date.now())}catch(err){}}});
+  b.addEventListener('click',async e=>{if(e.target.closest('.x')){INS.closed=true;return insHide()}
+    if(e.target.closest('.go')&&INS.ev){const ev=INS.ev;INS.ev=null;insHide();ev.prompt();try{await ev.userChoice}catch(err){}}});
   document.body.appendChild(b);
-  INS.t=setInterval(()=>{const hide=['chat','lock','loading'].includes(S.route)||!!document.querySelector('.cfm');b.style.display=hide?'none':''},700)}
+  INS.t=setInterval(()=>{const hide=['chat','teamChat','lock','loading','allow','alertGate'].includes(S.route)||!notifOn()||!!document.querySelector('.cfm');b.style.display=hide?'none':''},700)}
 // Android browsers that never offer an install button (e.g. Firefox) still get the steps.
 setTimeout(()=>{if(!INS.ev)insShow()},5000);
 BIO.login='login';BIO.open=['alertGate','loading','splash','role','login','signup','verify','setpin','forgot','reset','lock','allow'];

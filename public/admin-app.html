@@ -554,7 +554,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
 staff:()=>`<section class="scr">${hd('Staff','Active and Pending Recio Agents','dash')}
  <div class="bd">${search('Search staff members...')}<div id="list">
  ${S.staff.length?S.staff.map(s=>{const b=sBadge(s),st=staffStats(s);return `<article class="card sc" data-k="${esc((s.name+' '+s.phone).toLowerCase())}">
-  <button class="row" style="gap:12px;width:100%;text-align:left" data-go="staffProfile" data-id="${esc(s.id)}">${av(s.name)}<span class="grow" style="min-width:0"><b class="h" style="font-size:14.5px;display:block">${esc(s.name)}</b><small class="muted">${st.trades} Trades Handled • ${st.accounts} Accounts</small><small style="display:block;margin-top:2px;font-weight:600;color:${s.alerts?'var(--green)':'var(--orange)'}">${s.alerts?'🔔 Alerts on':'🔕 Alerts off'}</small></span><span class="badge ${b[1]} xs">${b[0]}</span></button>
+  <button class="row" style="gap:12px;width:100%;text-align:left" data-go="staffProfile" data-id="${esc(s.id)}">${av(s.name)}<span class="grow" style="min-width:0"><b class="h" style="font-size:14.5px;display:block">${esc(s.name)}</b><small class="muted">${s.role==='chat'?'Chat Manager':s.role==='vendor'?'Vendor':'No department'} • ${st.trades} Trades • ${st.accounts} Accounts</small><small style="display:block;margin-top:2px;font-weight:600;color:${s.alerts?'var(--green)':'var(--orange)'}">${s.alerts?'🔔 Alerts on':'🔕 Alerts off'}</small></span><span class="badge ${b[1]} xs">${b[0]}</span></button>
   <div class="row" style="gap:8px;margin-top:12px"><button class="sb o-red" data-act="staffDelete" data-id="${esc(s.id)}">Delete</button>
    ${s.status==='rejected'?'':`<button class="sb orange" data-act="staffReject" data-id="${esc(s.id)}">REJECT</button>`}
    ${s.status==='approved'?'':`<button class="sb blue" data-act="staffApprove" data-id="${esc(s.id)}">${s.status==='rejected'?'Re-Approve':'Approve Staff'}</button>`}</div></article>`}).join(''):'<p class="empty">No staff yet</p>'}</div>
@@ -562,13 +562,14 @@ staff:()=>`<section class="scr">${hd('Staff','Active and Pending Recio Agents','
 
 staffProfile:()=>{const s=S.staff.find(x=>x.id===S.id);if(!s)return V.staff();const b=sBadge(s),st=staffStats(s),p=s.status==='pending',r=s.status==='rejected';
  return `<section class="scr">${hd('Staff Profile',p?'Pending Review':'Agent ID: #REC-'+esc(String(s.id).slice(0,4).toUpperCase()),'staff')}
- <div class="bd"><div class="card" style="text-align:center">${av(s.name,'xl')}<h2 class="h" style="font-size:19px;margin-top:12px">${esc(s.name)}</h2><p class="muted" style="font-size:14px">Staff Agent</p>
+ <div class="bd"><div class="card" style="text-align:center">${av(s.name,'xl')}<h2 class="h" style="font-size:19px;margin-top:12px">${esc(s.name)}</h2><p class="muted" style="font-size:14px">${s.role==='chat'?'Chat Manager':s.role==='vendor'?'Vendor':'Department not set yet'}</p>
   <span class="badge ${b[1]} xs" style="margin-top:8px">${p||r?b[0]:'ACTIVE AGENT'}</span><div class="hr" style="margin:18px 0 14px"></div>
   <div class="cl" style="text-align:left;margin-top:0">Performance metrics</div>
   <div class="g2" style="text-align:left">${[[n0(st.trades),'Trades Handled'],[st.accounts,'Active Accounts'],[st.rate,'Success Rate'],p?['Pending','Verification Status']:[st.failed,'Failed Trades']].map(m=>`<div class="met"><b>${m[0]}</b><small>${m[1]}</small></div>`).join('')}</div></div>
  <div class="card" style="margin-top:14px"><div class="cl" style="margin-top:0">Contact &amp; registration</div>
   <div class="ci">${I('phone')}<span><small>PHONE NUMBER</small>${esc(s.phone)}</span></div>
-  <div class="ci">${I('cal')}<span><small>${p?'SUBMISSION DATE':'REGISTRATION DATE'}</small>${fd(s.createdAt)}</span></div></div>
+  <div class="ci">${I('cal')}<span><small>${p?'SUBMISSION DATE':'REGISTRATION DATE'}</small>${fd(s.createdAt)}</span></div>
+  <div class="cl">Department</div><div class="g2">${[['vendor','Vendor'],['chat','Chat Manager']].map(d=>`<button class="b ${s.role===d[0]?'blue':'soft'}" style="margin:0" data-act="staffRole" data-id="${esc(s.id)}" data-role="${d[0]}">${d[1]}</button>`).join('')}</div></div>
  ${p?`<button class="b blue" data-act="staffApprove" data-id="${esc(s.id)}">Approve &amp; Activate</button><div class="g2"><button class="b orange" data-act="staffReject" data-id="${esc(s.id)}">Reject Staff</button><button class="b o-red" data-act="staffDelete" data-id="${esc(s.id)}">Delete Application</button></div>`
   :r?`<button class="b green" data-act="staffApprove" data-id="${esc(s.id)}">Re-Approve Agent</button><div class="g2"><button class="b soft" data-act="soon">Investigate</button><button class="b o-red" data-act="staffDelete" data-id="${esc(s.id)}">Delete Agent</button></div>`
   :`<div class="g2"><button class="b blue" data-act="soon">Edit Profile</button><button class="b o-orange" data-act="staffReject" data-id="${esc(s.id)}">Suspend Agent</button></div><button class="b o-red" data-act="staffDelete" data-id="${esc(s.id)}">Delete Permanently</button>`}
@@ -907,6 +908,7 @@ const ACT={
   soon(){toast('Coming soon')},
   show(el){const i=$('#lg-pw'),sh=i.type==='password';i.type=sh?'text':'password';el.textContent=sh?'HIDE':'SHOW'},
   async logout(){try{await pushDetach()}catch(e){}try{await api('POST','/api/admin/logout')}catch(e){}go(lsGet(BIO.key)?'lock':'login')},
+  async staffRole(el,id){if(el.classList.contains('blue'))return;await api('PUT','/api/admin/staff/'+encodeURIComponent(id)+'/role',{role:el.dataset.role});toast('Department changed');await reload()},
   async fwDone(el,id){await api('POST','/api/admin/forwards/'+encodeURIComponent(id)+'/done');await reload()},
   async alertsOn(){try{await pushOn();toast('Alerts turned on')}catch(e){toast(e.message||'Could not turn on alerts')}render()},
   savePic(el,id){const k=el.dataset.kind,t=S.trades.find(x=>x.id===id)||{};savePic(k==='chat'?(S.chat.concat(S.fwds||[]).find(m=>m.id===id)||{}).imageData:k==='fail'?t.failImage:t.receiptImage,k==='chat'?'azaplug-chat-photo':'azaplug-receipt-'+String(id).slice(0,8))},
@@ -1028,21 +1030,23 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
   if(BIO.away&&Date.now()-BIO.away>300000&&lsGet(BIO.key)&&!BIO.open.includes(S.route)&&!VN.rec){go('lock');bioUnlock(true)}});
 /* ---------- "Install AZAPLUG" banner for Android ----------
    Chrome only shows its own install bar once; this banner shows every time until the app is installed
-   (closing it hides it for a day). Browsers without an install button get the menu steps instead. */
+   (closing it hides it until the app is opened again). It only shows once notifications are on.
+   Browsers without an install button get the menu steps instead. */
 const INS={ev:null,key:'az_ins_skip_'+location.pathname,name:'AZAPLUG Admin'};
 const insAndroid=/android/i.test(navigator.userAgent);
 const insStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
-const insSkipped=()=>{try{return Date.now()-(+localStorage.getItem(INS.key)||0)<864e5}catch(e){return false}};
+const insSkipped=()=>INS.closed===true;
+const notifOn=()=>!('Notification' in window)||Notification.permission==='granted';
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();INS.ev=e;insShow()});
 window.addEventListener('appinstalled',()=>{INS.ev=null;insHide();toast(INS.name+' is installed. Open it from your home screen')});
 function insHide(){const b=document.getElementById('insb');if(b)b.remove();clearInterval(INS.t)}
 function insShow(){if(!insAndroid||insStandalone()||insSkipped()||document.getElementById('insb'))return;
   const b=document.createElement('div');b.id='insb';b.setAttribute('role','dialog');b.setAttribute('aria-label','Install '+INS.name);
   b.innerHTML=`<img src="/icon-192.png" alt=""><span class="t"><b>Install ${esc(INS.name)}</b><small>${INS.ev?'Add the app to your home screen for faster access and alerts.':'Tap the <b>⋮</b> menu, then <b>Install app</b> or <b>Add to Home screen</b>.'}</small></span>${INS.ev?'<button type="button" class="go">Install</button>':''}<button type="button" class="x" aria-label="Close">×</button>`;
-  b.addEventListener('click',async e=>{if(e.target.closest('.x')){try{localStorage.setItem(INS.key,Date.now())}catch(err){}return insHide()}
-    if(e.target.closest('.go')&&INS.ev){const ev=INS.ev;INS.ev=null;insHide();ev.prompt();try{const c=await ev.userChoice;if(c.outcome!=='accepted')localStorage.setItem(INS.key,Date.now())}catch(err){}}});
+  b.addEventListener('click',async e=>{if(e.target.closest('.x')){INS.closed=true;return insHide()}
+    if(e.target.closest('.go')&&INS.ev){const ev=INS.ev;INS.ev=null;insHide();ev.prompt();try{await ev.userChoice}catch(err){}}});
   document.body.appendChild(b);
-  INS.t=setInterval(()=>{const hide=['chat','lock','loading'].includes(S.route)||!!document.querySelector('.cfm');b.style.display=hide?'none':''},700)}
+  INS.t=setInterval(()=>{const hide=['chat','teamChat','lock','loading','allow','alertGate'].includes(S.route)||!notifOn()||!!document.querySelector('.cfm');b.style.display=hide?'none':''},700)}
 // Android browsers that never offer an install button (e.g. Firefox) still get the steps.
 setTimeout(()=>{if(!INS.ev)insShow()},5000);
 /* ---------- Alerts must be on before the dashboard (Staff and Admin) ----------
@@ -1059,6 +1063,9 @@ AXA.gateAllow=async()=>{let perm='default';try{perm=await Notification.requestPe
   PUSH=perm==='denied'?'denied':'off';toast(perm==='denied'?'Alerts are blocked on this device':'Please allow alerts to continue');render()};
 AXA.gateCheck=async()=>{await pushState();if(!gateNeeded())return go(S.after||'dash');toast('Still blocked. Allow notifications for AZAPLUG in Settings.')};
 AXA.gateOut=()=>ACT.logout();
+// Coming back to the app with alerts switched off brings the alerts screen back.
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||S.route==='alertGate'||BIO.open.includes(S.route)||!!['login','loading','lock'].includes(S.route))return;
+  pushState().then(()=>{if(gateNeeded()&&S.route!=='alertGate'&&!BIO.open.includes(S.route)){S.after=S.route;go('alertGate')}}).catch(()=>{})});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.route==='alertGate')pushState().then(()=>{if(S.route!=='alertGate')return;gateNeeded()?render():go(S.after||'dash')}).catch(()=>{})});
 BIO.login='login';BIO.open=['alertGate','loading','login','lock'];
 const bioEnter=()=>startApp();
