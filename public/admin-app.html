@@ -1088,7 +1088,7 @@ async function reload(r,o){await refresh();go(r||S.route,o)}
 const ACT={
   soon(){toast('Coming soon')},
   show(el){const i=$('#lg-pw'),sh=i.type==='password';i.type=sh?'text':'password';el.textContent=sh?'HIDE':'SHOW'},
-  async logout(){try{await pushDetach()}catch(e){}try{await api('POST','/api/admin/logout')}catch(e){}go(lsGet(BIO.key)?'lock':'login')},
+  async logout(){if(!await ask('Log out of admin?','To sign in again you will need your admin password and the code from Google Authenticator.','Log out',1))return;try{await pushDetach()}catch(e){}try{await api('POST','/api/admin/logout')}catch(e){}go(lsGet(BIO.key)?'lock':'login')},
   async staffRole(el,id){if(el.classList.contains('blue'))return;await api('PUT','/api/admin/staff/'+encodeURIComponent(id)+'/role',{role:el.dataset.role});toast('Department changed');await reload()},
   async gaCredit(el,id){const g=S.gas.find(x=>x.id===id),only=el.dataset.entry,n=only?1:g.entries.filter(e=>e.won&&!e.credited).length;
     if(!await ask(only?'Pay this winner?':`Pay ${n} winners?`,`${naira(n*g.amount)} will be added to ${only?'their balance':'their balances'} now. Each winner gets a notification.`,'Pay '+naira(n*g.amount)))return;

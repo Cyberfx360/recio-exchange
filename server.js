@@ -32,7 +32,7 @@ if (!process.env.ADMIN_PASSWORD) {
 app.use(express.json({ limit: '10mb' })); // receipts + settlement screenshots travel as base64
 // Sessions are kept in the database (table "sessions"), so a restart or the server going to sleep does not
 // sign anyone out. If the table is not there yet, they are kept in memory like before.
-const SESSION_DAYS = 60;
+const SESSION_DAYS = 60, ADMIN_DAYS = 400;
 class SavedSessions extends session.Store {
   constructor() { super(); this.mem = new Map(); this.saved = new Map(); }
   get(sid, cb) {
@@ -43,7 +43,7 @@ class SavedSessions extends session.Store {
   set(sid, sess, cb) {
     const data = JSON.parse(JSON.stringify(sess));
     this.mem.set(sid, data); this.saved.set(sid, Date.now());
-    const exp = new Date(Date.now() + SESSION_DAYS * 864e5).toISOString();
+    const exp = data.cookie && data.cookie.expires ? new Date(data.cookie.expires).toISOString() : new Date(Date.now() + SESSION_DAYS * 864e5).toISOString();
     store.sessionSet(sid, data, exp).catch(() => {}).then(() => cb && cb(null));
   }
   touch(sid, sess, cb) {   // called on every request: only write to the database once an hour
@@ -451,6 +451,9 @@ app.post('/api/admin/login', (req, res) => {
   }
   const wasAdmin = !!req.session.isAdmin;
   req.session.isAdmin = true;
+  // The admin stays signed in on this device: 400 days (the longest a browser keeps a sign-in), renewed every time
+  // the app is used, so the password and Google Authenticator code are only needed on a new device or after "Log out".
+  req.session.cookie.maxAge = ADMIN_DAYS * 864e5;
   if (!wasAdmin) alertTeam({ admin: true }, 'New admin sign-in', `Someone signed in to the admin app (${String(req.get('user-agent') || 'unknown device').slice(0, 80)}). If this was not you, change ADMIN_PASSWORD on Render now.`, { admin: 'dash' });
   res.json({ ok: true });
 });
