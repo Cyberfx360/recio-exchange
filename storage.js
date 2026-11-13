@@ -83,11 +83,22 @@ async function deleteUser(id) {
   if (error) throw error;
   dropMediaFolder('u/' + safeOwner(id));   // their receipts, chat photos and voice notes
 }
-async function addToBalance(id, amount) {
-  const user = await findUserById(id);
-  if (!user) return;
-  const { error } = await supabase.from('users').update({ balance: user.balance + amount }).eq('id', id);
-  if (error) throw error;
+// Changes a balance safely: the update only goes through if the balance is still what we read,
+// so two changes at the same moment can never overwrite each other (it simply tries again).
+// noNegative: refuse (return { ok: false }) instead of going below zero — used for withdrawals.
+async function addToBalance(id, amount, opts = {}) {
+  for (let i = 0; i < 10; i++) {
+    const { data: row, error: e1 } = await supabase.from('users').select('balance').eq('id', id).maybeSingle();
+    if (e1) throw e1;
+    if (!row) return { ok: false, missing: true };
+    const cur = Number(row.balance) || 0, next = Math.round((cur + Number(amount)) * 100) / 100;
+    if (opts.noNegative && next < 0) return { ok: false, balance: cur };
+    const { data, error } = await supabase.from('users').update({ balance: next }).eq('id', id).eq('balance', row.balance).select('id');
+    if (error) throw error;
+    if (data && data.length) return { ok: true, balance: next };
+    await new Promise(r => setTimeout(r, 40 + Math.random() * 120));
+  }
+  throw new Error('The balance is busy. Please try again.');
 }
 
 // ============================================================

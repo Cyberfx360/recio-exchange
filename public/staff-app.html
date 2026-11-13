@@ -536,7 +536,7 @@ const S={route:'loading',me:null,portal:store.get('az_portal')==='chat'?'chat':'
 const $=s=>document.querySelector(s);
 const n0=n=>Number(n||0).toLocaleString('en-NG'), naira=n=>'₦'+n0(n);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const safeImg=s=>/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+$/i.test(s||'')||/^\/api\/media\/(u|pub|staff|team)\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(jpg|png|webp|gif)$/.test(s||'')?s:'';   // pictures come as data: or from our own storage
+const safeImg=s=>/^data:image\/(jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i.test(s||'')||/^\/api\/media\/(u|pub|staff|team)\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(jpg|png|webp|gif)$/.test(s||'')?s:'';   // pictures come as data: or from our own storage
 const num=v=>parseFloat(String(v).replace(/[^0-9.]/g,''))||0;
 const ini=n=>(String(n||'?').trim().split(/\s+/).map(x=>x[0]).slice(0,2).join('')||'?').toUpperCase();
 const fd=d=>new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
