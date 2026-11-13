@@ -407,6 +407,16 @@ async function listTradesForStaff(staffId) {
   if (error) throw error;
   return data.map(tradeRow);
 }
+// Approved trades, only the columns the Top Traders board needs (paged past Supabase's 1,000-row limit).
+async function listApprovedTradeTotals() {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.from('trades').select('user_id, credited_amount, created_at').eq('status', 'approved').range(from, from + 999);
+    if (error) throw error;
+    data.forEach(r => out.push({ userId: r.user_id, creditedAmount: Number(r.credited_amount) || 0, createdAt: r.created_at }));
+    if (data.length < 1000) return out;
+  }
+}
 async function listAllTrades() {
   const { data, error } = await supabase.from('trades').select('*').order('created_at', { ascending: false });
   if (error) throw error;
@@ -919,7 +929,7 @@ module.exports = {
   createUser, findUserByPhone, findUserById, listUsers, setUserStatus, updateUser, deleteUser, addToBalance,
   createStaff, findStaffByPhone, findStaffById, listStaff, setStaffStatus, deleteStaff,
   listAccountsPublic, listAccountsForAmount, listAllAccounts, listAccountsByStaff, findAccountById, createAccount, updateAccount, deleteAccount,
-  createTrade, findTradeById, listTradesForUser, listTradesForStaff, listAllTrades, updateTradeStatus, setSettlement,
+  listApprovedTradeTotals, createTrade, findTradeById, listTradesForUser, listTradesForStaff, listAllTrades, updateTradeStatus, setSettlement,
   getSettings, updateSettings,
   addMessage, messagesForUser, listConversations, findMessageById, deleteMessage,
   createWithdrawal, findWithdrawalById, listWithdrawalsForUser, listAllWithdrawals, updateWithdrawalStatus
