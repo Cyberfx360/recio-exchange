@@ -1418,6 +1418,24 @@ app.put('/api/admin/users/:id', requireAdmin, async (req, res) => {
   try { await store.updateUser(req.params.id, req.body || {}); res.json({ ok: true }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not update user.' }); }
 });
+// Admin adds money to a customer's balance by hand (giveaway prizes, gifts, fixes).
+// The customer gets a notification and a chat message, so there is always a record in their chat.
+const RECENT_CREDIT = new Map();
+app.post('/api/admin/users/:id/credit', requireAdmin, ADMIN_MONEY, async (req, res) => {
+  try {
+    const amount = Math.round(Number((req.body || {}).amount) * 100) / 100, reason = String((req.body || {}).reason || 'Giveaway prize').trim().slice(0, 80) || 'Giveaway prize';
+    if (!(amount > 0) || amount > 1000000) return res.status(400).json({ error: 'Enter an amount between ₦1 and ₦1,000,000.' });
+    const user = await store.findUserById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'Customer not found.' });
+    const key = user.id + ':' + amount, last = RECENT_CREDIT.get(key);
+    if (last && Date.now() - last < 15000 && !(req.body || {}).again) return res.status(409).json({ error: `You just added ₦${plain(amount)} to ${user.name}. Wait a few seconds if you really want to add it again.` });
+    const r = await store.addToBalance(user.id, amount);
+    RECENT_CREDIT.set(key, Date.now());
+    await store.addMessage({ userId: user.id, sender: 'admin', text: `₦${plain(amount)} has been added to your AZAPLUG balance (${reason}). Congratulations!` }).catch(() => {});
+    notify(user.id, 'tx', 'Money added to your balance', `₦${plain(amount)} was added to your balance (${reason}).`, { go: 'home' });
+    res.json({ ok: true, balance: r && r.balance, name: user.name });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not add the money.' }); }
+});
 app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
   try { await store.deleteUser(req.params.id); res.json({ ok: true }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete user.' }); }
