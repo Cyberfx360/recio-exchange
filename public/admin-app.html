@@ -355,6 +355,14 @@ img,svg,video{max-width:100%}
 .fwc{padding:14px;border-radius:14px;margin-bottom:12px}.fwc.done{opacity:.6}
 .fwc .fwb{background:#F4F7FC;border-radius:12px;padding:10px 12px;margin:10px 0;font-size:14.5px;line-height:1.45;word-break:break-word}.fwc .fwb img{max-width:100%;max-height:260px;border-radius:10px;display:block;margin-bottom:6px}
 .fwc .fwb .voice .pl{background:var(--blue);color:#fff}.fwc .fwb .wave{color:var(--blue)}
+.ax.gate{align-items:center;text-align:center}.ax.gate .gbell{width:104px;height:104px;border-radius:50%;background:#EEF3FE;color:var(--blue);display:grid;place-items:center;box-shadow:0 0 0 14px #F6F8FE}
+.ax.gate .gbell svg{width:40px;height:40px}.ax.gate ol{text-align:left;margin:14px auto 0;padding-left:20px;max-width:330px;color:#374151;font-size:14.5px;line-height:1.7}
+/* Install banner (Android) */
+#insb{position:fixed;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:calc(var(--w) - 20px);max-width:calc(100vw - 20px);z-index:95;background:#1F2433;color:#fff;border-radius:16px;padding:12px 12px 12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 16px 40px -12px rgba(0,0,0,.5);animation:insin .35s ease-out}
+#insb img{width:42px;height:42px;border-radius:11px;flex:none}#insb .t{flex:1;min-width:0}#insb b{display:block;font-size:15px}#insb small{display:block;font-size:12.5px;color:#C7CCD8;line-height:1.35}
+#insb .go{background:#8AB4F8;color:#0B1B3F;font-weight:700;font-size:14px;padding:9px 14px;border-radius:999px;flex:none}#insb .x{color:#C7CCD8;width:30px;height:30px;display:grid;place-items:center;font-size:20px;flex:none}
+@keyframes insin{from{opacity:0;transform:translate(-50%,-14px)}to{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion:reduce){#insb{animation:none}}
 </style>
 </head>
 <body>
@@ -527,6 +535,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
    ...S.staff.filter(s=>s.status==='pending').map(s=>({at:s.createdAt,t:'New Staff Account Pending',s:`${esc(s.name)} requested access`,r:'Review',go:'staffProfile',id:s.id})),
    ...S.wds.filter(w=>w.status==='pending').map(w=>({at:w.createdAt,t:'Withdrawal Request',s:esc(w.userName),r:naira(w.amount),go:'wd',id:w.id})),
    ...S.escs.filter(e=>e.status==='open').map(e=>({at:e.createdAt,t:'Chat Escalated',s:`${esc(e.userName)} • by ${esc(e.staffName)}`,r:'Review',go:'console',id:''}))].sort((a,b)=>new Date(b.at)-new Date(a.at)).slice(0,6);
+ const alertsOn=S.users.filter(u=>u.alerts>0).length;
  const cnt={staff:S.staff.filter(x=>x.status==='pending').length,accounts:S.accounts.filter(a=>!a.active).length,chats:S.convos.filter(c=>c.lastSender==='user').length+S.escs.filter(x=>x.status==='open').length+fwNew(),
    receipts:act.length,wds:S.wds.filter(w=>w.status==='pending').length+S.loans.filter(l=>l.status==='pending').length};
  const qa=[['staff','users','Manage Staff'],['accounts','users','Accounts'],['users','users','Manage Users'],['chats','help','Help &amp; Support'],['rules','gear','Edit Rules'],['receipts','file','Receipts'],['wds','dl','Withdrawer Request'],['rates','trend','Edit Rates']];
@@ -535,7 +544,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
   <div class="stat"><small>Total Users</small><b>${n0(S.users.length)}</b><i style="color:var(--green)">+${week} this week</i></div>
   <div class="stat"><small>Active Trades</small><b>${act.length}</b><i style="color:var(--blue)">${S.trades.length} all time</i></div>
   <button class="stat" data-go="receipts"><small>Pending</small><b style="color:var(--orange)">${rec} Receipt${rec===1?'':'s'}</b><i>Needs review</i></button>
-  <div class="stat"><small>Today's Revenue</small><b>—</b><i>Not tracked yet</i></div></div>
+  <button class="stat" data-go="users" data-tab="alertsoff"><small>Notifications On</small><b style="color:${alertsOn===S.users.length?'var(--green)':'var(--slate)'}">${alertsOn}<span style="font-size:15px;color:var(--muted);font-weight:600"> / ${S.users.length}</span></b><i style="color:${alertsOn<S.users.length?'var(--orange)':'var(--green)'}">${S.users.length-alertsOn?(S.users.length-alertsOn)+' customer'+(S.users.length-alertsOn===1?'':'s')+' without':'Every customer'}</i></button></div>
   <h2 class="sh">Quick Actions</h2>
   <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
   <div class="between" style="margin:22px 0 10px"><h2 class="sh" style="margin:0">Recent Activity Feed</h2><button class="link" style="font-size:14px" data-go="receipts">View All</button></div>
@@ -545,7 +554,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
 staff:()=>`<section class="scr">${hd('Staff','Active and Pending Recio Agents','dash')}
  <div class="bd">${search('Search staff members...')}<div id="list">
  ${S.staff.length?S.staff.map(s=>{const b=sBadge(s),st=staffStats(s);return `<article class="card sc" data-k="${esc((s.name+' '+s.phone).toLowerCase())}">
-  <button class="row" style="gap:12px;width:100%;text-align:left" data-go="staffProfile" data-id="${esc(s.id)}">${av(s.name)}<span class="grow" style="min-width:0"><b class="h" style="font-size:14.5px;display:block">${esc(s.name)}</b><small class="muted">${st.trades} Trades Handled • ${st.accounts} Accounts</small></span><span class="badge ${b[1]} xs">${b[0]}</span></button>
+  <button class="row" style="gap:12px;width:100%;text-align:left" data-go="staffProfile" data-id="${esc(s.id)}">${av(s.name)}<span class="grow" style="min-width:0"><b class="h" style="font-size:14.5px;display:block">${esc(s.name)}</b><small class="muted">${st.trades} Trades Handled • ${st.accounts} Accounts</small><small style="display:block;margin-top:2px;font-weight:600;color:${s.alerts?'var(--green)':'var(--orange)'}">${s.alerts?'🔔 Alerts on':'🔕 Alerts off'}</small></span><span class="badge ${b[1]} xs">${b[0]}</span></button>
   <div class="row" style="gap:8px;margin-top:12px"><button class="sb o-red" data-act="staffDelete" data-id="${esc(s.id)}">Delete</button>
    ${s.status==='rejected'?'':`<button class="sb orange" data-act="staffReject" data-id="${esc(s.id)}">REJECT</button>`}
    ${s.status==='approved'?'':`<button class="sb blue" data-act="staffApprove" data-id="${esc(s.id)}">${s.status==='rejected'?'Re-Approve':'Approve Staff'}</button>`}</div></article>`}).join(''):'<p class="empty">No staff yet</p>'}</div>
@@ -660,13 +669,13 @@ announce:()=>`<section class="scr">${hd('Write','Announcement to all customers',
   <p style="background:#EEF2F8;border-radius:8px;padding:10px 12px;font-size:12.5px;color:#4B5563;margin-top:14px">Every customer sees this in their Notifications. Customers who turned on push also get it on their phone.</p>
   <button class="b blue">Send to all customers</button></form></div></section>`,
 
-users:()=>{const list=S.users.filter(u=>S.userTab==='all'||(S.userTab==='approved'?u.status==='approved':u.status!=='approved'));
+users:()=>{const list=S.users.filter(u=>S.userTab==='all'||(S.userTab==='alertson'?u.alerts>0:S.userTab==='alertsoff'?!u.alerts:S.userTab==='approved'?u.status==='approved':u.status!=='approved'));
  return `<section class="scr"><div class="bd" style="padding-top:24px"><div class="top" style="margin-bottom:12px"><button class="icon-btn sqr" style="width:36px;height:36px" data-go="dash" aria-label="Back">${I('cl','style="width:16px;height:16px"')}</button>
    <span class="title" style="line-height:1.2">Users<small class="muted" style="display:block;font:400 12.5px var(--body)">${S.users.filter(u=>u.status==='approved').length} total approved accounts</small></span><span></span></div>
   ${search('Search users, banks, or accounts...')}
-  <div class="chips">${[['all','All Users'],['approved','Approved'],['suspended','Suspended']].map(c=>`<button class="${S.userTab===c[0]?'on':''}" data-set="userTab:${c[0]}">${c[1]}</button>`).join('')}</div>
+  <div class="chips">${[['all','All Users'],['alertson','🔔 Alerts On'],['alertsoff','🔕 Alerts Off'],['approved','Approved'],['suspended','Suspended']].map(c=>`<button class="${S.userTab===c[0]?'on':''}" data-set="userTab:${c[0]}">${c[1]}</button>`).join('')}</div>
   <div id="list">${list.length?list.map(u=>{const ok=u.status==='approved';return `<article class="card uc" data-k="${esc((u.name+' '+u.phone+' '+u.bankName+' '+u.accountNumber).toLowerCase())}">
-   <button class="between" style="width:100%;text-align:left;align-items:flex-start" data-go="user" data-id="${esc(u.id)}"><span style="min-width:0"><b class="h" style="font-size:15.5px;display:block;word-break:break-word">${esc(u.name)}</b><small class="muted">Balance: <b style="color:var(--slate)">${naira(u.balance)}</b></small></span><span class="badge ${ok?'b-approved':'b-failed'} xs">${ok?'APPROVED':'SUSPENDED'}</span></button>
+   <button class="between" style="width:100%;text-align:left;align-items:flex-start" data-go="user" data-id="${esc(u.id)}"><span style="min-width:0"><b class="h" style="font-size:15.5px;display:block;word-break:break-word">${esc(u.name)}</b><small class="muted">Balance: <b style="color:var(--slate)">${naira(u.balance)}</b></small><small style="display:block;margin-top:3px;font-weight:600;color:${u.alerts?'var(--green)':'var(--orange)'}">${u.alerts?'🔔 Notifications on'+(u.alerts>1?' · '+u.alerts+' phones':''):'🔕 Notifications off'}</small></span><span class="badge ${ok?'b-approved':'b-failed'} xs">${ok?'APPROVED':'SUSPENDED'}</span></button>
    <div class="ur"><div><span>PHONE</span><b>${esc(u.phone)}</b></div><div><span>BANK</span><b>${esc(u.bankName)}</b></div><div><span>ACCOUNT NO</span><b style="font-weight:700">${esc(u.accountNumber)}</b></div></div>
    <div class="row" style="gap:8px"><button class="sb s-blue" data-act="userEdit" data-id="${esc(u.id)}">${I('pen','style="width:13px;height:13px"')}Edit</button>
     ${ok?`<button class="sb s-yellow" data-act="userSuspend" data-id="${esc(u.id)}">Suspend</button>`:`<button class="sb s-green" data-act="userApprove" data-id="${esc(u.id)}">Approve</button>`}
@@ -778,7 +787,7 @@ const alertCard=()=>PUSH==='off'?`<div class="alertc"><span>${I('bell')}</span><
 const LIVE=['dash','staff','receipts','wds','users','chats','accountsAll','rates','console','loans'];
 function liveRefresh(){const r=S.route;if(!LIVE.includes(r)||typing())return;refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{})}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')liveRefresh()});
-if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{const d=e.data||{};if(!(S.route!=='login'&&S.route!=='loading'))return;if(d.go&&V[d.go]&&LIVE.includes(d.go))return go(d.go);if(d.refresh)liveRefresh()});
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{const d=e.data||{};if(!(S.route!=='login'&&S.route!=='loading'&&S.route!=='alertGate'))return;if(d.go&&V[d.go]&&LIVE.includes(d.go))return go(d.go);if(d.refresh)liveRefresh()});
 /* ---------- Back gesture: each screen is a history entry, so swiping back returns to the previous screen ---------- */
 const NAV={stack:[],keys:['id','uid','back','ratesTab','form','done','escTab','rcTab','wdTab','userTab','chatTab'],roots:['loading','login','dash']};
 function navPush(r){const snap={r,c:{}};NAV.keys.forEach(k=>snap.c[k]=S[k]);const st=NAV.stack;
@@ -948,7 +957,7 @@ document.addEventListener('click',async e=>{
     if(g.dataset.id){if(r==='user')o.uid=g.dataset.id;else o.id=g.dataset.id}
     if(g.dataset.from)o.back=g.dataset.from;else if(r==='trade'||r==='chat')o.back='';
     if(r==='rates')o.ratesTab='rates';if(r==='rules'){r='rates';o.ratesTab='rules'}
-    if(r==='accounts')o.form=null;
+    if(r==='accounts')o.form=null;if(r==='users')o.userTab=g.dataset.tab||'all';
     return go(r,o)}
 });
 document.addEventListener('input',e=>{if(e.target.id==='q'){const q=e.target.value.toLowerCase();document.querySelectorAll('#list [data-k]').forEach(el=>el.style.display=el.dataset.k.includes(q)?'':'none')}});
@@ -962,7 +971,7 @@ const FORMS={
     if(!await ask('Send to every customer?',`"${title}" will go to all ${S.users.length} customers and cannot be taken back.`,'Send announcement'))return;
     await api('POST','/api/admin/announce',{title,body});toast('Announcement sent');go('dash')},
   async loanLimit(){const limit=num(val('ln-lim'));await api('PUT','/api/admin/loans/limit',{limit});toast('Loan limit saved');await refresh()},
-  async login(){const password=$('#lg-pw').value;if(!password)throw new Error('Enter the admin password');await api('POST','/api/admin/login',{password});await refresh();pushState().then(()=>{if(S.route==='dash')render()});go('dash');bioOffer()},
+  async login(){const password=$('#lg-pw').value;if(!password)throw new Error('Enter the admin password');await api('POST','/api/admin/login',{password});await refresh();await gateGo('dash');bioOffer()},
   async account(){const b={title:val('f-title'),bankName:val('f-bank'),accountNumber:val('f-num'),lowestAmount:num(val('f-la')),lowestRate:num(val('f-lr')),higherAmount:num(val('f-ha')),higherRate:num(val('f-hr')),minAmount:num(val('f-min')),maxAmount:num(val('f-max')),imageData:S.form.imageData||null};
     if(!b.title||!b.bankName||!b.accountNumber)throw new Error('Country, bank name and account number are required');
     if(S.form.id){await api('PUT','/api/admin/accounts/'+S.form.id,b);toast('Account saved');const back=S.back;S.form=null;await reload(back)}
@@ -1017,9 +1026,43 @@ const AXA={};
 // Coming back after 5 minutes away locks the app again.
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){BIO.away=Date.now();return}
   if(BIO.away&&Date.now()-BIO.away>300000&&lsGet(BIO.key)&&!BIO.open.includes(S.route)&&!VN.rec){go('lock');bioUnlock(true)}});
-BIO.login='login';BIO.open=['loading','login','lock'];
+/* ---------- "Install AZAPLUG" banner for Android ----------
+   Chrome only shows its own install bar once; this banner shows every time until the app is installed
+   (closing it hides it for a day). Browsers without an install button get the menu steps instead. */
+const INS={ev:null,key:'az_ins_skip_'+location.pathname,name:'AZAPLUG Admin'};
+const insAndroid=/android/i.test(navigator.userAgent);
+const insStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const insSkipped=()=>{try{return Date.now()-(+localStorage.getItem(INS.key)||0)<864e5}catch(e){return false}};
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();INS.ev=e;insShow()});
+window.addEventListener('appinstalled',()=>{INS.ev=null;insHide();toast(INS.name+' is installed. Open it from your home screen')});
+function insHide(){const b=document.getElementById('insb');if(b)b.remove();clearInterval(INS.t)}
+function insShow(){if(!insAndroid||insStandalone()||insSkipped()||document.getElementById('insb'))return;
+  const b=document.createElement('div');b.id='insb';b.setAttribute('role','dialog');b.setAttribute('aria-label','Install '+INS.name);
+  b.innerHTML=`<img src="/icon-192.png" alt=""><span class="t"><b>Install ${esc(INS.name)}</b><small>${INS.ev?'Add the app to your home screen for faster access and alerts.':'Tap the <b>⋮</b> menu, then <b>Install app</b> or <b>Add to Home screen</b>.'}</small></span>${INS.ev?'<button type="button" class="go">Install</button>':''}<button type="button" class="x" aria-label="Close">×</button>`;
+  b.addEventListener('click',async e=>{if(e.target.closest('.x')){try{localStorage.setItem(INS.key,Date.now())}catch(err){}return insHide()}
+    if(e.target.closest('.go')&&INS.ev){const ev=INS.ev;INS.ev=null;insHide();ev.prompt();try{const c=await ev.userChoice;if(c.outcome!=='accepted')localStorage.setItem(INS.key,Date.now())}catch(err){}}});
+  document.body.appendChild(b);
+  INS.t=setInterval(()=>{const hide=['chat','lock','loading'].includes(S.route)||!!document.querySelector('.cfm');b.style.display=hide?'none':''},700)}
+// Android browsers that never offer an install button (e.g. Firefox) still get the steps.
+setTimeout(()=>{if(!INS.ev)insShow()},5000);
+/* ---------- Alerts must be on before the dashboard (Staff and Admin) ----------
+   Only a browser that cannot do push at all is let through. */
+const gateNeeded=()=>PUSH==='install'||PUSH==='denied'||(PUSH==='off'&&!(PUSH_OK&&Notification.permission==='granted'));
+async function gateGo(dest){await Promise.race([pushState(),new Promise(r=>setTimeout(r,2500))]).catch(()=>{});S.after=dest;go(gateNeeded()?'alertGate':dest)}
+V.alertGate=()=>{const den=PUSH==='denied',inst=PUSH==='install';return `<section class="ax gate"><div style="flex:1"></div><span class="gbell">${I('bell')}</span>
+  <h1>${den?'Alerts are blocked':'Turn on alerts'}</h1><p class="sub">${den?'Alerts are switched off for AZAPLUG on this device. You need them to work.':'You need alerts on to work, so you never miss a receipt, message or request.'}</p>
+  ${inst?'<ol><li>Tap the <b>Share</b> button in Safari.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Open the app from your Home Screen and log in.</li><li>Tap <b>Turn on alerts</b>.</li></ol>':den?'<ol><li>Open your phone or browser <b>Settings</b>.</li><li>Find <b>Notifications</b> (or Site settings) and choose AZAPLUG.</li><li>Switch notifications to <b>Allow</b>.</li><li>Come back and tap <b>Check again</b>.</li></ol>':''}
+  <div style="flex:1"></div>${inst?'':`<button type="button" class="btn axb" data-ax="${den?'gateCheck':'gateAllow'}">${den?'Check again':'Turn on alerts'}</button>`}<button type="button" class="axl" data-ax="gateOut">Log out</button></section>`};
+NAV.roots.push('alertGate');
+AXA.gateAllow=async()=>{let perm='default';try{perm=await Notification.requestPermission()}catch(e){}
+  if(perm==='granted'){go(S.after||'dash');pushOn().then(()=>{toast('Alerts turned on');render()}).catch(()=>{});return}
+  PUSH=perm==='denied'?'denied':'off';toast(perm==='denied'?'Alerts are blocked on this device':'Please allow alerts to continue');render()};
+AXA.gateCheck=async()=>{await pushState();if(!gateNeeded())return go(S.after||'dash');toast('Still blocked. Allow notifications for AZAPLUG in Settings.')};
+AXA.gateOut=()=>ACT.logout();
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.route==='alertGate')pushState().then(()=>{if(S.route!=='alertGate')return;gateNeeded()?render():go(S.after||'dash')}).catch(()=>{})});
+BIO.login='login';BIO.open=['alertGate','loading','login','lock'];
 const bioEnter=()=>startApp();
-const startApp=()=>refresh().then(()=>{pushState().then(()=>{if(S.route==='dash')render()});const h=location.hash.slice(1);go(V[h]&&LIVE.includes(h)?h:'dash')}).catch(()=>go('login'));
+const startApp=()=>refresh().then(()=>{const h=location.hash.slice(1);return gateGo(V[h]&&LIVE.includes(h)?h:'dash')}).catch(()=>go('login'));
 if(lsGet(BIO.key)){go('lock');bioUnlock(true)}else startApp();
 </script>
 </body>

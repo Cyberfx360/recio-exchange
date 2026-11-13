@@ -376,6 +376,14 @@ img,svg,video{max-width:100%}
 .fwc{padding:14px;border-radius:14px;margin-bottom:12px}.fwc.done{opacity:.6}
 .fwc .fwb{background:#F4F7FC;border-radius:12px;padding:10px 12px;margin:10px 0;font-size:14.5px;line-height:1.45;word-break:break-word}.fwc .fwb img{max-width:100%;max-height:260px;border-radius:10px;display:block;margin-bottom:6px}
 .fwc .fwb .voice .pl{background:var(--blue);color:#fff}.fwc .fwb .wave{color:var(--blue)}
+.ax.gate{align-items:center;text-align:center}.ax.gate .gbell{width:104px;height:104px;border-radius:50%;background:#EEF3FE;color:var(--blue);display:grid;place-items:center;box-shadow:0 0 0 14px #F6F8FE}
+.ax.gate .gbell svg{width:40px;height:40px}.ax.gate ol{text-align:left;margin:14px auto 0;padding-left:20px;max-width:330px;color:#374151;font-size:14.5px;line-height:1.7}
+/* Install banner (Android) */
+#insb{position:fixed;top:calc(10px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:calc(var(--w) - 20px);max-width:calc(100vw - 20px);z-index:95;background:#1F2433;color:#fff;border-radius:16px;padding:12px 12px 12px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 16px 40px -12px rgba(0,0,0,.5);animation:insin .35s ease-out}
+#insb img{width:42px;height:42px;border-radius:11px;flex:none}#insb .t{flex:1;min-width:0}#insb b{display:block;font-size:15px}#insb small{display:block;font-size:12.5px;color:#C7CCD8;line-height:1.35}
+#insb .go{background:#8AB4F8;color:#0B1B3F;font-weight:700;font-size:14px;padding:9px 14px;border-radius:999px;flex:none}#insb .x{color:#C7CCD8;width:30px;height:30px;display:grid;place-items:center;font-size:20px;flex:none}
+@keyframes insin{from{opacity:0;transform:translate(-50%,-14px)}to{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion:reduce){#insb{animation:none}}
 </style>
 </head>
 <body>
@@ -499,7 +507,7 @@ const escBanner=()=>{const e=lastEsc(S.id),ic=I('alertc','style="width:15px;heig
   return `${ic}<span class="grow">Need an admin to step in on this chat?</span><button data-go="forward">Escalate</button>`};
 const home=()=>S.portal==='chat'?'chats':'dash';
 async function enter(){const me=await loadMe();if(!me)return go('role');if(me.needsPin)return go('setpin');if(me.status!=='approved')return go('pending');await refresh();
-  pushState().then(()=>{if(S.route==='dash'||S.route==='chats')render()});const h=location.hash.slice(1);go(V[h]&&LIVE.includes(h)&&(h==='chats')===(S.portal==='chat')?h:home())}
+  const h=location.hash.slice(1);gateGo(V[h]&&LIVE.includes(h)&&(h==='chats')===(S.portal==='chat')?h:home())}
 function compress(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onerror=rej;fr.onload=e=>{const img=new Image();img.onerror=rej;img.onload=()=>{
   const c=document.createElement('canvas'),k=Math.min(1,1000/img.width);c.width=img.width*k;c.height=img.height*k;
   c.getContext('2d').drawImage(img,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.75))};img.src=e.target.result};fr.readAsDataURL(file)})}
@@ -721,7 +729,7 @@ const alertCard=()=>PUSH==='off'?`<div class="alertc"><span>${I('bell')}</span><
 const LIVE=['dash','receipts','acctAll','chats','inbox'];
 function liveRefresh(){const r=S.route;if(!LIVE.includes(r)||typing())return;refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{})}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')liveRefresh()});
-if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{const d=e.data||{};if(!(S.me&&S.me.status==='approved'))return;if(d.go&&V[d.go]&&LIVE.includes(d.go))return go(d.go);if(d.refresh)liveRefresh()});
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{const d=e.data||{};if(!(S.me&&S.me.status==='approved')||S.route==='alertGate')return;if(d.go&&V[d.go]&&LIVE.includes(d.go))return go(d.go);if(d.refresh)liveRefresh()});
 /* ---------- Back gesture: each screen is a history entry, so swiping back returns to the previous screen ---------- */
 const NAV={stack:[],keys:['id','form','done','rcTab','chatTab','fwd','rt'],roots:['loading','role','pending','dash','chats']};
 function navPush(r){const snap={r,c:{}};NAV.keys.forEach(k=>snap.c[k]=S[k]);const st=NAV.stack;
@@ -932,7 +940,41 @@ const AXA={};
 // Coming back after 5 minutes away locks the app again.
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){BIO.away=Date.now();return}
   if(BIO.away&&Date.now()-BIO.away>300000&&lsGet(BIO.key)&&!BIO.open.includes(S.route)&&!VN.rec){go('lock');bioUnlock(true)}});
-BIO.login='login';BIO.open=['loading','role','login','signup','verify','setpin','forgot','reset','lock','pending'];
+/* ---------- "Install AZAPLUG" banner for Android ----------
+   Chrome only shows its own install bar once; this banner shows every time until the app is installed
+   (closing it hides it for a day). Browsers without an install button get the menu steps instead. */
+const INS={ev:null,key:'az_ins_skip_'+location.pathname,name:'AZAPLUG Staff'};
+const insAndroid=/android/i.test(navigator.userAgent);
+const insStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const insSkipped=()=>{try{return Date.now()-(+localStorage.getItem(INS.key)||0)<864e5}catch(e){return false}};
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();INS.ev=e;insShow()});
+window.addEventListener('appinstalled',()=>{INS.ev=null;insHide();toast(INS.name+' is installed. Open it from your home screen')});
+function insHide(){const b=document.getElementById('insb');if(b)b.remove();clearInterval(INS.t)}
+function insShow(){if(!insAndroid||insStandalone()||insSkipped()||document.getElementById('insb'))return;
+  const b=document.createElement('div');b.id='insb';b.setAttribute('role','dialog');b.setAttribute('aria-label','Install '+INS.name);
+  b.innerHTML=`<img src="/icon-192.png" alt=""><span class="t"><b>Install ${esc(INS.name)}</b><small>${INS.ev?'Add the app to your home screen for faster access and alerts.':'Tap the <b>⋮</b> menu, then <b>Install app</b> or <b>Add to Home screen</b>.'}</small></span>${INS.ev?'<button type="button" class="go">Install</button>':''}<button type="button" class="x" aria-label="Close">×</button>`;
+  b.addEventListener('click',async e=>{if(e.target.closest('.x')){try{localStorage.setItem(INS.key,Date.now())}catch(err){}return insHide()}
+    if(e.target.closest('.go')&&INS.ev){const ev=INS.ev;INS.ev=null;insHide();ev.prompt();try{const c=await ev.userChoice;if(c.outcome!=='accepted')localStorage.setItem(INS.key,Date.now())}catch(err){}}});
+  document.body.appendChild(b);
+  INS.t=setInterval(()=>{const hide=['chat','lock','loading'].includes(S.route)||!!document.querySelector('.cfm');b.style.display=hide?'none':''},700)}
+// Android browsers that never offer an install button (e.g. Firefox) still get the steps.
+setTimeout(()=>{if(!INS.ev)insShow()},5000);
+/* ---------- Alerts must be on before the dashboard (Staff and Admin) ----------
+   Only a browser that cannot do push at all is let through. */
+const gateNeeded=()=>PUSH==='install'||PUSH==='denied'||(PUSH==='off'&&!(PUSH_OK&&Notification.permission==='granted'));
+async function gateGo(dest){await Promise.race([pushState(),new Promise(r=>setTimeout(r,2500))]).catch(()=>{});S.after=dest;go(gateNeeded()?'alertGate':dest)}
+V.alertGate=()=>{const den=PUSH==='denied',inst=PUSH==='install';return `<section class="ax gate"><div style="flex:1"></div><span class="gbell">${I('bell')}</span>
+  <h1>${den?'Alerts are blocked':'Turn on alerts'}</h1><p class="sub">${den?'Alerts are switched off for AZAPLUG on this device. You need them to work.':'You need alerts on to work, so you never miss '+(S.portal==='chat'?'a customer message':'a new receipt')+'.'}</p>
+  ${inst?'<ol><li>Tap the <b>Share</b> button in Safari.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Open the app from your Home Screen and log in.</li><li>Tap <b>Turn on alerts</b>.</li></ol>':den?'<ol><li>Open your phone or browser <b>Settings</b>.</li><li>Find <b>Notifications</b> (or Site settings) and choose AZAPLUG.</li><li>Switch notifications to <b>Allow</b>.</li><li>Come back and tap <b>Check again</b>.</li></ol>':''}
+  <div style="flex:1"></div>${inst?'':`<button type="button" class="btn axb" data-ax="${den?'gateCheck':'gateAllow'}">${den?'Check again':'Turn on alerts'}</button>`}<button type="button" class="axl" data-ax="gateOut">Log out</button></section>`};
+NAV.roots.push('alertGate');
+AXA.gateAllow=async()=>{let perm='default';try{perm=await Notification.requestPermission()}catch(e){}
+  if(perm==='granted'){go(S.after||'dash');pushOn().then(()=>{toast('Alerts turned on');render()}).catch(()=>{});return}
+  PUSH=perm==='denied'?'denied':'off';toast(perm==='denied'?'Alerts are blocked on this device':'Please allow alerts to continue');render()};
+AXA.gateCheck=async()=>{await pushState();if(!gateNeeded())return go(S.after||'dash');toast('Still blocked. Allow notifications for AZAPLUG in Settings.')};
+AXA.gateOut=()=>ACT.logout();
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.route==='alertGate')pushState().then(()=>{if(S.route!=='alertGate')return;gateNeeded()?render():go(S.after||'dash')}).catch(()=>{})});
+BIO.login='login';BIO.open=['alertGate','loading','role','login','signup','verify','setpin','forgot','reset','lock','pending'];
 const bioEnter=()=>enter();
 /* ---------- 6-digit PIN, email code, forgot PIN ---------- */
 const AX={role:'staff',cfg:{pin:true,email:true}};

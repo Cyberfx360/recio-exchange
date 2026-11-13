@@ -912,8 +912,11 @@ app.post('/api/admin/forwards/:id/done', requireAdmin, async (req, res) => {
 // ADMIN: users
 // ============================================================
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
-  try { res.json({ users: await store.listUsers() }); }
-  catch (err) { console.error(err); res.status(500).json({ error: 'Could not load users.' }); }
+  try {
+    const [users, subs] = await Promise.all([store.listUsers(), store.listPushSubscriptions(null).catch(() => [])]);
+    // alerts = how many phones this customer turned notifications on from
+    res.json({ users: users.map(u => ({ ...u, alerts: subs.filter(s => s.userId === u.id).length })) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load users.' }); }
 });
 app.put('/api/admin/users/:id/approve', requireAdmin, async (req, res) => {
   try { await store.setUserStatus(req.params.id, 'approved'); res.json({ ok: true }); }
@@ -936,8 +939,10 @@ app.delete('/api/admin/users/:id', requireAdmin, async (req, res) => {
 // ADMIN: staff
 // ============================================================
 app.get('/api/admin/staff', requireAdmin, async (req, res) => {
-  try { res.json({ staff: await store.listStaff() }); }
-  catch (err) { console.error(err); res.status(500).json({ error: 'Could not load staff.' }); }
+  try {
+    const [staff, subs] = await Promise.all([store.listStaff(), store.listTeamPush().catch(() => [])]);
+    res.json({ staff: staff.map(x => ({ ...x, alerts: subs.filter(s => s.staffId === x.id).length })), adminAlerts: subs.filter(s => s.portal === 'admin').length });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load staff.' }); }
 });
 app.put('/api/admin/staff/:id/approve', requireAdmin, async (req, res) => {
   try { await store.setStaffStatus(req.params.id, 'approved'); res.json({ ok: true }); }
