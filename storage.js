@@ -63,7 +63,22 @@ async function updateUser(id, fields) {
   const { error } = await supabase.from('users').update(patch).eq('id', id);
   if (error) throw error;
 }
+// Clears rows in a table that may not exist on older setups (so a missing table never blocks a delete).
+async function clearOptional(table, column, id, setNull) {
+  try {
+    const q = setNull ? supabase.from(table).update({ [column]: null }).eq(column, id) : supabase.from(table).delete().eq(column, id);
+    const { error } = await q;
+    if (error) console.error(`Cleanup of ${table} skipped:`, error.message);
+  } catch (err) { console.error(`Cleanup of ${table} skipped:`, err.message); }
+}
+// Deleting a customer removes everything that belongs to them first (receipts, withdrawals, chat,
+// loans, notifications) — otherwise the database refuses to delete the user.
 async function deleteUser(id) {
+  for (const table of ['withdrawals', 'messages', 'trades']) {
+    const r = await supabase.from(table).delete().eq('user_id', id);
+    if (r.error) throw r.error;
+  }
+  for (const table of ['escalations', 'loans', 'notifications', 'push_subscriptions']) await clearOptional(table, 'user_id', id);
   const { error } = await supabase.from('users').delete().eq('id', id);
   if (error) throw error;
 }
@@ -106,7 +121,14 @@ async function setStaffStatus(id, status) {
   const { error } = await supabase.from('staff').update({ status }).eq('id', id);
   if (error) throw error;
 }
+// Deleting a staff member keeps their accounts and receipts: they are handed back to the admin.
 async function deleteStaff(id) {
+  for (const table of ['accounts', 'trades']) {
+    const r = await supabase.from(table).update({ staff_id: null }).eq('staff_id', id);
+    if (r.error) throw r.error;
+  }
+  await clearOptional('escalations', 'staff_id', id, true);
+  await clearOptional('team_push_subscriptions', 'staff_id', id);
   const { error } = await supabase.from('staff').delete().eq('id', id);
   if (error) throw error;
 }
@@ -175,7 +197,10 @@ async function updateAccount(id, a) {
   const { error } = await supabase.from('accounts').update(patch).eq('id', id);
   if (error) throw error;
 }
+// Deleting an account keeps its receipts: each one already stores the account title and number it used.
 async function deleteAccount(id) {
+  const r = await supabase.from('trades').update({ account_id: null }).eq('account_id', id);
+  if (r.error) throw r.error;
   const { error } = await supabase.from('accounts').delete().eq('id', id);
   if (error) throw error;
 }
@@ -260,11 +285,12 @@ async function getSettings() {
       settlement_account: '', settlement_bank: '', max_deposit: 3000000
     };
     await supabase.from('settings').insert(defaults);
-    return { rulesText: defaults.rules_text, settlementAccount: '', settlementBank: '', maxDeposit: 3000000 };
+    return { rulesText: defaults.rules_text, settlementAccount: '', settlementBank: '', maxDeposit: 3000000, btcRate: 0, usdtRate: 0 };
   }
   return {
     rulesText: data.rules_text, settlementAccount: data.settlement_account,
-    settlementBank: data.settlement_bank, maxDeposit: Number(data.max_deposit)
+    settlementBank: data.settlement_bank, maxDeposit: Number(data.max_deposit),
+    btcRate: Number(data.btc_rate) || 0, usdtRate: Number(data.usdt_rate) || 0   // naira for 1 BTC / 1 USDT; 0 = not set
   };
 }
 async function updateSettings(fields) {
@@ -273,6 +299,9 @@ async function updateSettings(fields) {
   if (fields.settlementAccount !== undefined) patch.settlement_account = fields.settlementAccount;
   if (fields.settlementBank !== undefined) patch.settlement_bank = fields.settlementBank;
   if (fields.maxDeposit !== undefined) patch.max_deposit = fields.maxDeposit;
+  if (fields.btcRate !== undefined) patch.btc_rate = fields.btcRate;
+  if (fields.usdtRate !== undefined) patch.usdt_rate = fields.usdtRate;
+  if (!Object.keys(patch).length) return;
   const { error } = await supabase.from('settings').update(patch).eq('id', 1);
   if (error) throw error;
 }
