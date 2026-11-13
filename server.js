@@ -1848,7 +1848,7 @@ app.post('/api/team/push/unsubscribe', requireTeam, async (req, res) => {
 let TOP = { at: 0, data: null };
 // ---- December Challenge: the top 3 traders win prizes. Receipts SENT between start and end (Lagos time) count,
 // even if they are approved later. The banner shows in the app until showUntil.
-const CHALLENGE = { id: 'dec2026', title: 'December Top Traders', start: Date.parse('2026-12-01T00:00:00+01:00'), end: Date.parse('2026-12-23T16:00:00+01:00'),
+const CHALLENGE = { id: 'dec2026', title: 'December Top Traders', start: Date.parse('2026-11-14T04:00:00+01:00'), end: Date.parse('2026-12-23T16:00:00+01:00'),
   showUntil: Date.parse('2027-01-05T00:00:00+01:00'), prizes: [20000, 15000, 10000] };
 const inChallenge = t => { const c = Date.parse(t.createdAt); return c >= CHALLENGE.start && c < CHALLENGE.end; };
 const chalPaidKey = rank => 'chal:' + CHALLENGE.id + ':' + rank;

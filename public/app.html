@@ -690,8 +690,8 @@ top:()=>{const t=S.top,ch=t&&t.challenge,tab=S.topTab||(ch?'chal':'month'),list=
   <div class="tpb"><span>${I('trophy')}</span><div><small>Traded with AZAPLUG</small><b>${t?naira0(t.totalTraded):'…'}</b><small>${t?`${n0(t.trades)} approved trade${t.trades===1?'':'s'} · ${n0(t.customers)} customer${t.customers===1?'':'s'}`:'Loading…'}</small></div></div>
   <div class="seg" role="tablist" style="margin-top:18px">${ch?`<button class="${tab==='chal'?'on':''}" data-set="topTab:chal">December</button>`:''}<button class="${tab==='month'?'on':''}" data-set="topTab:month">This Month</button><button class="${tab==='all'?'on':''}" data-set="topTab:all">All Time</button></div>
   ${tab==='chal'&&ch?chalCard(ch):''}
-  <div class="tpc" style="margin-top:14px">${!list?'<p class="empty">Loading…</p>':list.length?list.map(topRow).join(''):`<p class="empty">${tab==='chal'?(Date.now()<ch.start?'The challenge starts on 1 December.':'No approved trades yet. Be the first!'):tab==='month'?'No approved trades this month yet. Be the first!':'No approved trades yet'}</p>`}</div>
-  ${tab==='chal'&&ch?'<p class="muted" style="font-size:12.5px;margin:12px 6px 0">Receipts you send from 1 December until 23 December, 4:00 PM count, even if they are approved after. Only approved trades count. Winners get the prize in their AZAPLUG balance.</p>':''}
+  <div class="tpc" style="margin-top:14px">${!list?'<p class="empty">Loading…</p>':list.length?list.map(topRow).join(''):`<p class="empty">${tab==='chal'?(Date.now()<ch.start?'The challenge starts on 14 November at 4:00 AM.':'No approved trades yet. Be the first!'):tab==='month'?'No approved trades this month yet. Be the first!':'No approved trades yet'}</p>`}</div>
+  ${tab==='chal'&&ch?'<p class="muted" style="font-size:12.5px;margin:12px 6px 0">Receipts you send from 14 November, 4:00 AM until 23 December, 4:00 PM count, even if they are approved after. Only approved trades count. Winners get the prize in their AZAPLUG balance.</p>':''}
   <p class="muted" style="font-size:12.5px;text-align:center;margin:14px 8px 28px">Names are hidden for privacy. Totals come from approved trades and update every few minutes.</p></section>`},
 
 send:()=>{const ts=titles();if(!ts.length)return `<section class="screen"><div class="top left">${back('home',1)}<span class="title">Send Receipt</span></div><p class="empty">No accounts available right now. Please check back soon.</p></section>`;
@@ -945,7 +945,7 @@ function chalBanner(){const ch=S.top&&S.top.challenge;if(!ch)return '';const [w,
   return `<button class="chb" data-go="top"><span class="chi">${I('trophy')}</span><span class="grow" style="min-width:0;text-align:left"><b>December Challenge</b><small>${at?`${w} <span data-cd="${at}">${cdTxt(at-Date.now())}</span> · Win ₦20,000`:'Ended. See the winners'}</small></span>${I('cr','style="width:18px;height:18px;flex:none"')}</button>`}
 function chalCard(ch){const [w,at]=chalState(ch);
   return `<div class="chc"><div class="chp">${ch.prizes.map((p,i)=>`<span class="r${i+1}"><i>${i+1}</i><b>₦${n0(p)}</b></span>`).join('')}</div>
-   <div class="chd">${at?`${w} <b data-cd="${at}">${cdTxt(at-Date.now())}</b>`:'<b>The challenge has ended</b>'}<small>Ends 23 December, 4:00 PM</small></div></div>`}
+   <div class="chd">${at?`${w} <b data-cd="${at}">${cdTxt(at-Date.now())}</b>`:'<b>The challenge has ended</b>'}<small>14 Nov, 4:00 AM to 23 Dec, 4:00 PM</small></div></div>`}
 setInterval(()=>document.querySelectorAll('[data-cd]').forEach(e=>{const t=+e.dataset.cd-Date.now();e.textContent=cdTxt(t);if(t<=0&&(S.route==='home'||S.route==='top'))render()}),30000);
 
 /* ---------- Top Traders ---------- */
