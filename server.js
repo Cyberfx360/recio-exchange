@@ -927,47 +927,98 @@ app.put('/api/admin/staff/:id/role', requireAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not change the department.' }); }
 });
 const teamSqlHint = err => (/team_messages/.test(String(err && err.message)) ? 'Run the team messages SQL from the README in Supabase first.' : null);
-const teamOut = (m, me) => ({ id: m.id, sender: m.fromStaffId === me ? 'me' : 'them', text: m.text, imageData: m.imageData, createdAt: m.createdAt });
+// A staff chat has two sides; a side is a staff id, or null for the admin.
+const sameSide = (a, b) => (a || null) === (b || null);
+const teamOut = (m, me) => ({ id: m.id, sender: sameSide(m.fromStaffId, me) ? 'me' : 'them', text: m.text, imageData: m.imageData, createdAt: m.createdAt });
+const between = (msgs, me, other) => msgs.filter(m => (sameSide(m.fromStaffId, me) && sameSide(m.toStaffId, other)) || (sameSide(m.fromStaffId, other) && sameSide(m.toStaffId, me)));
+const preview = m => (m ? (m.imageData ? (isVoice(m.imageData) ? '🎤 Voice note' : '📷 Photo') : m.text) : '');
+const adminSqlHint = err => (/from_staff_id|to_staff_id|not-null|null value/.test(String(err && err.message)) ? 'Run the admin-to-staff messages SQL from the README in Supabase first.' : null);
+function threadSummary(msgs, me, other, base) {
+  const t = between(msgs, me, other), last = t[t.length - 1];
+  return { ...base, unread: t.filter(m => sameSide(m.fromStaffId, other) && sameSide(m.toStaffId, me) && !m.readAt).length,
+    lastMessage: preview(last), lastAt: last ? last.createdAt : null, lastMine: last ? sameSide(last.fromStaffId, me) : false };
+}
+async function sendTeam(res, from, to, body, fromName) {
+  const text = String((body || {}).text || '').trim().slice(0, 4000), imageData = (body || {}).imageData || null;
+  if (!text && !imageData) return res.status(400).json({ error: 'Message is empty.' });
+  if (badAttachment(imageData)) return res.status(400).json({ error: badAttachment(imageData) });
+  const m = await store.addTeamMessage({ fromStaffId: from, toStaffId: to, text, imageData });
+  const what = text ? text.slice(0, 120) : isVoice(imageData) ? 'Sent you a voice note' : 'Sent you a photo';
+  if (to) alertTeam({ toStaff: to }, `Message from ${fromName}`, what, { staff: 'team' });
+  else alertTeam({ admin: true }, `Message from ${fromName}`, what, { admin: 'chats' });
+  res.json({ ok: true, message: teamOut(m, from) });
+}
+// Staff: Admin is always pinned at the top; chat managers <-> vendors below it.
 app.get('/api/staff/team', requireStaff, requireApprovedStaff, async (req, res) => {
   try {
-    if (!(await teamCheck(req, res))) return;
-    const me = req.staff.id;
+    const me = req.staff.id, rolesOn = (await roleReady()) && !!req.staff.role;
     const [staff, msgs] = await Promise.all([store.listStaff(), store.listTeamMessagesFor(me)]);
-    const people = staff.filter(s => s.status === 'approved' && s.id !== me && canTalk(req.staff, s)).map(s => {
-      const mine = msgs.filter(m => m.fromStaffId === s.id || m.toStaffId === s.id), last = mine[mine.length - 1];
-      return { id: s.id, name: s.name, unread: mine.filter(m => m.fromStaffId === s.id && !m.readAt).length,
-        lastMessage: last ? (last.imageData ? (isVoice(last.imageData) ? '🎤 Voice note' : '📷 Photo') : last.text) : '', lastAt: last ? last.createdAt : null, lastMine: last ? last.fromStaffId === me : false };
-    }).sort((a, b) => String(b.lastAt || '').localeCompare(String(a.lastAt || '')) || a.name.localeCompare(b.name));
-    res.json({ people, unread: people.reduce((n, p) => n + p.unread, 0) });
+    const people = rolesOn ? staff.filter(s => s.status === 'approved' && s.id !== me && canTalk(req.staff, s)).map(s => threadSummary(msgs, me, s.id, { id: s.id, name: s.name, role: s.role }))
+      .sort((a, b) => String(b.lastAt || '').localeCompare(String(a.lastAt || '')) || a.name.localeCompare(b.name)) : [];
+    const admin = threadSummary(msgs, me, null, { id: 'admin', name: 'Admin', role: 'admin', pinned: true });
+    const list = [admin].concat(people);
+    res.json({ people: list, unread: list.reduce((n, p) => n + p.unread, 0) });
   } catch (err) { if (!teamSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || 'Could not load team messages.' }); }
 });
+// The other side of a staff chat: null = admin, or an allowed staff member. Sends an error and returns undefined if not allowed.
+async function staffOther(req, res) {
+  if (req.params.id === 'admin') return null;
+  if (!(await teamCheck(req, res))) return undefined;
+  const other = await store.findStaffById(req.params.id);
+  if (!other || other.status !== 'approved' || other.id === req.staff.id || !canTalk(req.staff, other)) { res.status(404).json({ error: 'You can only message the admin and ' + (req.staff.role === 'chat' ? 'vendors' : 'chat managers') + '.' }); return undefined; }
+  return other;
+}
 app.get('/api/staff/team/:id', requireStaff, requireApprovedStaff, async (req, res) => {
   try {
-    if (!(await teamCheck(req, res))) return;
-    const me = req.staff.id, other = await store.findStaffById(req.params.id);
-    if (!other || other.status !== 'approved' || other.id === me || !canTalk(req.staff, other)) return res.status(404).json({ error: 'You can only message ' + (req.staff.role === 'chat' ? 'vendors' : 'chat managers') + '.' });
-    const msgs = (await store.listTeamMessagesFor(me)).filter(m => m.fromStaffId === other.id || m.toStaffId === other.id);
-    if (msgs.some(m => m.fromStaffId === other.id && !m.readAt)) await store.markTeamRead(me, other.id);
-    res.json({ person: { id: other.id, name: other.name, phone: other.phone }, messages: msgs.map(m => teamOut(m, me)) });
+    const other = await staffOther(req, res); if (other === undefined) return;
+    const me = req.staff.id, oid = other ? other.id : null, t = between(await store.listTeamMessagesFor(me), me, oid);
+    if (t.some(m => sameSide(m.fromStaffId, oid) && !m.readAt)) await store.markTeamRead(me, oid);
+    res.json({ person: other ? { id: other.id, name: other.name, role: other.role } : { id: 'admin', name: 'Admin', role: 'admin' }, messages: t.map(m => teamOut(m, me)) });
   } catch (err) { if (!teamSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || 'Could not load messages.' }); }
 });
 app.post('/api/staff/team/:id/send', requireStaff, requireApprovedStaff, async (req, res) => {
   try {
-    if (!(await teamCheck(req, res))) return;
-    const me = req.staff.id, other = await store.findStaffById(req.params.id);
-    if (!other || other.status !== 'approved' || other.id === me || !canTalk(req.staff, other)) return res.status(404).json({ error: 'You can only message ' + (req.staff.role === 'chat' ? 'vendors' : 'chat managers') + '.' });
-    const text = String((req.body || {}).text || '').trim().slice(0, 4000), imageData = (req.body || {}).imageData || null;
-    if (!text && !imageData) return res.status(400).json({ error: 'Message is empty.' });
-    if (badAttachment(imageData)) return res.status(400).json({ error: badAttachment(imageData) });
-    const m = await store.addTeamMessage({ fromStaffId: me, toStaffId: other.id, text, imageData });
-    alertTeam({ toStaff: other.id }, `Message from ${req.staff.name}`, text ? text.slice(0, 120) : isVoice(imageData) ? 'Sent you a voice note' : 'Sent you a photo', { staff: 'team' });
-    res.json({ ok: true, message: teamOut(m, me) });
-  } catch (err) { if (!teamSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || 'Could not send the message.' }); }
+    const other = await staffOther(req, res); if (other === undefined) return;
+    await sendTeam(res, req.staff.id, other ? other.id : null, req.body, req.staff.name);
+  } catch (err) { if (!teamSqlHint(err) && !adminSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || adminSqlHint(err) || 'Could not send the message.' }); }
 });
 app.delete('/api/staff/team/:id/messages/:mid', requireStaff, requireApprovedStaff, async (req, res) => {
   try {
     const m = await store.findTeamMessage(req.params.mid);
     if (!m || m.fromStaffId !== req.staff.id) return res.status(404).json({ error: 'You can only delete your own messages.' });
+    await store.deleteTeamMessage(m.id); res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the message.' }); }
+});
+// Admin <-> every staff member
+app.get('/api/admin/team', requireAdmin, async (req, res) => {
+  try {
+    const [staff, msgs] = await Promise.all([store.listStaff(), store.listAdminTeamMessages()]);
+    const people = staff.filter(s => s.status === 'approved').map(s => threadSummary(msgs, null, s.id, { id: s.id, name: s.name, role: s.role || null, phone: s.phone }))
+      .sort((a, b) => String(b.lastAt || '').localeCompare(String(a.lastAt || '')) || a.name.localeCompare(b.name));
+    res.json({ people, unread: people.reduce((n, p) => n + p.unread, 0) });
+  } catch (err) { if (!teamSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || 'Could not load staff messages.' }); }
+});
+async function adminOther(req, res) {
+  const s = await store.findStaffById(req.params.id);
+  if (!s || s.status !== 'approved') { res.status(404).json({ error: 'Staff member not found.' }); return null; }
+  return s;
+}
+app.get('/api/admin/team/:id', requireAdmin, async (req, res) => {
+  try {
+    const s = await adminOther(req, res); if (!s) return;
+    const t = between(await store.listAdminTeamMessages(), null, s.id);
+    if (t.some(m => m.fromStaffId === s.id && !m.readAt)) await store.markTeamRead(null, s.id);
+    res.json({ person: { id: s.id, name: s.name, role: s.role || null, phone: s.phone }, messages: t.map(m => teamOut(m, null)) });
+  } catch (err) { if (!teamSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || 'Could not load messages.' }); }
+});
+app.post('/api/admin/team/:id/send', requireAdmin, async (req, res) => {
+  try { const s = await adminOther(req, res); if (!s) return; await sendTeam(res, null, s.id, req.body, 'Admin'); }
+  catch (err) { if (!teamSqlHint(err) && !adminSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || adminSqlHint(err) || 'Could not send the message.' }); }
+});
+app.delete('/api/admin/team/:id/messages/:mid', requireAdmin, async (req, res) => {
+  try {
+    const m = await store.findTeamMessage(req.params.mid);
+    if (!m || m.fromStaffId) return res.status(404).json({ error: 'You can only delete your own messages.' });
     await store.deleteTeamMessage(m.id); res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the message.' }); }
 });
@@ -1529,6 +1580,177 @@ app.get('/api/version', (req, res) => res.json({ v: BUILD }));
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders(res, file) { if (/\.(html|js|webmanifest)$/.test(file)) res.setHeader('Cache-Control', 'no-cache'); }
 }));
+
+// ============================================================
+// IN-APP CALLS (voice and video over the internet, WebRTC)
+// The server only passes call setup messages between the two phones; the sound and video go phone to phone
+// (or through a TURN relay when mobile networks block a direct link: set CF_TURN_KEY_ID + CF_TURN_API_TOKEN, or METERED_DOMAIN + METERED_API_KEY, on Render).
+// Who can call whom: customer -> AZAPLUG Support (rings the admin and every chat manager);
+// admin -> customers and staff; chat manager -> customers, vendors, admin; vendor -> chat managers, admin.
+// ============================================================
+const CALLS = new Map();
+const RING_MS = 45000;
+let iceCache = null;
+async function iceServers() {
+  if (iceCache && iceCache.exp > Date.now()) return iceCache.v;
+  let v = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  if (process.env.CF_TURN_KEY_ID && process.env.CF_TURN_API_TOKEN) {   // Cloudflare TURN (1,000 GB free)
+    try {
+      const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(process.env.CF_TURN_KEY_ID)}/credentials/generate-ice-servers`, {
+        method: 'POST', headers: { Authorization: `Bearer ${process.env.CF_TURN_API_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ ttl: 86400 })
+      });
+      if (r.ok) {
+        const j = await r.json();
+        // port 53 addresses often time out in browsers, so leave them out
+        const list = (j.iceServers || []).map(x => ({ ...x, urls: [].concat(x.urls || []).filter(u => !/:53(\?|$)/.test(u)) })).filter(x => x.urls.length);
+        if (list.length) { iceCache = { v: list, exp: Date.now() + 12 * 3600e3 }; return list; }
+      } else console.error('Cloudflare TURN error:', r.status);
+    } catch (err) { console.error('Cloudflare TURN error:', err.message); }
+  }
+  if (process.env.TURN_URLS) v.push({ urls: process.env.TURN_URLS.split(',').map(x => x.trim()), username: process.env.TURN_USERNAME, credential: process.env.TURN_CREDENTIAL });
+  else if (process.env.METERED_DOMAIN && process.env.METERED_API_KEY) {
+    try {
+      const domain = process.env.METERED_DOMAIN.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      const r = await fetch(`https://${domain}/api/v1/turn/credentials?apiKey=${encodeURIComponent(process.env.METERED_API_KEY)}`);
+      if (r.ok) { const j = await r.json(); if (Array.isArray(j) && j.length) v = j; }
+      else console.error('TURN credentials error:', r.status);
+    } catch (err) { console.error('TURN credentials error:', err.message); }
+  }
+  iceCache = { v, exp: Date.now() + (v.length > 1 ? 3600e3 : 300e3) };
+  return v;
+}
+async function callMe(req) {
+  const as = (req.body && req.body.as) || req.query.as;
+  if (as === 'admin' && req.session.isAdmin) return { key: 'admin', kind: 'admin', name: 'Admin' };
+  if (as === 'staff' && req.session.staffId) {
+    const s = await store.findStaffById(req.session.staffId);
+    if (s && s.status === 'approved') return { key: 's:' + s.id, kind: 'staff', id: s.id, role: s.role, name: s.name };
+  }
+  if (as === 'user' && req.session.userId) {
+    const u = await store.findUserById(req.session.userId);
+    if (u && u.status === 'approved') return { key: 'u:' + u.id, kind: 'user', id: u.id, name: u.name };
+  }
+  return null;
+}
+// Works out who a call rings, or returns { error }.
+async function callTargets(me, to) {
+  to = String(to || '');
+  if (me.kind === 'user') {
+    if (to !== 'support') return { error: 'You can call AZAPLUG Support.' };
+    const chat = (await store.listStaff()).filter(s => s.status === 'approved' && s.role === 'chat').map(s => 's:' + s.id);
+    return { keys: ['admin'].concat(chat), label: 'AZAPLUG Support', userId: me.id };
+  }
+  if (to === 'admin') {
+    if (me.kind !== 'staff') return { error: 'Choose who to call.' };
+    return { keys: ['admin'], label: 'Admin' };
+  }
+  if (to.startsWith('u:')) {
+    if (!(me.kind === 'admin' || (me.kind === 'staff' && me.role === 'chat'))) return { error: 'Only the admin and chat managers can call customers.' };
+    const u = await store.findUserById(to.slice(2));
+    if (!u) return { error: 'Customer not found.' };
+    return { keys: [to], label: u.name, userId: u.id };
+  }
+  if (to.startsWith('s:')) {
+    const s = await store.findStaffById(to.slice(2));
+    if (!s || s.status !== 'approved' || (me.kind === 'staff' && s.id === me.id)) return { error: 'Staff member not found.' };
+    if (me.kind === 'staff' && !canTalk(me, s)) return { error: 'You can call the admin and ' + (me.role === 'chat' ? 'vendors' : 'chat managers') + '.' };
+    return { keys: [to], label: s.name };
+  }
+  return { error: 'Choose who to call.' };
+}
+const inCall = key => [...CALLS.values()].some(c => (c.state === 'ringing' || c.state === 'active') && (c.from.key === key || c.by === key));
+// What the other person sees as the caller's name. Customers always see "AZAPLUG Support" for staff and admin.
+const shownName = (c, viewer) => (viewer.startsWith('u:') && c.from.kind !== 'user' ? 'AZAPLUG Support' : c.from.kind === 'admin' ? 'Admin' : c.from.name);
+const mmss = ms => { const s = Math.max(1, Math.round(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+function finishCall(c, state, by) {
+  if (c.state === 'ended' || c.state === 'declined' || c.state === 'missed') return;
+  const wasActive = c.state === 'active';
+  c.state = wasActive ? 'ended' : state; c.endedAt = Date.now(); c.endedBy = by || null;
+  if (c.userId) {   // leave a note in the customer chat, like WhatsApp
+    const kind = c.video ? 'video' : 'voice', icon = c.video ? '📹' : '📞';
+    const text = wasActive ? `${icon} ${c.video ? 'Video' : 'Voice'} call · ${mmss(c.endedAt - c.answeredAt)}` : `${icon} Missed ${kind} call`;
+    store.addMessage({ userId: c.userId, sender: c.from.kind === 'user' ? 'user' : 'admin', text }).catch(err => console.error('Call note error:', err.message));
+    if (!wasActive && c.from.kind !== 'user') notify(c.userId, 'chat', 'Missed call', `AZAPLUG Support tried to call you.`, { feed: false, go: 'chat' });
+  }
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, c] of CALLS) {
+    if (c.state === 'ringing' && now - c.created > RING_MS) finishCall(c, 'missed');
+    if (c.state === 'active' && (now - c.seen.a > 25000 || now - c.seen.b > 25000)) finishCall(c, 'ended');   // a phone went offline
+    if (c.endedAt && now - c.endedAt > 90000) CALLS.delete(id);
+  }
+}, 5000);
+app.get('/api/call/ice', async (req, res) => {
+  if (!(await callMe(req))) return res.status(401).json({ error: 'Please log in.' });
+  res.json({ iceServers: await iceServers() });
+});
+app.post('/api/call/start', async (req, res) => {
+  try {
+    const me = await callMe(req); if (!me) return res.status(401).json({ error: 'Please log in.' });
+    const b = req.body || {};
+    if (!b.sdp || typeof b.sdp !== 'object' || b.sdp.type !== 'offer') return res.status(400).json({ error: 'Could not start the call.' });
+    const t = await callTargets(me, b.to); if (t.error) return res.status(400).json({ error: t.error });
+    if (inCall(me.key)) return res.status(409).json({ error: 'You are already on a call.' });
+    const keys = t.keys.filter(k => k !== me.key);
+    if (!keys.length) return res.status(400).json({ error: 'There is nobody to call right now.' });
+    if (keys.length === 1 && inCall(keys[0])) return res.status(409).json({ error: `${t.label} is on another call. Try again soon.` });
+    const id = crypto.randomUUID(), now = Date.now();
+    const c = { id, from: me, keys, label: t.label, userId: t.userId || null, video: !!b.video, offer: b.sdp, answer: null, state: 'ringing', by: null, ice: { a: [], b: [] }, created: now, seen: { a: now, b: now } };
+    CALLS.set(id, c);
+    const title = c.video ? 'Incoming video call' : 'Incoming voice call';
+    for (const k of keys) {
+      const body = `${shownName(c, k)} is calling you`;
+      if (k === 'admin') alertTeam({ admin: true }, title, body, { admin: 'dash' });
+      else if (k.startsWith('s:')) alertTeam({ toStaff: k.slice(2) }, title, body, { staff: '' });
+      else if (k.startsWith('u:')) notify(k.slice(2), 'chat', title, body, { feed: false, go: 'chat' });
+    }
+    res.json({ ok: true, id, label: t.label });
+  } catch (err) { console.error('Call start error:', err); res.status(500).json({ error: 'Could not start the call.' }); }
+});
+app.get('/api/call/incoming', async (req, res) => {
+  const me = await callMe(req); if (!me) return res.json({ calls: [] });
+  const calls = [...CALLS.values()].filter(c => c.state === 'ringing' && c.keys.includes(me.key) && c.from.key !== me.key)
+    .map(c => ({ id: c.id, name: shownName(c, me.key), video: c.video, offer: c.offer, fromKind: c.from.kind }));
+  res.json({ calls });
+});
+function callSide(c, me) { if (c.from.key === me.key) return 'a'; if (c.by === me.key || (c.state === 'ringing' && c.keys.includes(me.key))) return 'b'; return null; }
+app.get('/api/call/:id', async (req, res) => {
+  const me = await callMe(req), c = CALLS.get(req.params.id);
+  if (!me || !c) return res.json({ state: 'ended' });
+  const side = callSide(c, me); if (!side) return res.json({ state: c.by ? 'answered-elsewhere' : 'ended' });
+  c.seen[side] = Date.now();
+  const other = side === 'a' ? 'b' : 'a', since = Math.max(0, Number(req.query.since) || 0);
+  res.json({ state: c.state, answer: side === 'a' ? c.answer : null, ice: c.ice[other].slice(since), iceTotal: c.ice[other].length, answeredAt: c.answeredAt || null });
+});
+app.post('/api/call/:id/accept', async (req, res) => {
+  const me = await callMe(req), c = CALLS.get(req.params.id);
+  if (!me || !c) return res.status(404).json({ error: 'This call has ended.' });
+  if (c.state !== 'ringing' || !c.keys.includes(me.key)) return res.status(409).json({ error: c.by ? 'Someone else answered this call.' : 'This call has ended.' });
+  const sdp = (req.body || {}).sdp;
+  if (!sdp || sdp.type !== 'answer') return res.status(400).json({ error: 'Could not answer the call.' });
+  c.by = me.key; c.byName = me.name; c.answer = sdp; c.state = 'active'; c.answeredAt = Date.now(); c.seen.b = Date.now();
+  res.json({ ok: true });
+});
+app.post('/api/call/:id/decline', async (req, res) => {
+  const me = await callMe(req), c = CALLS.get(req.params.id);
+  if (!me || !c || c.state !== 'ringing') return res.json({ ok: true });
+  c.keys = c.keys.filter(k => k !== me.key);   // a support call keeps ringing the others
+  if (!c.keys.length) finishCall(c, 'declined', me.key);
+  res.json({ ok: true });
+});
+app.post('/api/call/:id/ice', async (req, res) => {
+  const me = await callMe(req), c = CALLS.get(req.params.id);
+  if (!me || !c) return res.json({ ok: false });
+  const side = callSide(c, me), cand = (req.body || {}).c;
+  if (side && cand && typeof cand === 'object' && c.ice[side].length < 200) c.ice[side].push(cand);
+  res.json({ ok: true });
+});
+app.post('/api/call/:id/end', async (req, res) => {
+  const me = await callMe(req), c = CALLS.get(req.params.id);
+  if (me && c && callSide(c, me)) finishCall(c, c.state === 'ringing' ? 'missed' : 'ended', me.key);
+  res.json({ ok: true });
+});
 
 // ---- Background storage jobs
 // 1) Move old pictures out of the database into Storage, a few at a time.

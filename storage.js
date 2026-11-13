@@ -805,7 +805,7 @@ function teamMsgRow(r) {
 async function addTeamMessage(m) {
   const id = uid();
   if (m.imageData) m = { ...m, imageData: await toRef(m.imageData, 'team/' + safeOwner(m.fromStaffId)) };
-  const { error } = await supabase.from('team_messages').insert({ id, from_staff_id: m.fromStaffId, to_staff_id: m.toStaffId, message_text: m.text || null, image_data: m.imageData || null });
+  const { error } = await supabase.from('team_messages').insert({ id, from_staff_id: m.fromStaffId || null, to_staff_id: m.toStaffId || null, message_text: m.text || null, image_data: m.imageData || null });
   if (error) throw error;
   const { data } = await supabase.from('team_messages').select('*').eq('id', id).maybeSingle();
   return data ? teamMsgRow(data) : { id, ...m, createdAt: new Date().toISOString() };
@@ -815,8 +815,17 @@ async function listTeamMessagesFor(staffId) {
   if (error) throw error;
   return data.map(teamMsgRow);
 }
-async function markTeamRead(toStaffId, fromStaffId) {
-  const { error } = await supabase.from('team_messages').update({ read_at: new Date().toISOString() }).eq('to_staff_id', toStaffId).eq('from_staff_id', fromStaffId).is('read_at', null);
+// Admin's side of staff chats: rows where one side is empty (null = the admin).
+async function listAdminTeamMessages() {
+  const { data, error } = await supabase.from('team_messages').select('*').or('from_staff_id.is.null,to_staff_id.is.null').order('created_at', { ascending: true }).limit(4000);
+  if (error) throw error;
+  return data.map(teamMsgRow);
+}
+const eqOrNull = (q, col, v) => (v ? q.eq(col, v) : q.is(col, null));
+async function markTeamRead(toStaffId, fromStaffId) {   // either side may be null (= admin)
+  let q = supabase.from('team_messages').update({ read_at: new Date().toISOString() }).is('read_at', null);
+  q = eqOrNull(eqOrNull(q, 'to_staff_id', toStaffId), 'from_staff_id', fromStaffId);
+  const { error } = await q;
   if (error) throw error;
 }
 async function findTeamMessage(id) {
@@ -841,7 +850,7 @@ async function setStaffRole(id, role) {
 module.exports = {
   mediaReady, getMediaFile, migrateMediaBatch, mediaLeftInDatabase, cleanOldChatMedia,
   hasStaffRole, setStaffRole,
-  addTeamMessage, listTeamMessagesFor, markTeamRead, findTeamMessage, deleteTeamMessage,
+  addTeamMessage, listTeamMessagesFor, listAdminTeamMessages, markTeamRead, findTeamMessage, deleteTeamMessage,
   createForward, listForwardsTo, findForwardById, setForwardStatus,
   hasEmailColumns, findByEmail, setLogin, sessionGet, sessionSet, sessionDelete, savePasskey, findPasskey, updatePasskeyCounter, deletePasskey,
   saveTeamPush, deleteTeamPush, listTeamPush,
