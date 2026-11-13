@@ -639,7 +639,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
    ...S.wds.filter(w=>w.status==='pending').map(w=>({at:w.createdAt,t:'Withdrawal Request',s:esc(w.userName),r:naira(w.amount),go:'wd',id:w.id})),
    ...S.escs.filter(e=>e.status==='open').map(e=>({at:e.createdAt,t:'Chat Escalated',s:`${esc(e.userName)} • by ${esc(e.staffName)}`,r:'Review',go:'console',id:''}))].sort((a,b)=>new Date(b.at)-new Date(a.at)).slice(0,6);
  const alertsOn=S.users.filter(u=>u.alerts>0).length;
- const cnt={staff:S.staff.filter(x=>x.status==='pending').length,accounts:S.accounts.filter(a=>!a.active).length,chats:S.convos.filter(c=>c.lastSender==='user').length+S.escs.filter(x=>x.status==='open').length+fwNew()+(S.teamUnread||0),
+ const cnt={staff:S.staff.filter(x=>x.status==='pending').length,accounts:S.accounts.filter(a=>!a.active).length,chats:S.convos.filter(c=>c.unread).length+S.escs.filter(x=>x.status==='open').length+fwNew()+(S.teamUnread||0),
    receipts:act.length,wds:S.wds.filter(w=>w.status==='pending').length+S.loans.filter(l=>l.status==='pending').length};
  const qa=[['staff','users','Manage Staff'],['accounts','users','Accounts'],['users','users','Manage Users'],['chats','help','Help &amp; Support'],['rules','gear','Edit Rules'],['receipts','file','Receipts'],['wds','dl','Withdrawer Request'],['rates','trend','Edit Rates']];
  return `<section class="scr">${hd('Admin Panel','AzaPlug Executive Control','',`<button class="write" data-go="announce">${I('pen','style="width:15px;height:15px"')}Write</button>`)}
@@ -856,15 +856,15 @@ console:()=>{const open=S.escs.filter(e=>e.status==='open'),list=S.escTab==='ope
     <span class="row" style="gap:8px">${o?`<button class="mini" data-act="escResolve" data-id="${esc(e.id)}">Resolve</button>`:''}<button class="mini dk" data-go="chat" data-from="console" data-id="${esc(e.userId)}">Join Chat</button></span></div></article>`}).join(''):`<p class="empty">${S.escTab==='open'?'No escalated chats waiting':'Nothing here'}</p>`}</div>
   <button class="b dark" style="height:50px;border-radius:999px;border:1.5px solid #D4A72C;margin-top:18px" data-act="soon">Broadcast Global System Alert</button></div></section>`},
 
-chats:()=>{const wait=S.convos.filter(c=>c.lastSender==='user'),list=S.chatTab==='wait'?wait:S.convos;
- return `<section class="scr">${hd('Chats','Staff and customers','dash',`<span class="badge b-failed xs">${wait.length} WAITING</span>`)}
+chats:()=>{const wait=S.convos.filter(c=>c.unread),list=S.chatTab==='wait'?wait:S.convos;
+ return `<section class="scr">${hd('Chats','Staff and customers','dash',`<span class="badge b-failed xs">${wait.length} NEW</span>`)}
  <div class="bd" style="padding-left:0;padding-right:0"><div style="padding:0 20px">${search('Search customer name or keyword...')}
-  <div class="chips">${[['all','All Queue',S.convos.length],['wait','Awaiting reply',wait.length]].map(c=>`<button class="${S.chatTab===c[0]?'on':''}" data-set="chatTab:${c[0]}">${c[1]} <i>${c[2]}</i></button>`).join('')}</div>
+  <div class="chips">${[['all','All Queue',S.convos.length],['wait','Unread',wait.length]].map(c=>`<button class="${S.chatTab===c[0]?'on':''}" data-set="chatTab:${c[0]}">${c[1]} <i>${c[2]}</i></button>`).join('')}</div>
   <button class="b dark" style="margin:4px 0 14px" data-go="console">Admin Console${S.escs.filter(e=>e.status==='open').length?` <span class="cnt">${S.escs.filter(e=>e.status==='open').length}</span>`:''}</button></div>
   ${(S.team||[]).length?`<div class="pinh">${I('pin','style="width:13px;height:13px"')}STAFF</div>${S.team.map(p=>`<button class="cv" data-go="staffChat" data-sid="${esc(p.id)}" data-k="${esc((p.name+' '+(p.lastMessage||'')).toLowerCase())}">${av(p.name,p.unread?'red':'')}<span class="grow" style="min-width:0"><span class="between"><b>${esc(p.name)} <small class="muted" style="font-weight:500">· ${p.role==='chat'?'Chat Manager':p.role==='vendor'?'Vendor':'Staff'}</small></b><small class="muted">${p.lastAt?ago(p.lastAt):''}</small></span>
    <span class="between"><span class="lm">${p.lastMessage?(p.lastMine?'You: ':'')+esc(p.lastMessage):'Tap to message'}</span>${p.unread?`<span class="newb">${p.unread}</span>`:`<span class="pinic">${I('pin','style="width:13px;height:13px"')}</span>`}</span></span></button>`).join('')}<div class="pinh">CUSTOMERS</div>`:''}
-  <div id="list">${list.length?list.map(c=>`<button class="cv" data-go="chat" data-id="${esc(c.userId)}" data-k="${esc((c.name+' '+c.lastMessage).toLowerCase())}">${av(c.name,c.lastSender==='user'?'red':'')}<span class="grow" style="min-width:0"><span class="between"><b>${esc(c.name)}</b><small class="muted">${ago(c.lastAt)}</small></span>
-   <span class="lm">${esc(c.lastMessage)}</span>${c.lastSender==='user'?`<span class="badge b-checking xs" style="margin-top:4px">${I('clock','style="width:10px;height:10px;vertical-align:-1px"')} waiting</span>`:''}</span></button>`).join(''):'<p class="empty">No conversations yet</p>'}</div></div></section>`},
+  <div id="list">${list.length?list.map(c=>`<button class="cv" data-go="chat" data-id="${esc(c.userId)}" data-k="${esc((c.name+' '+c.lastMessage).toLowerCase())}">${av(c.name,c.unread?'red':'')}<span class="grow" style="min-width:0"><span class="between"><b>${esc(c.name)}</b><small class="muted">${ago(c.lastAt)}</small></span>
+   <span class="lm">${esc(c.lastMessage)}</span>${c.unread?`<span class="badge b-checking xs" style="margin-top:4px">${I('clock','style="width:10px;height:10px;vertical-align:-1px"')} new</span>`:''}</span></button>`).join(''):'<p class="empty">No conversations yet</p>'}</div></div></section>`},
 
 staffChat:()=>{const u=S.staffPerson||(S.team||[]).find(p=>p.id===S.sid)||{name:'Staff'};return `<section class="chat">
   <header class="chat-top"><button data-go="chats" aria-label="Back">${I('cl','style="width:24px;height:24px"')}</button>${av(u.name)}
@@ -1077,7 +1077,7 @@ function go(r,o,pop){
   if(r==='staffChat'){if(!pop||!S.staffPerson||S.staffPerson.id!==S.sid){S.chat=[];S.staffPerson=null}
     const pull=()=>api('GET','/api/admin/team/'+encodeURIComponent(S.sid)).then(d=>{const first=!S.staffPerson,n=sig(d.messages)!==sig(S.chat);S.staffPerson=d.person;S.chat=d.messages||[];
       if(S.route!=='staffChat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(e=>{if(S.route==='staffChat'&&!S.staffPerson){toast(e.message);go('chats')}});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
-  if(r==='chat'){S.chat=[];const pull=()=>api('GET','/api/admin/chats/'+encodeURIComponent(S.id)).then(d=>{const n=sig(d.messages)!==sig(S.chat);S.chat=d.messages||[];
+  if(r==='chat'){S.chat=[];const cv=(S.convos||[]).find(c=>c.userId===S.id);if(cv)cv.unread=false;const pull=()=>api('GET','/api/admin/chats/'+encodeURIComponent(S.id)).then(d=>{const n=sig(d.messages)!==sig(S.chat);S.chat=d.messages||[];
       if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
   if(r==='tfa'){if(!S.tfa||!S.tfa.done)api('GET','/api/admin/2fa').then(d=>{S.tfa=d;if(S.route==='tfa')render()}).catch(e=>toast(e.message))}
   if(r==='giveaway'){loadGas();clearInterval(S.gaT);S.gaT=setInterval(()=>S.route==='giveaway'?loadGas():clearInterval(S.gaT),10000)}
