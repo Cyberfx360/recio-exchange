@@ -167,7 +167,7 @@ async function updateAccount(id, a) {
   const patch = { updated_at: new Date().toISOString() };
   var map = { title:'title', accountNumber:'account_number', bankName:'bank_name', imageData:'image_data',
     lowestAmount:'lowest_amount', lowestRate:'lowest_rate', higherAmount:'higher_amount', higherRate:'higher_rate',
-    minAmount:'min_amount', maxAmount:'max_amount', active:'active' };
+    minAmount:'min_amount', maxAmount:'max_amount', active:'active', staffId:'staff_id' };
   Object.keys(map).forEach(function(k){
     if (a[k] === undefined) return;
     patch[map[k]] = a[k];
@@ -445,7 +445,75 @@ async function listNotificationsForUser(userId, since) {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 50);
 }
 
+// ============================================================
+// TEAM ALERTS (push to admin and staff devices)
+// portal: 'admin' | 'vendor' | 'chat'. staff_id is empty for the admin.
+// ============================================================
+async function saveTeamPush(s) {
+  const { error } = await supabase.from('team_push_subscriptions')
+    .upsert({ endpoint: s.endpoint, staff_id: s.staffId || null, portal: s.portal, p256dh: s.p256dh, auth: s.auth }, { onConflict: 'endpoint' });
+  if (error) throw error;
+}
+async function deleteTeamPush(endpoint) {
+  const { error } = await supabase.from('team_push_subscriptions').delete().eq('endpoint', endpoint);
+  if (error) throw error;
+}
+async function listTeamPush() {
+  const { data, error } = await supabase.from('team_push_subscriptions').select('*');
+  if (error) throw error;
+  return data.map(r => ({ endpoint: r.endpoint, staffId: r.staff_id, portal: r.portal, p256dh: r.p256dh, auth: r.auth }));
+}
+
+// ============================================================
+// LOANS (Borrow)
+// status: pending -> declined, or active (approved, still owed) -> repaid
+// ============================================================
+function loanRow(r) {
+  return { id: r.id, userId: r.user_id, amount: Number(r.amount), outstanding: Number(r.outstanding),
+    status: r.status, createdAt: r.created_at, updatedAt: r.updated_at };
+}
+async function findLoanById(id) {
+  const { data, error } = await supabase.from('loans').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? loanRow(data) : null;
+}
+async function createLoan(l) {
+  const id = uid();
+  const { error } = await supabase.from('loans').insert({ id, user_id: l.userId, amount: l.amount, outstanding: 0, status: 'pending' });
+  if (error) throw error;
+  return findLoanById(id);
+}
+async function listLoans() {
+  const { data, error } = await supabase.from('loans').select('*').order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map(loanRow);
+}
+async function listLoansForUser(userId) {
+  const { data, error } = await supabase.from('loans').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map(loanRow);
+}
+async function updateLoan(id, fields) {
+  const patch = { updated_at: new Date().toISOString() };
+  if (fields.status !== undefined) patch.status = fields.status;
+  if (fields.outstanding !== undefined) patch.outstanding = fields.outstanding;
+  const { error } = await supabase.from('loans').update(patch).eq('id', id);
+  if (error) throw error;
+}
+// The most any customer may borrow. One number, set by the admin.
+async function getLoanLimit() {
+  const { data, error } = await supabase.from('loan_config').select('*').eq('id', 1).maybeSingle();
+  if (error) throw error;
+  return data ? Number(data.loan_limit) : 5000;
+}
+async function setLoanLimit(n) {
+  const { error } = await supabase.from('loan_config').upsert({ id: 1, loan_limit: n }, { onConflict: 'id' });
+  if (error) throw error;
+}
+
 module.exports = {
+  saveTeamPush, deleteTeamPush, listTeamPush,
+  createLoan, findLoanById, listLoans, listLoansForUser, updateLoan, getLoanLimit, setLoanLimit,
   getPushKeys, savePushKeys, savePushSubscription, deletePushSubscription, listPushSubscriptions,
   addNotification, listNotificationsForUser,
   createEscalation, findEscalationById, listEscalations, resolveEscalation,

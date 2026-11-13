@@ -219,7 +219,7 @@ label.lb{display:block;font-weight:600;font-size:15px;margin:22px 0 10px}
 .empty{text-align:center;color:var(--soft);padding:40px 0}
 :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 .blue :focus-visible{outline-color:#fff}
-.btn:disabled{opacity:.7}
+.btn:disabled{opacity:.5}
 a.role{display:flex}
 .tx-b{width:100%;text-align:left}
 .steps{display:flex;margin-top:20px}.steps div{flex:1;text-align:center;font-size:11.5px;color:var(--soft);position:relative;font-weight:600}
@@ -228,6 +228,10 @@ a.role{display:flex}
 .steps .on{color:var(--blue)}.steps .on i,.steps .on:before{background:var(--blue)!important}
 .ndot{position:absolute;top:9px;right:10px;width:9px;height:9px;border-radius:50%;background:var(--red);border:2px solid #fff}
 .steps2{text-align:left;margin:22px 8px 0;padding-left:22px;font-size:15px;line-height:1.5;color:#374151}.steps2 li{margin-bottom:8px}
+.chat{position:fixed;top:0;left:50%;transform:translateX(-50%);width:min(402px,100vw);height:100dvh;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.chat .chat-top,.chat>.hd,.chat .esc{position:static!important;flex:none}
+.chat .msgs{flex:1;min-height:0;overflow-y:auto;padding-bottom:18px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.chat .composer{position:static;transform:none;width:100%;flex:none}
 </style>
 </head>
 <body>
@@ -294,7 +298,7 @@ const CRYPTO = {
 };
 
 /* ---------- State + helpers ---------- */
-const S={route:'loading',notes:[],noteTab:'all',push:'off',seenSnap:0,homeTab:'trades',histTab:'All',coin:'BTC',me:null,accounts:[],trades:[],withdrawals:[],rules:null,chat:[],
+const S={route:'loading',loan:null,notes:[],noteTab:'all',push:'off',seenSnap:0,homeTab:'trades',histTab:'All',coin:'BTC',me:null,accounts:[],trades:[],withdrawals:[],rules:null,chat:[],
   slip:null,wd:null,send:{title:'',accountId:'',amount:'',image:null}};
 const $=s=>document.querySelector(s);
 const amt=n=>Number(n||0).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -355,9 +359,12 @@ let pbusy=false;
 async function togglePush(){if(pbusy)return;pbusy=true;
   try{if(S.push==='on'){await pushOff();toast('Push notifications turned off')}else{await pushOn();toast('Push notifications turned on')}}catch(e){toast(e.message||'Could not change notifications')}
   pbusy=false;if(S.route==='profile'||S.route==='notifications')render()}
-if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(!(e.data&&e.data.go&&S.me&&V[e.data.go]))return;if(S.route==='allow')S.after=e.data.go;else go(e.data.go)});
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{if(e.data&&e.data.refresh&&S.me){loadNotes();const r=S.route;if(['home','history','trade','loan'].includes(r))Promise.all([loadMe(),loadAll(),r==='loan'?loadLoan():0]).then(()=>{if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{})}
+  if(!(e.data&&e.data.go&&S.me&&V[e.data.go]))return;if(S.route==='allow')S.after=e.data.go;else go(e.data.go)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.route==='allow'&&!pbusy)pushState().then(()=>{if(S.route!=='allow')return;mustAllow()?render():go(S.after||'home')}).catch(()=>{})});
 
+async function loadLoan(){try{S.loan=await api('GET','/api/loans')}catch(e){S.loan={error:e.message,loans:[],limit:0}}
+  if(S.route==='loan'&&!document.activeElement.matches('input,select'))render()}
 async function enter(){
   const me=await loadMe();
   if(!me)return go('splash');
@@ -455,7 +462,7 @@ home:()=>{const list=S.homeTab==='trades'
    <span class="row" style="gap:12px"><button data-go="accounts" style="background:var(--blue);color:#fff;font-weight:700;font-size:14px;padding:9px 16px;border-radius:999px">Rate</button>
    ${bell()}</span></div>
   <div class="balance"><small>Balance</small><div class="amt">${naira(S.me.balance)}</div>
-   <div class="pills"><button class="on" data-go="accounts">Get Account</button><button data-go="withdraw">Withdraw</button><button data-go="rules">Rules</button><button data-act="soon">Borrow</button></div></div>
+   <div class="pills"><button class="on" data-go="accounts">Get Account</button><button data-go="withdraw">Withdraw</button><button data-go="rules">Rules</button><button data-go="loan">Borrow</button></div></div>
   <button class="btn sq" style="margin:16px 0 20px;font-family:var(--body);font-weight:600" data-go="send">Send Receipt</button>
   <div class="seg" role="tablist"><button class="${S.homeTab==='trades'?'on':''}" data-set="homeTab:trades">Trades</button><button class="${S.homeTab==='withdrawals'?'on':''}" data-set="homeTab:withdrawals">Withdrawals</button></div>
   <div class="sec-h"><h3>Recent Transactions</h3><button class="link" style="font-size:15px" data-go="history">See All</button></div>
@@ -596,6 +603,24 @@ allow:()=>{const st=S.push,inst=st==='install',den=st==='denied';return `<sectio
   <button data-act="logout" style="margin-top:18px;color:var(--muted);font-weight:600;font-size:15px">Log out</button>
   </section>`},
 
+loan:()=>{const L=S.loan,cur=L&&L.loans.find(l=>l.status==='pending'||l.status==='active'),past=L?L.loans.filter(l=>l!==cur).slice(0,4):[],
+  LS={pending:['Pending','b-checking'],active:['Active','b-confirmed'],repaid:['Repaid','b-approved'],declined:['Declined','b-failed']};
+ return `<section class="screen">
+  <div class="top">${back('home')}<span class="title brand" style="font-size:20px">AZAPLUG</span><span></span></div>
+  <div class="warn">${I('alertt','style="width:26px;height:26px"')}<span><b>Not Guarantee to Borrow</b><p>Approval depends on your repayment history and how actively you use AZAPLUG.</p></span></div>
+  ${!L?'<p class="empty">Loading…</p>':L.error?`<div class="card" style="margin-top:16px"><p class="empty" style="padding:18px 0">${esc(L.error)}</p></div>`:`
+  <form data-form="loan" class="card" style="margin-top:16px" novalidate><b class="h" style="font-size:17px;font-weight:600">Request a Loan</b>
+   <label class="lb muted" for="l-a" style="font-size:13.5px;margin:12px 0 8px">Loan Amount</label>
+   <div class="field sm" style="background:#F4F7FC"><b style="color:var(--blue)">₦</b><input id="l-a" inputmode="decimal" placeholder="0.00" ${cur?'disabled':''} style="font-family:var(--head);font-weight:500;font-size:17px"></div>
+   <p style="color:var(--muted);font-weight:600;font-size:13px;margin:16px 0 18px">Loan will be automatically removed from next deal</p>
+   ${cur?`<p style="background:#FEF3C7;color:#92400E;border-radius:10px;padding:10px 12px;font-size:13.5px;font-weight:600;margin-bottom:14px">${cur.status==='pending'?`Your request for ${naira(cur.amount)} is being reviewed.`:`You still owe ${naira(cur.outstanding)} of ${naira(cur.amount)}. It comes out of your next credited receipts.`}</p>`:''}
+   <button class="btn sq" style="height:50px;box-shadow:none;font-family:var(--body)" ${cur?'disabled':''}>Apply for Loan</button></form>
+  <div class="card" style="margin-top:16px"><b class="h" style="font-size:16px;font-weight:600">Your Eligibility Summary</b>
+   <div class="tile between" style="background:#EDF4FE;color:var(--blue)"><span><small style="font-weight:600">Maximum Eligible Limit</small><b class="h" style="display:block;font-size:17px">${naira(L.limit)}</b></span>${I('checkc')}</div>
+   ${cur&&cur.status==='active'?`<div class="tile" style="background:#F4F7FC"><small class="muted" style="font-weight:600">Outstanding Loan</small><b class="h" style="display:block;font-size:17px;color:var(--red)">${naira(cur.outstanding)}</b></div>`:''}</div>
+  ${past.length?`<div class="sec-h"><h3>Past Loans</h3></div>${past.map(l=>`<div class="txn"><div><div class="nm">${naira(l.amount)}</div><div class="dt">${fd(new Date(l.createdAt))}</div></div><div class="rt"><span class="badge ${LS[l.status][1]}">${LS[l.status][0]}</span></div></div>`).join('')}`:''}`}
+  ${fab(1)}</section>`},
+
 notifications:()=>{const f=S.noteTab,rows=S.notes.filter(n=>f==='all'||(f==='tx'?n.kind==='tx':n.kind!=='tx')),snap=S.seenSnap||0,
   K={tx:['checkc','#10B981','#E4F6EE'],alert:['alertt','#EF4444','#FDE0E0'],info:['bell','#0D4DC7','#EAF1FE']};
  return `<section class="screen">
@@ -650,21 +675,36 @@ function msgsHtml(){if(!S.chat.length)return '<p class="empty">Send us a message
     return `${head}<div class="msg ${mine?'out':'in'}">${mine?'':'<span class="who">AZAPLUG Agent</span>'}${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">`:''}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(d)}</time></div>`}).join('')}
 
 /* ---------- Render + navigation ---------- */
+/* ---------- Back gesture: each screen is a history entry, so swiping back returns to the previous screen ---------- */
+const NAV={stack:[],keys:['tradeId','tprev','prev','coin','histTab','homeTab','noteTab','after'],roots:['loading','splash','allow','home']};
+function navPush(r){const snap={r,c:{}};NAV.keys.forEach(k=>snap.c[k]=S[k]);const st=NAV.stack;
+  if(NAV.roots.includes(r)||!st.length){NAV.stack=[snap];try{history.replaceState({n:0},'')}catch(e){}}
+  else if(st[st.length-1].r===r)st[st.length-1]=snap;
+  else if(st.length>1&&st[st.length-2].r===r){st.pop();st[st.length-1]=snap;NAV.skip=true;try{history.back()}catch(e){NAV.skip=false}} // going to the screen you came from = going back
+  else{st.push(snap);try{history.pushState({n:st.length-1},'')}catch(e){}}}
+window.addEventListener('popstate',e=>{if(NAV.skip){NAV.skip=false;return}const n=e.state&&typeof e.state.n==='number'?e.state.n:0,st=NAV.stack;
+  if(!st.length||n>=st.length)return;const snap=st[n];st.length=n+1;Object.assign(S,snap.c);go(snap.r,null,true)});
+function goBack(target){const st=NAV.stack;if(st.length>1&&st[st.length-2].r===target){history.back();return true}return false}
+/* ---------- Chat layout: header and message box stay put; only the messages scroll (also when the keyboard opens) ---------- */
+function fitChat(){const c=$('.chat'),v=window.visualViewport;if(!c||!v)return;c.style.height=v.height+'px';c.style.top=v.offsetTop+'px'}
+function chatBottom(){fitChat();const m=$('#msgs');if(m)m.scrollTop=m.scrollHeight}
+if(window.visualViewport){visualViewport.addEventListener('resize',chatBottom);visualViewport.addEventListener('scroll',fitChat)}
 let poll=null;
-function render(){$('#app').innerHTML=V[S.route]();if(S.route==='chat')window.scrollTo(0,document.body.scrollHeight);if(S.route==='receive')drawQR()}
-function go(r){
-  if(r==='chat'&&S.route!=='chat')S.prev=S.route;
+function render(){$('#app').innerHTML=V[S.route]();if(S.route==='chat')chatBottom();if(S.route==='receive')drawQR()}
+function go(r,o,pop){
+  if(r==='chat'&&S.route!=='chat'&&!pop)S.prev=S.route;
   if(S.route!==r)$('#toast').classList.remove('show');
-  S.route=r;render();if(r!=='chat')window.scrollTo(0,0);
+  S.route=r;if(!pop)navPush(r);render();if(r!=='chat')window.scrollTo(0,0);
   clearInterval(poll);poll=null;
   if(!S.me)return;
   if(r==='notifications'){S.seenSnap=seenAt();ls.set('az_seen',Date.now());render()}
   if(r==='home'||r==='notifications')loadNotes();
+  if(r==='loan')loadLoan();
   if(r==='trade'||r==='home'||r==='history'||r==='withdraw'||r==='profile')Promise.all([loadMe(),loadAll()]).then(()=>{if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
   if(r==='accounts'||r==='send')api('GET','/api/accounts').then(d=>{S.accounts=d.accounts||[];if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
   if(r==='rules')api('GET','/api/rules').then(d=>{S.rules=d.rulesText||'';if(S.route===r)render()}).catch(e=>toast(e.message));
   if(r==='chat'){const pull=()=>api('GET','/api/chat/messages').then(d=>{const n=(d.messages||[]).length!==S.chat.length;S.chat=d.messages||[];
-      if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight)}}).catch(()=>{});pull();poll=setInterval(pull,5000)}
+      if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();poll=setInterval(pull,5000)}
 }
 function drawQR(){const c=CRYPTO[S.coin],el=$('#qr');if(!el||!c.address)return;
   const make=()=>{try{const q=qrcode(0,'M');q.addData(c.address);q.make();el.innerHTML=q.createSvgTag({scalable:true})}catch(e){}};
@@ -674,7 +714,7 @@ function drawQR(){const c=CRYPTO[S.coin],el=$('#qr');if(!el||!c.address)return;
 /* ---------- Events ---------- */
 document.addEventListener('click',e=>{
   const tr=e.target.closest('[data-trade]');if(tr&&!e.target.closest('[data-copy]')){S.tradeId=tr.dataset.trade;S.tprev=S.route;return go('trade')}
-  const g=e.target.closest('[data-go]');if(g)return go(g.dataset.go);
+  const g=e.target.closest('[data-go]');if(g){if(g.matches('[aria-label="Back"]')&&goBack(g.dataset.go))return;return go(g.dataset.go)}
   const s=e.target.closest('[data-set]');if(s){const[k,v]=s.dataset.set.split(':');S[k]=v;return render()}
   const c=e.target.closest('[data-copy]');if(c){navigator.clipboard?.writeText(c.dataset.copy).then(()=>toast('Copied'),()=>toast('Could not copy'));return}
   const a=e.target.closest('[data-act]');if(!a)return;
@@ -696,7 +736,7 @@ document.addEventListener('change',async e=>{const t=e.target;
   if(t.id==='s-c'){S.send.title=t.value;S.send.accountId='';render()}
   if(t.id==='s-b'){S.send.accountId=t.value;render()}
   if(t.id==='s-file'&&t.files[0]){try{S.send.image=await compress(t.files[0]);render()}catch(err){toast('Could not read that photo')}}
-  if(t.id==='c-file'&&t.files[0]){try{const imageData=await compress(t.files[0]);const d=await api('POST','/api/chat/send',{imageData});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight)}catch(err){toast(err.message||'Could not send photo')}t.value=''}
+  if(t.id==='c-file'&&t.files[0]){try{const imageData=await compress(t.files[0]);const d=await api('POST','/api/chat/send',{imageData});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();chatBottom()}catch(err){toast(err.message||'Could not send photo')}t.value=''}
 });
 document.addEventListener('input',e=>{const t=e.target;
   if(t.id==='s-a'){S.send.amount=t.value;$('#s-send').textContent=amt(num(t.value))}
@@ -718,10 +758,12 @@ const FORMS={
     S.slip=d.trade;S.send={title:'',accountId:'',amount:'',image:null};go('slip')},
   async withdraw(){const amount=num(val('w-a'));if(!amount)throw new Error('Enter an amount');
     const d=await api('POST','/api/withdrawals',{amount});S.wd=d.withdrawal;go('withdrawn')},
+  async loan(){const amount=num(val('l-a'));if(!amount)throw new Error('Enter a loan amount');if(S.loan&&amount>S.loan.limit)throw new Error('The most you can borrow is '+naira(S.loan.limit));
+    await api('POST','/api/loans',{amount});toast('Loan request sent for review');await loadLoan();render()},
   async edit(){const b={name:val('e-n'),bankName:val('e-b'),accountNumber:val('e-a')};if(Object.values(b).some(v=>!v))throw new Error('All fields are required');
     await api('PUT','/api/me',b);await loadMe();toast('Details saved');go('profile')},
   async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';
-    const d=await api('POST','/api/chat/send',{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight);i.focus()}
+    const d=await api('POST','/api/chat/send',{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();chatBottom();i.focus()}
 };
 document.addEventListener('submit',async e=>{
   e.preventDefault();const f=e.target,fn=FORMS[f.dataset.form];if(!fn||f.dataset.busy)return;

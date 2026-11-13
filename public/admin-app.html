@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0D4DC7">
+<link rel="manifest" href="/admin.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="AZAPLUG Admin">
 <title>AZAPLUG Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -241,6 +247,7 @@ a.role{display:flex}
 .badge.xs{font-size:10px;padding:3px 8px;border-radius:6px;letter-spacing:.02em}
 .b{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:44px;border-radius:8px;font-weight:600;font-size:14px;margin-top:12px;color:#fff;text-decoration:none}
 .sb{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;height:36px;border-radius:8px;font-weight:700;font-size:12px;color:#fff;text-decoration:none;min-width:0;white-space:nowrap}
+.warn2{display:flex;gap:10px;background:#FEF3C7;border-radius:8px;padding:10px 12px;font-size:12px;color:#374151}.warn2 svg{color:#D97706}
 .blue{background:var(--blue)}.blue2{background:#2F66E0}.green{background:var(--green)}.red{background:#E5322D}.red2{background:var(--red)}.orange{background:var(--orange)}.navy{background:#1E3FAE}.dark{background:#111827}.indigo{background:#4F46E5}
 .o-red{background:#fff;border:1.5px solid var(--red);color:var(--red)}.o-orange{background:#fff;border:1.5px solid var(--orange);color:var(--orange)}
 .soft,.s-blue{background:#E8EFFD;color:var(--blue)}.s-red{background:#FDE8E8;color:var(--red)}.s-green{background:#DFF7EC;color:#0E9F6E}.s-yellow{background:#FDF0C4;color:#D97706}
@@ -279,6 +286,18 @@ form .g2{margin-top:14px;row-gap:14px}form .g2 .cl{margin-top:0}
 .byl{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#B7791F;min-width:0}
 .mini{font-size:12px;font-weight:700;padding:7px 12px;border-radius:8px;background:#F1F3F7;color:var(--slate);white-space:nowrap}.mini.dk{background:#111827;color:#fff}
 .cnt{background:var(--blue);color:#fff;font-size:11px;border-radius:999px;padding:1px 7px}
+.chat{position:fixed;top:0;left:50%;transform:translateX(-50%);width:min(402px,100vw);height:100dvh;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+.chat .chat-top,.chat>.hd,.chat .esc{position:static!important;flex:none}
+.chat .msgs{flex:1;min-height:0;overflow-y:auto;padding-bottom:18px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.chat .composer{position:static;transform:none;width:100%;flex:none}
+.qa{position:relative}.glow{position:absolute;top:10px;right:10px;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:var(--red);color:#fff;font:700 11.5px var(--body);font-style:normal;display:grid;place-items:center;animation:glow 1.4s ease-in-out infinite}
+.b .glow,.sb .glow{position:static;margin-left:4px;background:#fff;color:var(--red)}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.6)}50%{box-shadow:0 0 0 10px rgba(239,68,68,0)}}
+@media (prefers-reduced-motion:reduce){.glow{animation:none;box-shadow:0 0 0 4px rgba(239,68,68,.25)}}
+.alertc{display:flex;align-items:center;gap:12px;background:#EEF3FE;border:1px solid #C9D9FA;border-radius:14px;padding:12px 14px;margin-bottom:14px}.alertc>span{width:36px;height:36px;border-radius:50%;background:#fff;color:var(--blue);display:grid;place-items:center;flex:none}
+.alertc b{display:block;font-size:14px}.alertc small{font-size:12.5px;color:#4B5563;display:block}.alertc button{background:var(--blue);color:#fff;font-weight:700;font-size:13px;padding:8px 14px;border-radius:999px;flex:none}
+.svp{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:inherit;opacity:.9;margin:0 0 6px;text-decoration:underline}
+.pk{display:block;width:100%;text-align:left;padding:13px 12px;border-radius:10px;font-size:15px;font-weight:500;margin-top:4px;background:#F4F7FC}.pk.on{background:#E1EAFD;color:var(--blue);font-weight:700}
 </style>
 </head>
 <body>
@@ -354,7 +373,7 @@ Object.assign(P,{
    made-up numbers.
    ===================================================================== */
 const S={route:'loading',users:[],staff:[],accounts:[],trades:[],wds:[],settings:{},convos:[],chat:[],
-  userTab:'all',rcTab:'pending',wdTab:'pending',wdPage:1,ratesTab:'rates',chatTab:'all',id:null,uid:null,back:'dash',form:null,done:null,escs:[],escErr:'',escTab:'open'};
+  userTab:'all',rcTab:'pending',wdTab:'pending',wdPage:1,ratesTab:'rates',chatTab:'all',id:null,uid:null,back:'dash',form:null,done:null,escs:[],escErr:'',escTab:'open',loans:[],loanLimit:0,loanErr:''};
 const $=s=>document.querySelector(s);
 const n0=n=>Number(n||0).toLocaleString('en-NG'), naira=n=>'₦'+n0(n);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -380,6 +399,7 @@ async function refresh(){
   const [u,s,a,t,w,st,c]=await Promise.all(['users','staff','accounts','trades','withdrawals','settings','chats'].map(x=>api('GET','/api/admin/'+x)));
   S.users=u.users||[];S.staff=s.staff||[];S.accounts=a.accounts||[];S.trades=t.trades||[];S.wds=w.withdrawals||[];S.settings=st||{};S.convos=c.conversations||[];
   try{const e=await api('GET','/api/admin/escalations');S.escs=e.escalations||[];S.escErr=''}catch(err){S.escs=[];S.escErr=err.message}
+  try{const l=await api('GET','/api/admin/loans');S.loans=l.loans||[];S.loanLimit=l.limit;S.loanErr=''}catch(err){S.loans=[];S.loanErr=err.message}
 }
 function compress(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onerror=rej;fr.onload=e=>{const img=new Image();img.onerror=rej;img.onload=()=>{
   const c=document.createElement('canvas'),k=Math.min(1,1000/img.width);c.width=img.width*k;c.height=img.height*k;
@@ -391,6 +411,8 @@ function ask(title,text,ok,danger){return new Promise(res=>{askResolve=res;
   $('#sheet').innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h3>${esc(title)}</h3><p>${esc(text)}</p>
    <button class="b ${danger?'red':'green'}" data-ask="1">${esc(ok)}</button><button class="b ghost" data-ask="0">Cancel</button></div></div>`})}
 
+function pick(title,opts){return new Promise(res=>{askResolve=res;
+  $('#sheet').innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h3>${esc(title)}</h3><div style="max-height:48vh;overflow:auto;margin-top:10px">${opts.map(o=>`<button class="pk ${o.on?'on':''}" data-pick="${esc(o.id)}">${esc(o.label)}${o.on?' ✓':''}</button>`).join('')}</div><button class="b ghost" data-ask="0">Cancel</button></div></div>`})}
 function askText(title,text,ph,ok){return new Promise(res=>{askResolve=res;
   $('#sheet').innerHTML=`<div class="sheet-bg"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><h3>${esc(title)}</h3><p>${esc(text)}</p><textarea class="in" id="ask-t" rows="3" placeholder="${esc(ph)}" aria-label="${esc(ph)}"></textarea>
    <button class="b green" data-ask="1">${esc(ok)}</button><button class="b ghost" data-ask="0">Cancel</button></div></div>`;$('#ask-t').focus()})}
@@ -406,11 +428,12 @@ const search=(ph)=>`<div class="field srch">${I('search','style="width:17px;heig
 const blankAcct=()=>({title:'',bankName:'',accountNumber:'',lowestAmount:'',lowestRate:'',higherAmount:'',higherRate:'',minAmount:'',maxAmount:'',imageData:null});
 const acctCard=(a,btns)=>{const img=safeImg(a.imageData);return `<article class="card acct" data-k="${esc((a.title+' '+a.bankName+' '+a.accountNumber).toLowerCase())}">
   <div class="between"><b>${esc(a.title)}</b><span class="badge ${a.active?'b-approved':'b-checking'}">${a.active?'VERIFIED':'UNVERIFIED'}</span></div>
+  <small class="muted" style="display:block;margin-top:4px;font-size:12.5px">Assigned to: <b style="color:var(--slate)">${esc((S.staff.find(x=>x.id===a.staffId)||{}).name||'No one (admin account)')}</b></small>
   ${img?`<img src="${img}" alt="" style="width:100%;border-radius:14px;margin-top:14px;display:block">`:`<div class="noimg">${I('imgoff')}No image</div>`}
   <div class="mono" style="white-space:pre-wrap;line-height:2.1;word-break:break-word">${esc(a.accountNumber)}</div>
   <div style="font-family:var(--mono);font-size:10.5px;color:var(--soft)">:${esc(a.bankName)}</div>
   <div class="kv"><div><span>Minimum</span><b>${naira(a.minAmount)}</b></div><div><span>Limit</span><b>${naira(a.maxAmount)}</b></div>
-   <div><span style="font-family:var(--mono)">${n0(a.lowestAmount)}</span><b>${naira(a.lowestRate)}</b></div><div><span style="font-family:var(--mono)">${n0(a.higherAmount)}</span><b>${naira(a.higherRate)}</b></div></div>${btns}</article>`};
+   <div><span style="font-family:var(--mono)">${n0(a.lowestAmount)}</span><b>${naira(a.lowestRate)}</b></div><div><span style="font-family:var(--mono)">${n0(a.higherAmount)}</span><b>${naira(a.higherRate)}</b></div></div>${btns}<button class="b navy" data-act="acctAssign" data-id="${esc(a.id)}">${I('users','style="width:16px;height:16px"')}Assign to Staff</button></article>`};
 const acctForm=(edit)=>{const f=S.form,img=safeImg(f.imageData),fl=(id,l,v,ph,im)=>`<div><label class="cl" for="${id}">${l}</label><input class="in" id="${id}" value="${esc(v)}" placeholder="${ph}" ${im?'inputmode="decimal"':''}></div>`;
   return `<form data-form="account" novalidate><div class="g2"><div><label class="cl" for="f-title">Country</label><input class="in" id="f-title" list="titles" value="${esc(f.title)}" placeholder="Select country"></div>${fl('f-bank','Bank name',f.bankName,'e.g. azteca')}</div>
   <datalist id="titles">${[...new Set(S.accounts.map(a=>a.title))].map(t=>`<option value="${esc(t)}">`).join('')}</datalist>
@@ -443,15 +466,17 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
    ...S.staff.filter(s=>s.status==='pending').map(s=>({at:s.createdAt,t:'New Staff Account Pending',s:`${esc(s.name)} requested access`,r:'Review',go:'staffProfile',id:s.id})),
    ...S.wds.filter(w=>w.status==='pending').map(w=>({at:w.createdAt,t:'Withdrawal Request',s:esc(w.userName),r:naira(w.amount),go:'wd',id:w.id})),
    ...S.escs.filter(e=>e.status==='open').map(e=>({at:e.createdAt,t:'Chat Escalated',s:`${esc(e.userName)} • by ${esc(e.staffName)}`,r:'Review',go:'console',id:''}))].sort((a,b)=>new Date(b.at)-new Date(a.at)).slice(0,6);
+ const cnt={staff:S.staff.filter(x=>x.status==='pending').length,accounts:S.accounts.filter(a=>!a.active).length,chats:S.convos.filter(c=>c.lastSender==='user').length+S.escs.filter(x=>x.status==='open').length,
+   receipts:act.length,wds:S.wds.filter(w=>w.status==='pending').length+S.loans.filter(l=>l.status==='pending').length};
  const qa=[['staff','users','Manage Staff'],['accounts','users','Accounts'],['users','users','Manage Users'],['chats','help','Help &amp; Support'],['rules','gear','Edit Rules'],['receipts','file','Receipts'],['wds','dl','Withdrawer Request'],['rates','trend','Edit Rates']];
  return `<section class="scr">${hd('Admin Panel','AzaPlug Executive Control','',`<button class="write" data-go="announce">${I('pen','style="width:15px;height:15px"')}Write</button>`)}
- <div class="bd"><div class="g2">
+ <div class="bd">${alertCard()}<div class="g2">
   <div class="stat"><small>Total Users</small><b>${n0(S.users.length)}</b><i style="color:var(--green)">+${week} this week</i></div>
   <div class="stat"><small>Active Trades</small><b>${act.length}</b><i style="color:var(--blue)">${S.trades.length} all time</i></div>
   <button class="stat" data-go="receipts"><small>Pending</small><b style="color:var(--orange)">${rec} Receipt${rec===1?'':'s'}</b><i>Needs review</i></button>
   <div class="stat"><small>Today's Revenue</small><b>—</b><i>Not tracked yet</i></div></div>
   <h2 class="sh">Quick Actions</h2>
-  <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}</button>`).join('')}</div>
+  <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
   <div class="between" style="margin:22px 0 10px"><h2 class="sh" style="margin:0">Recent Activity Feed</h2><button class="link" style="font-size:14px" data-go="receipts">View All</button></div>
   ${feed.length?feed.map(f=>`<button class="feed" data-go="${f.go}" data-id="${esc(f.id)}"><i></i><span class="grow" style="min-width:0"><b>${f.t}</b><small>${f.s} • ${ago(f.at)}</small></span><em>${f.r}</em></button>`).join(''):'<p class="empty">No activity yet</p>'}
   <p style="text-align:center;margin-top:26px"><button class="link" style="color:var(--muted);font-weight:600;font-size:14px" data-act="logout">Log out</button></p></div></section>`},
@@ -511,14 +536,14 @@ trade:()=>{const t=S.trades.find(x=>x.id===S.id);if(!t)return V.receipts();const
  return `<section class="scr">${hd('Trade '+tid(t),'Full Review &amp; Admin Controls',S.back==='user'?'user':'receipts')}
  <div class="bd"><div class="card row" style="gap:12px;padding:14px">${av(t.userName)}<span class="grow" style="min-width:0"><b class="h" style="font-size:15px;display:block">${esc(t.userName)}</b><small class="muted">${esc(t.userPhone)}</small></span><span class="badge ${b[1]} xs">${b[0]}</span></div>
   <div class="card" style="margin-top:14px;padding:12px"><div class="cl" style="margin-top:2px">User uploaded receipt</div>
-   ${img?`<img src="${img}" alt="Receipt uploaded by the customer" style="width:100%;max-height:460px;object-fit:contain;background:#EEF2F8;border-radius:10px;display:block"><a class="b soft" style="margin-top:10px" href="${img}" download="receipt-${esc(String(t.id).slice(0,8))}.jpg">${I('dl','style="width:16px;height:16px"')}Save to Device</a>`:'<div class="noimg" style="margin-top:0">No receipt image</div>'}</div>
+   ${img?`<img src="${img}" alt="Receipt uploaded by the customer" style="width:100%;max-height:460px;object-fit:contain;background:#EEF2F8;border-radius:10px;display:block"><button class="b soft" style="margin-top:10px" data-act="savePic" data-kind="receipt" data-id="${esc(t.id)}">${I('dl','style="width:16px;height:16px"')}Save to Device</button>`:'<div class="noimg" style="margin-top:0">No receipt image</div>'}</div>
   <div class="card tp" style="margin-top:14px"><b style="font-size:14px">Trade Parameters</b>
    ${row('Amount',n0(t.intendedAmount))}${row('Country',esc(t.accountTitleUsed||'—'))}${row('Account Paid To',`<span style="white-space:pre-wrap">${esc(t.accountNumberUsed||'—')}</span>`)}
    ${row('User account',esc([t.userPayoutBank,t.userPayoutAccount].filter(Boolean).join(' • ')||'—'))}${row('Staff Handled','Staff: '+esc(t.staffName))}${row('Date &amp; Time',fdt(t.createdAt))}
    ${t.lowestRate!=null?row('Account rates',`${n0(t.lowestAmount)} → ${naira(t.lowestRate)}<br>${n0(t.higherAmount)} → ${naira(t.higherRate)}`):''}
    ${t.staffCreditedAmount!=null?row('Staff proposed',naira(t.staffCreditedAmount)):''}${t.creditedAmount!=null?row('Credited to balance',`<span style="color:#0E9F6E">${naira(t.creditedAmount)}</span>`):''}
    ${t.failReason?row('Failure reason',`<span style="color:var(--red)">${esc(t.failReason)}</span>`):''}</div>
-  ${fi?`<img src="${fi}" alt="Failure proof" style="width:100%;border-radius:12px;margin-top:12px">`:''}
+  ${fi?`<img src="${fi}" alt="Failure proof" style="width:100%;border-radius:12px;margin-top:12px"><button class="b soft" data-act="savePic" data-kind="fail" data-id="${esc(t.id)}">${I('dl','style="width:16px;height:16px"')}Save to Device</button>`:''}
   ${canCredit?`<div class="card" style="margin-top:14px;border-color:#A7E3CB"><label class="cl" style="margin-top:0" for="t-credit">Final amount to credit (₦)</label><input class="in" id="t-credit" inputmode="decimal" placeholder="e.g. 450000" value="${t.staffCreditedAmount!=null?esc(t.staffCreditedAmount):''}"><button class="b green" data-act="tradeCredit" data-id="${esc(t.id)}">Verify and Credit Balance</button></div>`:''}
   <label for="t-reason" style="display:block;font-weight:600;font-size:13.5px;margin:18px 0 8px">Failure Reason/ Compensation Reason (Mandatory if Undoing/Failing)</label>
   <textarea class="in" id="t-reason" rows="2" placeholder="Enter reason (e.g., Receipt amount mismatch, Unconfirmed credit)..."></textarea>
@@ -531,7 +556,7 @@ wds:()=>{const pend=S.wds.filter(w=>w.status==='pending'),paidToday=S.wds.filter
  <div class="bd"><div class="g3"><div class="stat sm"><small>Total Requests</small><b>${S.wds.length}</b><i>All time</i></div>
   <div class="stat sm" style="border:1.5px solid var(--blue)"><small>Pending</small><b style="color:#D97706">${pend.length}</b><i>Needs action</i></div>
   <div class="stat sm"><small>Approved Today</small><b>${paidToday.length}</b><i>${naira(paidToday.reduce((s,w)=>s+w.amount,0))} paid</i></div></div>
-  <button class="b green" style="margin-top:14px" data-go="loans">view loan request</button>
+  <button class="b green" style="margin-top:14px" data-go="loans">view loan request${S.loans.filter(l=>l.status==='pending').length?`<i class="glow">${S.loans.filter(l=>l.status==='pending').length}</i>`:''}</button>
   <div class="between" style="margin:16px 0 10px"><b style="font-size:13.5px">${title}</b><button class="link" style="font-size:12.5px;font-weight:600" data-set="wdTab:${S.wdTab==='all'?'pending':'all'}">${S.wdTab==='all'?'Pending only':'View History'}</button></div>
   ${list.length?list.map(w=>{const b=wBadge(w);return `<button class="card wd" data-go="wd" data-id="${esc(w.id)}"><span class="row" style="gap:10px">${av(w.userName,'sm')}<span class="grow" style="min-width:0;text-align:left"><b style="font-size:13.5px;display:block">${esc(w.userName)}</b><small class="muted" style="font-size:11.5px">${ago(w.createdAt)}, ${ft(w.createdAt)}</small></span><span class="badge ${b[1]} xs">${b[0]}</span></span>
    <span class="between" style="border-top:1px solid var(--line);margin-top:10px;padding-top:10px"><span class="row muted" style="gap:6px;font-size:13px">${I('cardi','style="width:14px;height:14px"')}${esc(w.payoutBank)}</span><b class="h" style="font-size:16px">${naira(w.amount)}</b></span></button>`}).join(''):'<p class="empty">Nothing here</p>'}
@@ -554,9 +579,17 @@ wdDone:()=>{const w=S.done;return `<section class="scr">${hd('Payment Confirmati
    <div><span>Recipient</span><b>${esc(w.userName)}</b></div><div><span>Bank Name</span><b>${esc(w.payoutBank)}</b></div><div><span>Account Number</span><b>${esc(w.payoutAccount)}</b></div><div><span>Paid On</span><b>Today, ${ft(new Date())}</b></div></div>
   <button class="b green" style="margin-top:26px" data-go="wds">BACK TO REQUESTS</button></div></section>`},
 
-loans:()=>`<section class="scr"><div class="bd" style="padding-top:24px"><div class="top"><button class="icon-btn" data-go="wds" aria-label="Back">${I('al')}</button><span class="title brand" style="font-size:19px">AZAPLUG</span><span></span></div>
+loans:()=>{const LS={pending:['Pending','b-checking'],active:['Approved','b-approved'],repaid:['Repaid','b-confirmed'],declined:['Declined','b-failed']};
+ return `<section class="scr"><div class="bd" style="padding-top:24px"><div class="top"><button class="icon-btn" data-go="wds" aria-label="Back">${I('al')}</button><span class="title brand" style="font-size:19px">AZAPLUG</span><span></span></div>
   <h1 class="h" style="font-size:23px;font-weight:700;margin-bottom:16px">Loan Applications</h1>
-  <div class="card"><p class="empty" style="padding:26px 0">No loan applications yet.<br>Loans are not connected to the server yet.</p></div></div></section>`,
+  ${S.loanErr?`<div class="warn2" style="margin:0 0 14px">${I('alertt','style="width:16px;height:16px;flex:none"')}<span><b>Loans could not be loaded.</b> ${esc(S.loanErr)} If this is a new setup, run the loans SQL from the README in Supabase.</span></div>`:`
+  <form data-form="loanLimit" class="card" style="padding:14px;border-radius:14px;margin-bottom:14px" novalidate><label class="cl" for="ln-lim" style="margin-top:0">Maximum loan per customer (₦)</label>
+   <div class="row" style="gap:8px"><input class="in" id="ln-lim" inputmode="decimal" value="${esc(S.loanLimit)}"><button class="sb blue" style="flex:none;padding:0 18px;height:42px">Save</button></div></form>`}
+  ${S.loans.length?S.loans.map(l=>`<article class="card" style="padding:16px;border-radius:14px;margin-bottom:12px"><div class="between"><b class="h" style="font-size:16px">${esc(l.userName)}</b><span class="badge ${LS[l.status][1]}">${LS[l.status][0]}</span></div>
+   <small class="muted">Submitted: ${fd(l.createdAt)}</small>
+   <div class="g2" style="margin-top:12px"><div><small class="muted" style="display:block;font-size:12px">Requested Amount</small><b class="h" style="font-size:18px">${naira(l.amount)}</b></div>
+    <div><small class="muted" style="display:block;font-size:12px">${l.status==='active'?'Still Owed':l.status==='repaid'?'Still Owed':'Customer Balance'}</small><b class="h" style="font-size:18px;color:${l.status==='active'?'var(--red)':'var(--green)'}">${naira(l.status==='active'||l.status==='repaid'?l.outstanding:l.userBalance)}</b></div></div>
+   ${l.status==='pending'?`<div class="row" style="gap:10px;margin-top:14px;border-top:1px solid var(--line);padding-top:14px"><button class="sb o-red" style="height:42px" data-act="loanDecide" data-d="decline" data-id="${esc(l.id)}">Decline</button><button class="sb blue" style="height:42px" data-act="loanDecide" data-d="approve" data-id="${esc(l.id)}">Approve</button></div>`:''}</article>`).join(''):S.loanErr?'':'<p class="empty">No loan applications yet</p>'}</div></section>`},
 
 announce:()=>`<section class="scr">${hd('Write','Announcement to all customers','dash')}
  <div class="bd"><form data-form="announce" novalidate><label class="cl" for="an-t" style="margin-top:0">Title</label><input class="in" id="an-t" maxlength="80" placeholder="e.g. New Mexico rate">
@@ -634,21 +667,76 @@ chat:()=>{const u=S.users.find(x=>x.id===S.id)||{name:'Customer',phone:''};retur
 };
 function msgsHtml(){if(!S.chat.length)return '<p class="empty">No messages yet</p>';let day='';
   return S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender!=='user';const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">`:''}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(m.createdAt)}</time></div>`}).join('')}
+    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(m.createdAt)}</time></div>`}).join('')}
 
 /* ---------- Render + navigation ---------- */
+function savePic(src,name){src=safeImg(src);if(!src)return toast('No picture to save');
+  try{const i=src.indexOf(','),type=(src.slice(0,i).match(/data:([^;]+)/)||[])[1]||'image/jpeg',bin=atob(src.slice(i+1).replace(/\s/g,'')),u8=new Uint8Array(bin.length);
+    for(let k=0;k<bin.length;k++)u8[k]=bin.charCodeAt(k);
+    const file=new File([u8],name+'.'+type.split('/')[1].replace('jpeg','jpg').replace('svg+xml','svg'),{type});
+    // Phones: open the share sheet, which has "Save Image" (a plain download link does nothing on iPhone).
+    if(matchMedia('(pointer:coarse)').matches&&navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({files:[file]}).catch(e=>{if(e.name!=='AbortError')toast('Could not open the save menu')});return}
+    const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);toast('Picture saved to your downloads')}
+  catch(e){toast('Could not save the picture')}}
+/* ---------- Alerts on this device (push) ---------- */
+const PUSH_OK='serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+const IOS=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+const STANDALONE=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const b64=s=>{const r=atob((s+'='.repeat((4-s.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(r,c=>c.charCodeAt(0))};
+let PUSH='off';
+const subBody=sub=>Object.assign(sub.toJSON(),{});
+async function pushState(){
+  if(!PUSH_OK){PUSH=IOS&&!STANDALONE?'install':'unsupported';return}
+  if(Notification.permission==='denied'){PUSH='denied';return}
+  try{const reg=await navigator.serviceWorker.register('/sw.js'),sub=await reg.pushManager.getSubscription(),yes=Notification.permission==='granted';
+    PUSH=sub&&yes?'on':'off';
+    if(PUSH==='on')api('POST','/api/admin/push/subscribe',subBody(sub)).catch(()=>{});
+    else if(yes)pushOn().then(()=>render()).catch(()=>{})}catch(e){PUSH='unsupported'}
+}
+async function pushOn(){
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted'){PUSH=perm==='denied'?'denied':'off';throw new Error('Alerts were not allowed')}
+  const reg=await navigator.serviceWorker.ready,{publicKey}=await api('GET','/api/team/push/key');
+  const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64(publicKey)});
+  await api('POST','/api/admin/push/subscribe',subBody(sub));PUSH='on';
+}
+async function pushDetach(){if(!PUSH_OK)return;const reg=await navigator.serviceWorker.getRegistration(),sub=reg&&await reg.pushManager.getSubscription();
+  if(sub)await api('POST','/api/team/push/unsubscribe',{endpoint:sub.endpoint}).catch(()=>{})}
+const alertCard=()=>PUSH==='off'?`<div class="alertc"><span>${I('bell')}</span><div class="grow"><b>Turn on alerts</b><small>Get a phone alert for new receipts, messages, withdrawals and requests.</small></div><button data-act="alertsOn">Turn on</button></div>`
+  :PUSH==='install'?`<div class="alertc"><span>${I('bell')}</span><div class="grow"><b>Get alerts on this iPhone</b><small>Tap Share in Safari, choose "Add to Home Screen", then open this app from your Home Screen and turn alerts on.</small></div></div>`
+  :PUSH==='denied'?`<div class="alertc"><span>${I('bell')}</span><div class="grow"><b>Alerts are blocked</b><small>Allow notifications for AZAPLUG in your phone or browser settings to get alerts.</small></div></div>`:'';
+/* Live updates: refresh when an alert arrives or when you come back to the app */
+const LIVE=['dash','staff','receipts','wds','users','chats','accountsAll','rates','console','loans'];
+function liveRefresh(){const r=S.route;if(!LIVE.includes(r)||typing())return;refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{})}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')liveRefresh()});
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{const d=e.data||{};if(!(S.route!=='login'&&S.route!=='loading'))return;if(d.go&&V[d.go]&&LIVE.includes(d.go))return go(d.go);if(d.refresh)liveRefresh()});
+/* ---------- Back gesture: each screen is a history entry, so swiping back returns to the previous screen ---------- */
+const NAV={stack:[],keys:['id','uid','back','ratesTab','form','done','escTab','rcTab','wdTab','userTab','chatTab'],roots:['loading','login','dash']};
+function navPush(r){const snap={r,c:{}};NAV.keys.forEach(k=>snap.c[k]=S[k]);const st=NAV.stack;
+  if(NAV.roots.includes(r)||!st.length){NAV.stack=[snap];try{history.replaceState({n:0},'')}catch(e){}}
+  else if(st[st.length-1].r===r)st[st.length-1]=snap;
+  else if(st.length>1&&st[st.length-2].r===r){st.pop();st[st.length-1]=snap;NAV.skip=true;try{history.back()}catch(e){NAV.skip=false}} // going to the screen you came from = going back
+  else{st.push(snap);try{history.pushState({n:st.length-1},'')}catch(e){}}}
+window.addEventListener('popstate',e=>{if(NAV.skip){NAV.skip=false;return}const n=e.state&&typeof e.state.n==='number'?e.state.n:0,st=NAV.stack;
+  if(!st.length||n>=st.length)return;const snap=st[n];st.length=n+1;Object.assign(S,snap.c);go(snap.r,null,true)});
+function goBack(target){const st=NAV.stack;if(st.length>1&&st[st.length-2].r===target){history.back();return true}return false}
+/* ---------- Chat layout: header and message box stay put; only the messages scroll (also when the keyboard opens) ---------- */
+function fitChat(){const c=$('.chat'),v=window.visualViewport;if(!c||!v)return;c.style.height=v.height+'px';c.style.top=v.offsetTop+'px'}
+function chatBottom(){fitChat();const m=$('#msgs');if(m)m.scrollTop=m.scrollHeight}
+if(window.visualViewport){visualViewport.addEventListener('resize',chatBottom);visualViewport.addEventListener('scroll',fitChat)}
 let poll=null;
 const typing=()=>document.activeElement&&document.activeElement.matches('input,textarea');
-function render(){$('#app').innerHTML=V[S.route]();if(S.route==='chat')window.scrollTo(0,document.body.scrollHeight)}
-function go(r,o){
+function render(){$('#app').innerHTML=V[S.route]();if(S.route==='chat')chatBottom()}
+function go(r,o,pop){
   if(S.route!==r)$('#toast').classList.remove('show');
   Object.assign(S,o||{});S.route=r;if(r==='wds')S.wdPage=S.wdPage||1;
+  if(!pop)navPush(r);
   render();if(r!=='chat')window.scrollTo(0,0);
   clearInterval(poll);poll=null;
   if(r==='login'||r==='loading')return;
   if(r==='chat'){S.chat=[];const pull=()=>api('GET','/api/admin/chats/'+encodeURIComponent(S.id)).then(d=>{const n=(d.messages||[]).length!==S.chat.length;S.chat=d.messages||[];
-      if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight)}}).catch(()=>{});pull();poll=setInterval(pull,5000);return}
-  if(['dash','staff','receipts','wds','users','chats','accountsAll','rates','console'].includes(r))refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{});
+      if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();poll=setInterval(pull,5000);return}
+  if(['dash','staff','receipts','wds','users','chats','accountsAll','rates','console','loans'].includes(r))refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{});
 }
 async function reload(r,o){await refresh();go(r||S.route,o)}
 
@@ -656,7 +744,14 @@ async function reload(r,o){await refresh();go(r||S.route,o)}
 const ACT={
   soon(){toast('Coming soon')},
   show(el){const i=$('#lg-pw'),sh=i.type==='password';i.type=sh?'text':'password';el.textContent=sh?'HIDE':'SHOW'},
-  async logout(){try{await api('POST','/api/admin/logout')}catch(e){}go('login')},
+  async logout(){try{await pushDetach()}catch(e){}try{await api('POST','/api/admin/logout')}catch(e){}go('login')},
+  async alertsOn(){try{await pushOn();toast('Alerts turned on')}catch(e){toast(e.message||'Could not turn on alerts')}render()},
+  savePic(el,id){const k=el.dataset.kind,t=S.trades.find(x=>x.id===id)||{};savePic(k==='chat'?(S.chat.find(m=>m.id===id)||{}).imageData:k==='fail'?t.failImage:t.receiptImage,k==='chat'?'azaplug-chat-photo':'azaplug-receipt-'+String(id).slice(0,8))},
+  async acctAssign(el,id){const a=S.accounts.find(x=>x.id===id),r=await pick('Assign '+a.title+' ('+a.bankName+') to',[{id:'',label:'No one (admin account)',on:!a.staffId}].concat(S.staff.filter(x=>x.status==='approved').map(x=>({id:x.id,label:x.name,on:a.staffId===x.id}))));
+    if(!r||(r.id||null)===(a.staffId||null))return;await api('PUT','/api/admin/accounts/'+id,{staffId:r.id||null});toast(r.id?'Account assigned':'Account un-assigned');await reload()},
+  async loanDecide(el,id){const l=S.loans.find(x=>x.id===id),yes=el.dataset.d==='approve';
+    if(!await ask(yes?'Approve this loan?':'Decline this loan?',yes?`${naira(l.amount)} will be added to ${l.userName}'s balance now, and taken back from their next credited receipts.`:`${l.userName} will be told their request was not approved.`,yes?'Approve and pay '+naira(l.amount):'Decline',!yes))return;
+    await api('POST',`/api/admin/loans/${id}/decide`,{decision:yes?'approve':'decline'});toast(yes?'Loan approved and paid into balance':'Loan declined');await reload()},
   async staffApprove(el,id){await api('PUT',`/api/admin/staff/${id}/approve`);toast('Staff approved');await reload()},
   async staffReject(el,id){const s=S.staff.find(x=>x.id===id);if(!await ask(s.status==='approved'?'Suspend this agent?':'Reject this staff?',`${s.name} will not be able to use the Staff portal.`,s.status==='approved'?'Suspend':'Reject',1))return;
     await api('PUT',`/api/admin/staff/${id}/reject`);toast('Staff access turned off');await reload()},
@@ -694,7 +789,8 @@ document.addEventListener('click',async e=>{
   const c=e.target.closest('[data-copy]');if(c){navigator.clipboard?.writeText(c.dataset.copy).then(()=>toast('Copied'),()=>toast('Could not copy'));return}
   const a=e.target.closest('[data-act]');if(a){if(busy)return;busy=true;try{await ACT[a.dataset.act](a,a.dataset.id)}catch(err){toast(err.message||'Something went wrong. Try again.')}finally{busy=false}return}
   const s=e.target.closest('[data-set]');if(s){const[key,v]=s.dataset.set.split(':');S[key]=key==='wdPage'?Number(v):v;if(key==='wdTab')S.wdPage=1;return render()}
-  const g=e.target.closest('[data-go]');if(g){let r=g.dataset.go;const o={};
+  const pk=e.target.closest('[data-pick]');if(pk){$('#sheet').innerHTML='';askResolve&&askResolve({id:pk.dataset.pick});askResolve=null;return}
+  const g=e.target.closest('[data-go]');if(g){if(g.matches('.bk,[aria-label="Back"]')&&goBack(g.dataset.go))return;let r=g.dataset.go;const o={};
     if(g.dataset.id){if(r==='user')o.uid=g.dataset.id;else o.id=g.dataset.id}
     if(g.dataset.from)o.back=g.dataset.from;else if(r==='trade'||r==='chat')o.back='';
     if(r==='rates')o.ratesTab='rates';if(r==='rules'){r='rates';o.ratesTab='rules'}
@@ -704,14 +800,15 @@ document.addEventListener('click',async e=>{
 document.addEventListener('input',e=>{if(e.target.id==='q'){const q=e.target.value.toLowerCase();document.querySelectorAll('#list [data-k]').forEach(el=>el.style.display=el.dataset.k.includes(q)?'':'none')}});
 document.addEventListener('change',async e=>{const t=e.target;
   if(t.id==='f-img'&&t.files[0]){try{S.form.imageData=await compress(t.files[0]);$('#f-drop').firstChild.remove();$('#f-drop').insertAdjacentHTML('afterbegin',`<img src="${S.form.imageData}" alt="Account image" style="max-height:140px;max-width:100%;border-radius:8px">`);const sp=$('#f-drop span');sp&&sp.remove()}catch(err){toast('Could not read that image')}}
-  if(t.id==='c-file'&&t.files[0]){try{const imageData=await compress(t.files[0]);const d=await api('POST','/api/admin/chats/'+encodeURIComponent(S.id)+'/send',{imageData});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight)}catch(err){toast(err.message||'Could not send photo')}t.value=''}
+  if(t.id==='c-file'&&t.files[0]){try{const imageData=await compress(t.files[0]);const d=await api('POST','/api/admin/chats/'+encodeURIComponent(S.id)+'/send',{imageData});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();chatBottom()}catch(err){toast(err.message||'Could not send photo')}t.value=''}
 });
 const val=id=>$('#'+id).value.trim();
 const FORMS={
   async announce(){const title=val('an-t'),body=val('an-b');if(!title||!body)throw new Error('Enter a title and a message');
     if(!await ask('Send to every customer?',`"${title}" will go to all ${S.users.length} customers and cannot be taken back.`,'Send announcement'))return;
     await api('POST','/api/admin/announce',{title,body});toast('Announcement sent');go('dash')},
-  async login(){const password=$('#lg-pw').value;if(!password)throw new Error('Enter the admin password');await api('POST','/api/admin/login',{password});await refresh();go('dash')},
+  async loanLimit(){const limit=num(val('ln-lim'));await api('PUT','/api/admin/loans/limit',{limit});toast('Loan limit saved');await refresh()},
+  async login(){const password=$('#lg-pw').value;if(!password)throw new Error('Enter the admin password');await api('POST','/api/admin/login',{password});await refresh();pushState().then(()=>{if(S.route==='dash')render()});go('dash')},
   async account(){const b={title:val('f-title'),bankName:val('f-bank'),accountNumber:val('f-num'),lowestAmount:num(val('f-la')),lowestRate:num(val('f-lr')),higherAmount:num(val('f-ha')),higherRate:num(val('f-hr')),minAmount:num(val('f-min')),maxAmount:num(val('f-max')),imageData:S.form.imageData||null};
     if(!b.title||!b.bankName||!b.accountNumber)throw new Error('Country, bank name and account number are required');
     if(S.form.id){await api('PUT','/api/admin/accounts/'+S.form.id,b);toast('Account saved');const back=S.back;S.form=null;await reload(back)}
@@ -719,7 +816,7 @@ const FORMS={
   async userEdit(){const b={name:val('u-n'),bankName:val('u-b'),accountNumber:val('u-a')};if(Object.values(b).some(v=>!v))throw new Error('All fields are required');
     await api('PUT','/api/admin/users/'+S.id,b);toast('User saved');await reload(S.back)},
   async rules(){await api('PUT','/api/admin/settings',{rulesText:$('#r-text').value,maxDeposit:num(val('r-max'))});toast('Rules saved');await refresh()},
-  async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';const d=await api('POST','/api/admin/chats/'+encodeURIComponent(S.id)+'/send',{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();window.scrollTo(0,document.body.scrollHeight);i.focus()}
+  async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';const d=await api('POST','/api/admin/chats/'+encodeURIComponent(S.id)+'/send',{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();chatBottom();i.focus()}
 };
 document.addEventListener('submit',async e=>{
   e.preventDefault();const f=e.target,fn=FORMS[f.dataset.form];if(!fn||f.dataset.busy)return;
@@ -728,7 +825,7 @@ document.addEventListener('submit',async e=>{
   finally{delete f.dataset.busy;if(b&&b.isConnected){b.disabled=false;b.innerHTML=label}}
 });
 render();
-refresh().then(()=>go('dash')).catch(()=>go('login'));
+refresh().then(()=>{pushState().then(()=>{if(S.route==='dash')render()});const h=location.hash.slice(1);go(V[h]&&LIVE.includes(h)?h:'dash')}).catch(()=>go('login'));
 </script>
 </body>
 </html>

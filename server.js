@@ -138,6 +138,7 @@ app.post('/api/staff/register', async (req, res) => {
       name: String(name).trim(), phone: String(phone).trim(), passwordHash: bcrypt.hashSync(password, 10)
     });
     req.session.staffId = staff.id;
+    alertTeam({ admin: true }, 'New staff awaiting approval', `${staff.name} signed up for the Staff portal.`, { admin: 'staff' });
     res.json({ ok: true, status: staff.status });
   } catch (err) {
     console.error('Staff register error:', err);
@@ -263,6 +264,7 @@ app.post('/api/trades', requireUser, requireApprovedUser, async (req, res) => {
       accountNumberUsed: account.accountNumber, accountTitleUsed: account.title,
       userPayoutAccount: req.user.accountNumber, userPayoutBank: req.user.bankName
     });
+    alertTeam({ admin: true, staffId: account.staffId }, 'New receipt', `${req.user.name} sent a ${account.title} receipt for ${plain(intendedAmount)}.`, { admin: 'receipts', staff: 'receipts' });
     res.json({ ok: true, trade });
   } catch (err) {
     console.error('Create trade error:', err);
@@ -293,6 +295,7 @@ app.post('/api/withdrawals', requireUser, requireApprovedUser, async (req, res) 
       userId: user.id, amount, payoutAccount: user.accountNumber, payoutBank: user.bankName
     });
     await store.addToBalance(user.id, -amount); // hold the funds until this is paid or rejected
+    alertTeam({ admin: true }, 'Withdrawal request', `${user.name} asked to withdraw ₦${plain(amount)} to ${user.bankName}.`, { admin: 'wds' });
     res.json({ ok: true, withdrawal });
   } catch (err) {
     console.error('Create withdrawal error:', err);
@@ -317,6 +320,7 @@ app.post('/api/chat/send', requireUser, async (req, res) => {
     const { text, imageData } = req.body || {};
     if (!text && !imageData) return res.status(400).json({ error: 'Message is empty.' });
     const msg = await store.addMessage({ userId: req.session.userId, sender: 'user', text, imageData });
+    store.findUserById(req.session.userId).then(u => alertTeam({ admin: true, chat: true }, `New message from ${u ? u.name : 'a customer'}`, text ? String(text).slice(0, 140) : 'Sent a photo', { admin: 'chats', staff: 'chats' })).catch(() => {});
     res.json({ ok: true, message: msg });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send message.' }); }
 });
@@ -342,6 +346,7 @@ app.post('/api/staff/accounts', requireStaff, requireApprovedStaff, async (req, 
       minAmount: Number(b.minAmount) || 0, maxAmount: Number(b.maxAmount) || 0,
       active: false
     });
+    alertTeam({ admin: true }, 'Account awaiting verification', `${req.staff.name} added a ${account.title} (${account.bankName}) account.`, { admin: 'accountsAll' });
     res.json({ ok: true, account });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not create account.' }); }
 });
@@ -484,6 +489,7 @@ app.post('/api/staff/chats/:userId/escalate', requireStaff, requireApprovedStaff
     const open = (await store.listEscalations()).find(e => e.userId === user.id && e.status === 'open');
     if (open) return res.status(409).json({ error: 'This chat is already with the admin. Wait for their reply.' });
     const escalation = await store.createEscalation({ userId: user.id, staffId: req.staff.id, reason });
+    alertTeam({ admin: true }, 'Chat escalated', `${req.staff.name} escalated ${user.name}'s chat: ${reason.slice(0, 110)}`, { admin: 'console' });
     res.json({ ok: true, escalation });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not forward this chat.' }); }
 });
@@ -563,9 +569,18 @@ app.post('/api/admin/accounts', requireAdmin, async (req, res) => {
 });
 app.put('/api/admin/accounts/:id', requireAdmin, async (req, res) => {
   try {
+    const b = req.body || {};
     const before = await store.findAccountById(req.params.id);
-    await store.updateAccount(req.params.id, req.body || {});
-    if ((req.body || {}).active === false) notifyAccountGone(before); // un-verified = hidden from customers
+    if (!before) return res.status(404).json({ error: 'Account not found.' });
+    // Assigning to a staff member: it must be a real, approved one (or null to un-assign).
+    if (b.staffId !== undefined && b.staffId !== null) {
+      const owner = await store.findStaffById(b.staffId);
+      if (!owner || owner.status !== 'approved') return res.status(400).json({ error: 'Choose an approved staff member.' });
+    }
+    await store.updateAccount(req.params.id, b);
+    if (b.active === false) notifyAccountGone(before); // un-verified = hidden from customers
+    if (b.active === true && !before.active && before.staffId) alertTeam({ staffId: before.staffId }, 'Account verified', `Your ${before.title} (${before.bankName}) account is now live for customers.`, { staff: 'acctAll' });
+    if (b.staffId && b.staffId !== before.staffId) alertTeam({ staffId: b.staffId }, 'Account assigned to you', `The ${before.title} (${before.bankName}) account is now yours to manage.`, { staff: 'acctAll' });
     res.json({ ok: true });
   }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not update account.' }); }
@@ -650,9 +665,22 @@ app.post('/api/admin/trades/:id/credit', requireAdmin, async (req, res) => {
       userPayoutAccount: user ? user.accountNumber : trade.userPayoutAccount,
       userPayoutBank: user ? user.bankName : trade.userPayoutBank
     });
-    await store.addToBalance(trade.userId, Number(creditedAmount));
-    notify(trade.userId, 'tx', 'Balance credited', `₦${plain(creditedAmount)} has been added to your balance for your ${trade.accountTitleUsed || ''} receipt.`.replace('  ', ' '));
-    res.json({ ok: true });
+    // Loan repayment: whatever the customer owes comes out of this credit first.
+    let repay = 0;
+    try {
+      const loan = (await store.listLoansForUser(trade.userId)).find(l => l.status === 'active' && l.outstanding > 0);
+      if (loan) {
+        repay = Math.min(loan.outstanding, Number(creditedAmount));
+        const left = loan.outstanding - repay;
+        await store.updateLoan(loan.id, { outstanding: left, status: left <= 0 ? 'repaid' : 'active' });
+      }
+    } catch (err) { console.error('Loan repayment skipped:', err.message || err); repay = 0; }
+    await store.addToBalance(trade.userId, Number(creditedAmount) - repay);
+    const forWhat = `for your ${trade.accountTitleUsed || ''} receipt`.replace('  ', ' ');
+    notify(trade.userId, 'tx', 'Balance credited', repay
+      ? `₦${plain(creditedAmount)} was credited ${forWhat}. ₦${plain(repay)} went to your loan and ₦${plain(Number(creditedAmount) - repay)} was added to your balance.`
+      : `₦${plain(creditedAmount)} has been added to your balance ${forWhat}.`);
+    res.json({ ok: true, repaid: repay });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not credit trade.' }); }
 });
 
@@ -721,6 +749,7 @@ app.post('/api/admin/escalations/:id/resolve', requireAdmin, async (req, res) =>
     if (!esc) return res.status(404).json({ error: 'Escalation not found.' });
     if (esc.status !== 'open') return res.status(400).json({ error: 'This escalation has already been resolved.' });
     await store.resolveEscalation(esc.id, String((req.body || {}).feedback || '').trim());
+    alertTeam({ chat: true }, 'Returned from Admin', String((req.body || {}).feedback || '').trim() || 'An escalated chat was resolved.', { staff: 'chats' });
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not resolve this escalation.' }); }
 });
@@ -768,13 +797,14 @@ function pushKeys() {
   }
   return pushKeysPromise;
 }
-async function sendPush(subs, payload) {
+async function sendPush(subs, payload, forget) {
+  const drop = forget || store.deletePushSubscription;
   if (!subs.length || !(await pushKeys())) return;
   await Promise.all(subs.map(s =>
     webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, JSON.stringify(payload), { TTL: 86400 })
       .catch(err => {
         // 404 / 410 = the browser dropped this subscription; forget it.
-        if (err.statusCode === 404 || err.statusCode === 410) return store.deletePushSubscription(s.endpoint).catch(() => {});
+        if (err.statusCode === 404 || err.statusCode === 410) return drop(s.endpoint).catch(() => {});
         console.error('Push failed:', err.statusCode || err.message);
       })));
 }
@@ -841,6 +871,111 @@ app.post('/api/admin/announce', requireAdmin, async (req, res) => {
     notify(null, 'info', title, body, { feed: false });
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send the announcement. Is the notifications table set up?' }); }
+});
+
+// ============================================================
+// TEAM ALERTS: push to the admin's and staff's own devices.
+// who: { admin: true, chat: true, staffId: '<vendor who owns it>' }.  go: which screen a tap opens in each app.
+// Runs in the background and never throws.
+// ============================================================
+function requireTeam(req, res, next) {
+  if (!req.session.isAdmin && !req.session.staffId) return res.status(401).json({ error: 'Login required.' });
+  next();
+}
+function alertTeam(who, title, body, go) {
+  const g = go || {};
+  store.listTeamPush().then(subs => {
+    const admin = subs.filter(s => who.admin && s.portal === 'admin');
+    const staff = subs.filter(s => (who.chat && s.portal === 'chat') || (who.staffId && s.portal === 'vendor' && s.staffId === who.staffId));
+    return Promise.all([
+      sendPush(admin, { title, body, go: g.admin || 'dash', app: '/admin-app.html' }, store.deleteTeamPush),
+      sendPush(staff, { title, body, go: g.staff || '', app: '/staff-app.html' }, store.deleteTeamPush)
+    ]);
+  }).catch(err => console.error('Team alert error:', err.message || err));
+}
+function validSub(b) { const k = (b || {}).keys || {}; return b && b.endpoint && /^https:\/\//.test(b.endpoint) && k.p256dh && k.auth; }
+app.get('/api/team/push/key', requireTeam, async (req, res) => {
+  try {
+    const keys = await pushKeys();
+    if (!keys) return res.status(503).json({ error: 'Alerts are not available right now.' });
+    res.json({ publicKey: keys.publicKey });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Alerts are not set up yet.' }); }
+});
+app.post('/api/admin/push/subscribe', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!validSub(b)) return res.status(400).json({ error: 'Invalid subscription.' });
+    await store.saveTeamPush({ endpoint: b.endpoint, staffId: null, portal: 'admin', p256dh: b.keys.p256dh, auth: b.keys.auth });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not turn on alerts.' }); }
+});
+app.post('/api/staff/push/subscribe', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!validSub(b)) return res.status(400).json({ error: 'Invalid subscription.' });
+    await store.saveTeamPush({ endpoint: b.endpoint, staffId: req.staff.id, portal: b.portal === 'chat' ? 'chat' : 'vendor', p256dh: b.keys.p256dh, auth: b.keys.auth });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not turn on alerts.' }); }
+});
+app.post('/api/team/push/unsubscribe', requireTeam, async (req, res) => {
+  try { await store.deleteTeamPush(String((req.body || {}).endpoint || '')); res.json({ ok: true }); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Could not turn off alerts.' }); }
+});
+
+// ============================================================
+// LOANS (Borrow)
+// A customer may request up to the admin's limit, one loan at a time. Approving adds the money to their
+// balance. Repayment is automatic: each time a receipt is credited, what is owed is taken out first.
+// ============================================================
+app.get('/api/loans', requireUser, async (req, res) => {
+  try {
+    const [limit, loans] = await Promise.all([store.getLoanLimit(), store.listLoansForUser(req.session.userId)]);
+    res.json({ limit, loans });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Borrowing is not available right now.' }); }
+});
+app.post('/api/loans', requireUser, requireApprovedUser, async (req, res) => {
+  try {
+    const amount = Number((req.body || {}).amount);
+    if (!amount || amount <= 0) return res.status(400).json({ error: 'Enter a valid amount.' });
+    const [limit, loans] = await Promise.all([store.getLoanLimit(), store.listLoansForUser(req.user.id)]);
+    if (amount > limit) return res.status(400).json({ error: `The most you can borrow is ₦${plain(limit)}.` });
+    if (loans.some(l => l.status === 'pending')) return res.status(400).json({ error: 'You already have a loan request being reviewed.' });
+    if (loans.some(l => l.status === 'active')) return res.status(400).json({ error: 'Repay your current loan before asking for another.' });
+    const loan = await store.createLoan({ userId: req.user.id, amount });
+    alertTeam({ admin: true }, 'Loan request', `${req.user.name} asked to borrow ₦${plain(amount)}.`, { admin: 'loans' });
+    res.json({ ok: true, loan });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not send your loan request.' }); }
+});
+app.get('/api/admin/loans', requireAdmin, async (req, res) => {
+  try {
+    const [limit, loans, users] = await Promise.all([store.getLoanLimit(), store.listLoans(), store.listUsers()]);
+    res.json({ limit, loans: loans.map(l => { const u = users.find(x => x.id === l.userId) || {}; return { ...l, userName: u.name || 'Unknown', userPhone: u.phone || '', userBalance: u.balance || 0 }; }) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load loans.' }); }
+});
+app.put('/api/admin/loans/limit', requireAdmin, async (req, res) => {
+  try {
+    const limit = Number((req.body || {}).limit);
+    if (!(limit >= 0)) return res.status(400).json({ error: 'Enter a valid limit.' });
+    await store.setLoanLimit(limit);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not save the loan limit.' }); }
+});
+app.post('/api/admin/loans/:id/decide', requireAdmin, async (req, res) => {
+  try {
+    const loan = await store.findLoanById(req.params.id);
+    if (!loan) return res.status(404).json({ error: 'Loan request not found.' });
+    if (loan.status !== 'pending') return res.status(400).json({ error: 'This request has already been decided.' });
+    if ((req.body || {}).decision === 'approve') {
+      // Mark it first so a repeated tap can never pay the same loan out twice.
+      await store.updateLoan(loan.id, { status: 'active', outstanding: loan.amount });
+      await store.addToBalance(loan.userId, loan.amount);
+      notify(loan.userId, 'tx', 'Loan approved', `₦${plain(loan.amount)} has been added to your balance. It will be taken from your next credited receipts.`);
+    } else if ((req.body || {}).decision === 'decline') {
+      await store.updateLoan(loan.id, { status: 'declined' });
+      notify(loan.userId, 'tx', 'Loan request declined', `Your request to borrow ₦${plain(loan.amount)} was not approved this time.`);
+    } else return res.status(400).json({ error: 'Choose approve or decline.' });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update the loan.' }); }
 });
 
 // ============================================================
