@@ -467,7 +467,7 @@ const amt=n=>Number(n||0).toLocaleString('en-NG',{minimumFractionDigits:2,maximu
 const n0=n=>Number(n||0).toLocaleString('en-NG');
 const naira=n=>'₦'+amt(n), naira0=n=>'₦'+n0(n);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const safeImg=s=>/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+$/i.test(s||'')||/^\/api\/media\/(u|pub|staff|team)\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(jpg|png|webp|gif)$/.test(s||'')?s:'';   // pictures come as data: or from our own storage
+const safeImg=s=>/^data:image\/(jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=\s]+$/i.test(s||'')||/^\/api\/media\/(u|pub|staff|team)\/[A-Za-z0-9-]+\/[A-Za-z0-9-]+\.(jpg|png|webp|gif)$/.test(s||'')?s:'';   // pictures come as data: or from our own storage
 const fd=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
 const ft=d=>d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
 const num=v=>parseFloat(String(v).replace(/[^0-9.]/g,''))||0;

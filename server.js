@@ -7,6 +7,18 @@ const crypto = require('crypto');
 const store = require('./storage');
 
 const app = express();
+app.disable('x-powered-by');
+app.set('trust proxy', true); // Render sits in front of the app; needed for https cookies and visitor addresses
+// Browser safety settings for every page and file.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');                      // no other website can load AZAPLUG inside its page
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(), payment=()');
+  if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  next();
+});
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme123';
 // Without SESSION_SECRET we derive a stable one from the database key, so people are not signed out on every restart.
@@ -46,7 +58,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   rolling: true,
-  cookie: { maxAge: 864e5 * SESSION_DAYS, sameSite: 'lax' }
+  cookie: { maxAge: 864e5 * SESSION_DAYS, sameSite: 'lax', httpOnly: true, secure: 'auto' }
 }));
 
 // ============================================================
@@ -157,6 +169,60 @@ app.post('/api/peer/typing', async (req, res) => {
 });
 
 // ============================================================
+// MONEY SAFETY: one money action at a time, so a double tap or two requests at the same
+// second can never pay, credit or refund twice. Each action waits for the one before it.
+// ============================================================
+const LOCKS = new Map();
+function withLock(key, fn) {
+  const prev = LOCKS.get(key) || Promise.resolve();
+  const run = prev.catch(() => {}).then(fn), tail = run.catch(() => {});
+  LOCKS.set(key, tail);
+  tail.then(() => { if (LOCKS.get(key) === tail) LOCKS.delete(key); });
+  return run;
+}
+// Route version: holds the lock until the response has been sent (or 30 seconds, whichever is first).
+const moneyLock = keyFn => (req, res, next) => {
+  const key = keyFn(req);
+  withLock(key, () => new Promise(done => {
+    const t = setTimeout(done, 30000);
+    const end = () => { clearTimeout(t); done(); };
+    res.once('finish', end); res.once('close', end);
+    next();
+  }));
+};
+const ADMIN_MONEY = moneyLock(() => 'admin-money');
+
+// ============================================================
+// LOGIN GUARDS: limits per device/network, so nobody can keep guessing.
+// ============================================================
+const visitorKey = req => String(req.ip || (req.socket && req.socket.remoteAddress) || 'unknown');
+const IP_FAILS = new Map();   // visitor -> { n, until, first }
+function ipBlocked(kind, req) {
+  const t = IP_FAILS.get(kind + '|' + visitorKey(req));
+  return t && t.until > Date.now() ? Math.ceil((t.until - Date.now()) / 60000) : 0;
+}
+function ipFail(kind, req, max, minutes) {
+  const k = kind + '|' + visitorKey(req), now = Date.now();
+  let t = IP_FAILS.get(k);
+  if (!t || now - t.first > minutes * 60000) t = { n: 0, until: 0, first: now };
+  t.n += 1;
+  if (t.n >= max) t.until = now + minutes * 60000;
+  IP_FAILS.set(k, t);
+  return t.until > now;
+}
+setInterval(() => { const now = Date.now(); for (const [k, t] of IP_FAILS) if (t.until < now && now - t.first > 3600000) IP_FAILS.delete(k); }, 600000);
+const sameText = (a, b) => crypto.timingSafeEqual(crypto.createHash('sha256').update(String(a)).digest(), crypto.createHash('sha256').update(String(b)).digest());
+let adminWrong = { n: 0, since: Date.now(), warned: 0 }, pinWrong = { n: 0, since: Date.now(), warned: 0 };
+function pinWatch() { // many wrong PINs across all accounts = someone may be guessing; tell the admin
+  if (Date.now() - pinWrong.since > 900000) pinWrong = { n: 0, since: Date.now(), warned: pinWrong.warned };
+  pinWrong.n += 1;
+  if (pinWrong.n >= 150 && Date.now() - pinWrong.warned > 3600000) {
+    pinWrong.warned = Date.now();
+    alertTeam({ admin: true }, 'Warning: many wrong PINs', `${pinWrong.n} wrong PIN tries in the last 15 minutes across customer and staff accounts. Someone may be guessing PINs.`, { admin: 'dash' });
+  }
+}
+
+// ============================================================
 // MIDDLEWARE GUARDS
 // ============================================================
 function requireUser(req, res, next) {
@@ -217,8 +283,12 @@ app.post('/api/login', async (req, res) => {
     const { phone, password } = req.body || {};
     const lock = lockedOut('user', phone);
     if (lock) return res.status(429).json({ error: lock });
+    const mins = ipBlocked('pin', req);
+    if (mins) return res.status(429).json({ error: `Too many wrong tries from this device. Try again in ${mins} minute(s).` });
     const user = await store.findUserByPhone(String(phone || '').trim());
-    if (!user || !bcrypt.compareSync(String(password || ''), user.passwordHash)) {
+    if (!user || !(await bcrypt.compare(String(password || ''), user.passwordHash))) {
+      pinWatch();
+      if (ipFail('pin', req, 30, 15)) return res.status(429).json({ error: 'Too many wrong tries from this device. Try again in 15 minutes.' });
       return res.status(401).json({ error: wrongPin('user', phone) });
     }
     clearLock('user', phone);
@@ -293,8 +363,12 @@ app.post('/api/staff/login', async (req, res) => {
     const { phone, password } = req.body || {};
     const lock = lockedOut('staff', phone);
     if (lock) return res.status(429).json({ error: lock });
+    const mins = ipBlocked('pin', req);
+    if (mins) return res.status(429).json({ error: `Too many wrong tries from this device. Try again in ${mins} minute(s).` });
     const staff = await store.findStaffByPhone(String(phone || '').trim());
-    if (!staff || !bcrypt.compareSync(String(password || ''), staff.passwordHash)) {
+    if (!staff || !(await bcrypt.compare(String(password || ''), staff.passwordHash))) {
+      pinWatch();
+      if (ipFail('pin', req, 30, 15)) return res.status(429).json({ error: 'Too many wrong tries from this device. Try again in 15 minutes.' });
       return res.status(401).json({ error: wrongPin('staff', phone) });
     }
     clearLock('staff', phone);
@@ -325,10 +399,25 @@ app.get('/api/staff/me', async (req, res) => {
 // ============================================================
 // ADMIN AUTH
 // ============================================================
+// 5 wrong tries from one device/network locks admin login there for 15 minutes.
+// Many wrong tries in total sends the admin a warning notification.
 app.post('/api/admin/login', (req, res) => {
+  const mins = ipBlocked('admin', req) || ipBlocked('admin-all', { ip: 'all' });
+  if (mins) return res.status(429).json({ error: `Too many wrong tries. Admin login is paused for ${mins} minute(s).` });
   const { password } = req.body || {};
-  if (password !== ADMIN_PASSWORD) return res.status(401).json({ error: 'Wrong admin password.' });
+  if (!password || !sameText(password, ADMIN_PASSWORD)) {
+    const locked = ipFail('admin', req, 5, 15) | ipFail('admin-all', { ip: 'all' }, 20, 15); // 5 per device, 20 in total
+    if (Date.now() - adminWrong.since > 3600000) adminWrong = { n: 0, since: Date.now(), warned: 0 };
+    adminWrong.n += 1;
+    if (adminWrong.n >= 10 && Date.now() - adminWrong.warned > 3600000) {
+      adminWrong.warned = Date.now();
+      alertTeam({ admin: true }, 'Warning: admin password guesses', `${adminWrong.n} wrong admin password tries in the last hour. If this was not you, change ADMIN_PASSWORD on Render.`, { admin: 'dash' });
+    }
+    return res.status(locked ? 429 : 401).json({ error: locked ? 'Too many wrong tries. Admin login is locked here for 15 minutes.' : 'Wrong admin password.' });
+  }
+  const wasAdmin = !!req.session.isAdmin;
   req.session.isAdmin = true;
+  if (!wasAdmin) alertTeam({ admin: true }, 'New admin sign-in', `Someone signed in to the admin app (${String(req.get('user-agent') || 'unknown device').slice(0, 80)}). If this was not you, change ADMIN_PASSWORD on Render now.`, { admin: 'dash' });
   res.json({ ok: true });
 });
 app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; res.json({ ok: true }); });
@@ -340,7 +429,8 @@ app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; res.j
 function badPin(pin) {
   const p = String(pin || '');
   if (!/^\d{6}$/.test(p)) return 'Your PIN must be exactly 6 digits.';
-  if (/^(\d)\1{5}$/.test(p) || '0123456789012345'.includes(p) || '9876543210987654'.includes(p)) return 'That PIN is too easy to guess. Choose another one.';
+  if (/^(\d)\1{5}$/.test(p) || '0123456789012345'.includes(p) || '9876543210987654'.includes(p) || /^(\d\d)\1\1$/.test(p) || /^(\d{3})\1$/.test(p) ||
+      ['112233', '123321', '147258', '159753', '102030', '010203', '111222', '000111', '121314', '696969', '252525', '789456', '456123'].includes(p)) return 'That PIN is too easy to guess. Choose another one.';
   return null;
 }
 // --- Wrong-PIN lockout: a 6-digit PIN is short, so 5 wrong tries locks that phone number for 15 minutes.
@@ -686,17 +776,18 @@ app.get('/api/trades', requireUser, requireApprovedUser, async (req, res) => {
 // ============================================================
 // CUSTOMER: withdrawals
 // ============================================================
-app.post('/api/withdrawals', requireUser, requireApprovedUser, async (req, res) => {
+app.post('/api/withdrawals', requireUser, requireApprovedUser, moneyLock(req => 'user:' + req.session.userId), async (req, res) => {
   try {
-    const amount = Number((req.body || {}).amount);
-    if (!amount || amount <= 0) return res.status(400).json({ error: 'Enter a valid amount.' });
+    const amount = Math.round(Number((req.body || {}).amount) * 100) / 100;
+    if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Enter a valid amount.' });
     const user = await store.findUserById(req.user.id);
-    if (amount > user.balance) return res.status(400).json({ error: 'You cannot withdraw more than your balance.' });
-
-    const withdrawal = await store.createWithdrawal({
-      userId: user.id, amount, payoutAccount: user.accountNumber, payoutBank: user.bankName
-    });
-    await store.addToBalance(user.id, -amount); // hold the funds until this is paid or rejected
+    // Hold the funds first; this refuses if the balance is not enough (even with many requests at once).
+    const held = await store.addToBalance(user.id, -amount, { noNegative: true });
+    if (!held.ok) return res.status(400).json({ error: 'You cannot withdraw more than your balance.' });
+    let withdrawal;
+    try {
+      withdrawal = await store.createWithdrawal({ userId: user.id, amount, payoutAccount: user.accountNumber, payoutBank: user.bankName });
+    } catch (err) { await store.addToBalance(user.id, amount).catch(() => {}); throw err; } // give the money back if saving failed
     alertTeam({ admin: true }, 'Withdrawal request', `${user.name} asked to withdraw ₦${plain(amount)} to ${user.bankName}.`, { admin: 'wds' });
     res.json({ ok: true, withdrawal });
   } catch (err) {
@@ -716,7 +807,7 @@ app.get('/api/withdrawals', requireUser, requireApprovedUser, async (req, res) =
 // A chat attachment is a photo or a voice note, sent as a data: URL. Returns an error message, or null if fine.
 function badAttachment(data) {
   if (data === undefined || data === null || data === '') return null;
-  if (typeof data !== 'string' || !/^data:(image|audio)\/[a-z0-9.+-]+[;,]/i.test(data)) return 'Only photos and voice notes can be sent.';
+  if (typeof data !== 'string' || !/^data:(image\/(jpeg|jpg|png|webp|gif)|audio\/[a-z0-9.+-]+)[;,]/i.test(data)) return 'Only photos (JPG, PNG, WebP) and voice notes can be sent.';
   if (/^data:audio\//i.test(data) && data.length > 2500000) return 'That voice note is too long. Keep it under 2 minutes.';
   return null;
 }
@@ -741,6 +832,7 @@ app.get('/api/media/:scope/:owner/:file', async (req, res) => {
     let f = mediaCache.get(path);
     if (!f) { f = await store.getMediaFile(path); if (!f) return res.status(404).end(); cacheMedia(path, f); }
     res.setHeader('Content-Type', f.type);
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox"); // a file can only ever be shown, never run
     res.setHeader('Cache-Control', scope === 'pub' ? 'public, max-age=31536000, immutable' : 'private, max-age=31536000, immutable');
     res.setHeader('Accept-Ranges', 'bytes');
     const total = f.body.length, m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
@@ -857,7 +949,7 @@ app.get('/api/staff/trades', requireStaff, requireApprovedStaff, async (req, res
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load trades.' }); }
 });
 
-app.post('/api/staff/trades/:id/mark', requireStaff, requireApprovedStaff, async (req, res) => {
+app.post('/api/staff/trades/:id/mark', requireStaff, requireApprovedStaff, ADMIN_MONEY, async (req, res) => {
   try {
     const trade = await store.findTradeById(req.params.id);
     if (!trade || trade.staffId !== req.staff.id) return res.status(403).json({ error: 'You can only act on receipts for accounts you provided.' });
@@ -1299,7 +1391,7 @@ app.get('/api/admin/trades', requireAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load trades.' }); }
 });
 
-app.post('/api/admin/trades/:id/mark', requireAdmin, async (req, res) => {
+app.post('/api/admin/trades/:id/mark', requireAdmin, ADMIN_MONEY, async (req, res) => {
   try {
     const trade = await store.findTradeById(req.params.id);
     if (!trade) return res.status(404).json({ error: 'Trade not found.' });
@@ -1328,7 +1420,7 @@ app.post('/api/admin/trades/:id/mark', requireAdmin, async (req, res) => {
 // Admin-only second step: verify a staff-approved trade and actually credit the balance.
 // This is also the moment the customer's CURRENT payout account/bank gets locked into the
 // trade record permanently — even if the user later changes or deletes their account.
-app.post('/api/admin/trades/:id/credit', requireAdmin, async (req, res) => {
+app.post('/api/admin/trades/:id/credit', requireAdmin, ADMIN_MONEY, async (req, res) => {
   try {
     const trade = await store.findTradeById(req.params.id);
     if (!trade) return res.status(404).json({ error: 'Trade not found.' });
@@ -1381,7 +1473,7 @@ app.get('/api/admin/withdrawals', requireAdmin, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load withdrawals.' }); }
 });
 
-app.post('/api/admin/withdrawals/:id/mark', requireAdmin, async (req, res) => {
+app.post('/api/admin/withdrawals/:id/mark', requireAdmin, ADMIN_MONEY, async (req, res) => {
   try {
     const withdrawal = await store.findWithdrawalById(req.params.id);
     if (!withdrawal) return res.status(404).json({ error: 'Withdrawal not found.' });
@@ -1662,7 +1754,7 @@ app.get('/api/loans', requireUser, async (req, res) => {
     res.json({ limit, loans, traded, required: LOAN_MIN_TRADED, eligible: traded >= LOAN_MIN_TRADED });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Borrowing is not available right now.' }); }
 });
-app.post('/api/loans', requireUser, requireApprovedUser, async (req, res) => {
+app.post('/api/loans', requireUser, requireApprovedUser, moneyLock(req => 'user:' + req.session.userId), async (req, res) => {
   try {
     const amount = Number((req.body || {}).amount);
     if (!amount || amount <= 0) return res.status(400).json({ error: 'Enter a valid amount.' });
@@ -1691,7 +1783,7 @@ app.put('/api/admin/loans/limit', requireAdmin, async (req, res) => {
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not save the loan limit.' }); }
 });
-app.post('/api/admin/loans/:id/decide', requireAdmin, async (req, res) => {
+app.post('/api/admin/loans/:id/decide', requireAdmin, ADMIN_MONEY, async (req, res) => {
   try {
     const loan = await store.findLoanById(req.params.id);
     if (!loan) return res.status(404).json({ error: 'Loan request not found.' });
@@ -1797,7 +1889,7 @@ app.post('/api/admin/giveaways/:id/end', requireAdmin, async (req, res) => {
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not end the giveaway.' }); }
 });
 // Adds the prize to every winner not yet paid (or one winner with entryId).
-app.post('/api/admin/giveaways/:id/credit', requireAdmin, async (req, res) => {
+app.post('/api/admin/giveaways/:id/credit', requireAdmin, ADMIN_MONEY, async (req, res) => {
   try {
     const g = (await store.listGiveaways()).find(x => x.id === req.params.id);
     if (!g) return res.status(404).json({ error: 'Giveaway not found.' });
