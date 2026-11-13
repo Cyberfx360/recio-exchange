@@ -338,7 +338,7 @@ async function listConversations() {
     const user = users.find(function(u){ return u && u.id === userId; });
     return {
       userId: userId, name: user ? user.name : 'Unknown', phone: user ? user.phone : '',
-      lastMessage: lastMsg.image_data ? '📷 Photo' : lastMsg.text,
+      lastMessage: lastMsg.image_data ? (/^data:audio\//i.test(lastMsg.image_data) ? '🎤 Voice note' : '📷 Photo') : lastMsg.text,
       lastSender: lastMsg.sender, lastAt: lastMsg.created_at
     };
   });
