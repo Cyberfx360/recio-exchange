@@ -1007,7 +1007,7 @@ const FORMS={
   async signup(){S.portal=$('#su-d').value==='chat'?'chat':'vendor';store.set('az_portal',S.portal);await axSignup({name:val('su-n'),phone:val('su-p'),email:AX.cfg.pin?val('su-e').toLowerCase():'',password:$('#su-pw').value},$('#su-pw2').value)},
   async account(){const b={title:val('f-title'),bankName:val('f-bank'),accountNumber:val('f-num'),minAmount:num(val('f-min')),maxAmount:num(val('f-max')),imageData:S.form.imageData||null};
     if(!b.title||!b.bankName||!b.accountNumber)throw new Error('Country, bank name and account number are required');
-    if(S.form.id){await api('PUT','/api/staff/accounts/'+S.form.id,b);toast('Account saved');S.form=null;await reload('acctAll')}
+    if(S.form.id){const d=await api('PUT','/api/staff/accounts/'+S.form.id,b);toast(d.needsVerify?'Saved. The admin must verify the new details before customers see this account again.':'Account saved');S.form=null;await reload('acctAll')}
     else{const d=await api('POST','/api/staff/accounts',b);S.form=null;await refresh();go('acctDone',{done:d.account||b})}},
   async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';const d=await api('POST',(S.route==='teamChat'?'/api/staff/team/'+encodeURIComponent(S.tid)+'/send':'/api/staff/chats/'+encodeURIComponent(S.id)+'/send'),{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();chatBottom();i.focus()},
   async routeRc(){const rt=S.rt||{},amount=num(val('rt-a'));if(!rt.accountId)throw new Error('Choose the account the customer paid into');if(!amount)throw new Error('Enter the amount on the receipt');
