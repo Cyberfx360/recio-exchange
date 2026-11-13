@@ -133,7 +133,7 @@ app.get('/api/me', async (req, res) => {
     res.json({
       loggedIn: true, name: user.name, phone: user.phone, accountNumber: user.accountNumber,
       bankName: user.bankName, status: user.status, balance: user.balance,
-      email: user.email, needsPin: (await pinReady()) && !user.email
+      email: user.email, needsPin: (await pinReady()) && user.email === null
     });
   } catch (err) {
     console.error('Me error:', err);
@@ -205,7 +205,7 @@ app.get('/api/staff/me', async (req, res) => {
     if (!req.session.staffId) return res.json({ loggedIn: false });
     const staff = await store.findStaffById(req.session.staffId);
     if (!staff) return res.json({ loggedIn: false });
-    res.json({ loggedIn: true, name: staff.name, phone: staff.phone, status: staff.status, email: staff.email, needsPin: (await pinReady()) && !staff.email });
+    res.json({ loggedIn: true, name: staff.name, phone: staff.phone, status: staff.status, email: staff.email, needsPin: (await pinReady()) && staff.email === null });
   } catch (err) {
     console.error('Staff me error:', err);
     res.status(500).json({ error: 'Something went wrong.' });
@@ -262,6 +262,9 @@ async function pinReady() {
 
 // --- Email (Brevo). Needs BREVO_API_KEY and MAIL_FROM (a sender address verified in Brevo).
 const MAIL_ON = !!(process.env.BREVO_API_KEY && process.env.MAIL_FROM);
+// Email codes at sign-up are switched off for now, so nobody is blocked from joining when an email fails to arrive.
+// People still give their email (used for Forgot PIN). Set VERIFY_EMAIL=1 on Render to switch the code step back on.
+const VERIFY_ON = MAIL_ON && process.env.VERIFY_EMAIL === '1';
 function sendMail(to, subject, html) {
   return new Promise((resolve, reject) => {
     const url = new URL(process.env.BREVO_API_URL || 'https://api.brevo.com/v3/smtp/email');
@@ -308,26 +311,27 @@ const findByPhone = (kind, phone) => (kind === 'staff' ? store.findStaffByPhone(
 const fail = (res, err, fallback) => { if (!err.status) console.error(err); res.status(err.status || 500).json({ error: err.status ? err.message : fallback }); };
 
 // What the apps should show: PIN + email fields only once the database is ready; the code step only if email is set up.
-app.get('/api/auth/config', async (req, res) => { const pin = await pinReady(); res.json({ pin, email: pin && MAIL_ON }); });
+app.get('/api/auth/config', async (req, res) => { const pin = await pinReady(); res.json({ pin, email: pin && VERIFY_ON }); });
 
 // Checks the email part of a sign-up. Returns { value } (the email to save, or undefined) or { error }.
 async function signupEmail(kind, b) {
   if (!(await pinReady())) return {};
   const email = String(b.email || '').trim().toLowerCase();
-  if (!validEmail(email)) return { error: 'Enter a valid email address.' };
+  if (!email) return { value: '' };   // email is optional for now; it can be added later
+  if (!validEmail(email)) return { error: 'That email does not look right. Check it, or leave it empty.' };
   if (await store.findByEmail(kind, email)) return { error: 'That email is already used by another account.' };
-  if (MAIL_ON) { const bad = checkCode(`signup:${kind}:${email}`, b.code, email); if (bad) return { error: bad }; }
+  if (VERIFY_ON) { const bad = checkCode(`signup:${kind}:${email}`, b.code, email); if (bad) return { error: bad }; }
   return { value: email };
 }
 // Step 1 of sign-up: email a code.
 app.post('/api/auth/signup-code', async (req, res) => {
   try {
     const b0 = req.body || {}, kind = kindOf(b0), email = String(b0.email || '').trim().toLowerCase(), phone = String(b0.phone || '').trim();
-    if (!(await pinReady())) return res.json({ ok: true, skip: true });
+    if (!(await pinReady()) || !VERIFY_ON) return res.json({ ok: true, skip: true });   // no code step: the sign-up itself checks everything
     if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
     if (phone && await findByPhone(kind, phone)) return res.status(409).json({ error: 'An account with this phone number already exists.' });
     if (await store.findByEmail(kind, email)) return res.status(409).json({ error: 'That email is already used by another account.' });
-    if (!MAIL_ON) return res.json({ ok: true, skip: true });
+    if (!VERIFY_ON) return res.json({ ok: true, skip: true });
     if (b0.password !== undefined && badPin(b0.password)) return res.status(400).json({ error: badPin(b0.password) });
     const sent = await issueCode(`signup:${kind}:${email}`, email);
     res.json({ ok: true, email: maskEmail(email), wait: !sent });
@@ -342,7 +346,7 @@ app.post('/api/auth/setup-code', async (req, res) => {
     if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
     const taken = await store.findByEmail(kind, email);
     if (taken && taken.id !== id) return res.status(409).json({ error: 'That email is already used by another account.' });
-    if (!MAIL_ON) return res.json({ ok: true, skip: true });
+    if (!VERIFY_ON) return res.json({ ok: true, skip: true });
     const sent = await issueCode(`setup:${kind}:${id}`, email);
     res.json({ ok: true, email: maskEmail(email), wait: !sent });
   } catch (err) { fail(res, err, 'Could not send the code.'); }
@@ -352,11 +356,11 @@ app.post('/api/auth/setup', async (req, res) => {
     const kind = kindOf(req.body), id = sessionId(req, kind), b = req.body || {}, email = String(b.email || '').trim().toLowerCase();
     if (!id) return res.status(401).json({ error: 'Please log in first.' });
     if (!(await pinReady())) return res.status(400).json({ error: 'PIN login is not switched on yet.' });
-    if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+    if (email && !validEmail(email)) return res.status(400).json({ error: 'That email does not look right. Check it, or leave it empty.' });
     if (badPin(b.pin)) return res.status(400).json({ error: badPin(b.pin) });
-    const taken = await store.findByEmail(kind, email);
+    const taken = email ? await store.findByEmail(kind, email) : null;
     if (taken && taken.id !== id) return res.status(409).json({ error: 'That email is already used by another account.' });
-    if (MAIL_ON) { const bad = checkCode(`setup:${kind}:${id}`, b.code, email); if (bad) return res.status(400).json({ error: bad }); }
+    if (VERIFY_ON) { const bad = checkCode(`setup:${kind}:${id}`, b.code, email); if (bad) return res.status(400).json({ error: bad }); }
     await store.setLogin(kind, id, { email, passwordHash: bcrypt.hashSync(String(b.pin), 10) });
     res.json({ ok: true });
   } catch (err) { fail(res, err, 'Could not save your PIN.'); }
