@@ -8,6 +8,18 @@
 > alter table trades add column if not exists fail_image text;
 > alter table withdrawals add column if not exists reason_image text;
 > ```
+> For 6-digit PIN login, email codes, staying signed in and fingerprint login, run this one line:
+> ```sql
+> alter table users add column if not exists email text; alter table staff add column if not exists email text; create table if not exists sessions (sid text primary key, data jsonb not null, expires_at timestamptz not null); create table if not exists passkeys (id text primary key, kind text not null, owner_id text not null, public_key text not null, counter bigint not null default 0, created_at timestamptz not null default now()); alter table sessions enable row level security; alter table passkeys enable row level security;
+> ```
+> and add two Environment Variables on Render so codes can be emailed (from a free Brevo account):
+> `BREVO_API_KEY` (Brevo → SMTP & API → API Keys) and `MAIL_FROM` (the sender email you verified in Brevo).
+> Until both are set, sign-up works without the email code and "Forgot PIN" tells people to contact support.
+>
+> For chat managers to pass a chat receipt on to an account, run this one line:
+> ```sql
+> alter table trades add column if not exists chat_message_id uuid;
+> ```
 > For the Bitcoin / USDT naira rates (set under Admin → Edit Rates), also run this one line:
 > ```sql
 > alter table settings add column if not exists btc_rate numeric not null default 0, add column if not exists usdt_rate numeric not null default 0;

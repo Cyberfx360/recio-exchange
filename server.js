@@ -9,18 +9,44 @@ const store = require('./storage');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme123';
-const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+// Without SESSION_SECRET we derive a stable one from the database key, so people are not signed out on every restart.
+const SESSION_SECRET = process.env.SESSION_SECRET ||
+  (process.env.SUPABASE_SERVICE_KEY ? crypto.createHash('sha256').update('azaplug-session:' + process.env.SUPABASE_SERVICE_KEY).digest('hex') : crypto.randomBytes(32).toString('hex'));
 
 if (!process.env.ADMIN_PASSWORD) {
   console.warn('\n⚠️  ADMIN_PASSWORD is not set in .env — using the default "changeme123". Change this before going live.\n');
 }
 
 app.use(express.json({ limit: '10mb' })); // receipts + settlement screenshots travel as base64
+// Sessions are kept in the database (table "sessions"), so a restart or the server going to sleep does not
+// sign anyone out. If the table is not there yet, they are kept in memory like before.
+const SESSION_DAYS = 60;
+class SavedSessions extends session.Store {
+  constructor() { super(); this.mem = new Map(); this.saved = new Map(); }
+  get(sid, cb) {
+    const m = this.mem.get(sid);
+    if (m) return cb(null, m);
+    store.sessionGet(sid).then(d => { if (d) this.mem.set(sid, d); cb(null, d || null); }).catch(() => cb(null, null));
+  }
+  set(sid, sess, cb) {
+    const data = JSON.parse(JSON.stringify(sess));
+    this.mem.set(sid, data); this.saved.set(sid, Date.now());
+    const exp = new Date(Date.now() + SESSION_DAYS * 864e5).toISOString();
+    store.sessionSet(sid, data, exp).catch(() => {}).then(() => cb && cb(null));
+  }
+  touch(sid, sess, cb) {   // called on every request: only write to the database once an hour
+    if (Date.now() - (this.saved.get(sid) || 0) > 36e5) return this.set(sid, sess, cb);
+    cb && cb(null);
+  }
+  destroy(sid, cb) { this.mem.delete(sid); this.saved.delete(sid); store.sessionDelete(sid).catch(() => {}).then(() => cb && cb(null)); }
+}
 app.use(session({
   secret: SESSION_SECRET,
+  store: new SavedSessions(),
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 1000 * 60 * 60 * 24 * 30 }
+  rolling: true,
+  cookie: { maxAge: 864e5 * SESSION_DAYS, sameSite: 'lax' }
 }));
 
 // ============================================================
@@ -60,14 +86,16 @@ app.post('/api/register', async (req, res) => {
     if (!name || !phone || !accountNumber || !bankName || !password) {
       return res.status(400).json({ error: 'All fields are required.' });
     }
-    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    if (badPin(password)) return res.status(400).json({ error: badPin(password) });
     if (await store.findUserByPhone(String(phone).trim())) {
       return res.status(409).json({ error: 'An account with this phone number already exists.' });
     }
+    const email = await signupEmail('user', req.body || {});
+    if (email.error) return res.status(400).json({ error: email.error });
     const user = await store.createUser({
       name: String(name).trim(), phone: String(phone).trim(),
       accountNumber: String(accountNumber).trim(), bankName: String(bankName).trim(),
-      passwordHash: bcrypt.hashSync(password, 10)
+      passwordHash: bcrypt.hashSync(password, 10), email: email.value
     });
     req.session.userId = user.id;
     res.json({ ok: true, status: user.status });
@@ -80,10 +108,13 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
   try {
     const { phone, password } = req.body || {};
+    const lock = lockedOut('user', phone);
+    if (lock) return res.status(429).json({ error: lock });
     const user = await store.findUserByPhone(String(phone || '').trim());
     if (!user || !bcrypt.compareSync(String(password || ''), user.passwordHash)) {
-      return res.status(401).json({ error: 'Incorrect phone number or password.' });
+      return res.status(401).json({ error: wrongPin('user', phone) });
     }
+    clearLock('user', phone);
     req.session.userId = user.id;
     res.json({ ok: true, status: user.status });
   } catch (err) {
@@ -101,7 +132,8 @@ app.get('/api/me', async (req, res) => {
     if (!user) return res.json({ loggedIn: false });
     res.json({
       loggedIn: true, name: user.name, phone: user.phone, accountNumber: user.accountNumber,
-      bankName: user.bankName, status: user.status, balance: user.balance
+      bankName: user.bankName, status: user.status, balance: user.balance,
+      email: user.email, needsPin: (await pinReady()) && !user.email
     });
   } catch (err) {
     console.error('Me error:', err);
@@ -130,12 +162,14 @@ app.post('/api/staff/register', async (req, res) => {
   try {
     const { name, phone, password } = req.body || {};
     if (!name || !phone || !password) return res.status(400).json({ error: 'All fields are required.' });
-    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    if (badPin(password)) return res.status(400).json({ error: badPin(password) });
     if (await store.findStaffByPhone(String(phone).trim())) {
       return res.status(409).json({ error: 'A staff account with this phone number already exists.' });
     }
+    const email = await signupEmail('staff', req.body || {});
+    if (email.error) return res.status(400).json({ error: email.error });
     const staff = await store.createStaff({
-      name: String(name).trim(), phone: String(phone).trim(), passwordHash: bcrypt.hashSync(password, 10)
+      name: String(name).trim(), phone: String(phone).trim(), passwordHash: bcrypt.hashSync(password, 10), email: email.value
     });
     req.session.staffId = staff.id;
     alertTeam({ admin: true }, 'New staff awaiting approval', `${staff.name} signed up for the Staff portal.`, { admin: 'staff' });
@@ -149,10 +183,13 @@ app.post('/api/staff/register', async (req, res) => {
 app.post('/api/staff/login', async (req, res) => {
   try {
     const { phone, password } = req.body || {};
+    const lock = lockedOut('staff', phone);
+    if (lock) return res.status(429).json({ error: lock });
     const staff = await store.findStaffByPhone(String(phone || '').trim());
     if (!staff || !bcrypt.compareSync(String(password || ''), staff.passwordHash)) {
-      return res.status(401).json({ error: 'Incorrect phone number or password.' });
+      return res.status(401).json({ error: wrongPin('staff', phone) });
     }
+    clearLock('staff', phone);
     req.session.staffId = staff.id;
     res.json({ ok: true, status: staff.status });
   } catch (err) {
@@ -168,7 +205,7 @@ app.get('/api/staff/me', async (req, res) => {
     if (!req.session.staffId) return res.json({ loggedIn: false });
     const staff = await store.findStaffById(req.session.staffId);
     if (!staff) return res.json({ loggedIn: false });
-    res.json({ loggedIn: true, name: staff.name, phone: staff.phone, status: staff.status });
+    res.json({ loggedIn: true, name: staff.name, phone: staff.phone, status: staff.status, email: staff.email, needsPin: (await pinReady()) && !staff.email });
   } catch (err) {
     console.error('Staff me error:', err);
     res.status(500).json({ error: 'Something went wrong.' });
@@ -185,6 +222,232 @@ app.post('/api/admin/login', (req, res) => {
   res.json({ ok: true });
 });
 app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; res.json({ ok: true }); });
+
+// ============================================================
+// LOGIN EXTRAS: 6-digit PIN, email codes, forgot PIN, fingerprint
+// ============================================================
+// --- PIN rules
+function badPin(pin) {
+  const p = String(pin || '');
+  if (!/^\d{6}$/.test(p)) return 'Your PIN must be exactly 6 digits.';
+  if (/^(\d)\1{5}$/.test(p) || '0123456789012345'.includes(p) || '9876543210987654'.includes(p)) return 'That PIN is too easy to guess. Choose another one.';
+  return null;
+}
+// --- Wrong-PIN lockout: a 6-digit PIN is short, so 5 wrong tries locks that phone number for 15 minutes.
+const tries = new Map();
+const lockKey = (kind, phone) => kind + ':' + String(phone || '').trim();
+function lockedOut(kind, phone) {
+  const t = tries.get(lockKey(kind, phone));
+  if (t && t.until > Date.now()) return `Too many wrong tries. Try again in ${Math.ceil((t.until - Date.now()) / 60000)} minute(s), or tap "Forgot PIN".`;
+  return null;
+}
+function wrongPin(kind, phone) {
+  const k = lockKey(kind, phone), t = tries.get(k) || { n: 0, until: 0 };
+  if (t.until && t.until <= Date.now()) { t.n = 0; t.until = 0; }
+  t.n += 1;
+  if (t.n >= 5) { t.until = Date.now() + 15 * 60000; t.n = 0; }
+  tries.set(k, t);
+  return t.until ? 'Too many wrong tries. This number is locked for 15 minutes.' : 'Incorrect phone number or PIN.';
+}
+function clearLock(kind, phone) { tries.delete(lockKey(kind, phone)); }
+
+// --- Is the database ready for PIN + email? (true once the SQL in the README was run)
+let pinOk = false, pinChecked = 0;
+async function pinReady() {
+  if (pinOk || Date.now() - pinChecked < 60000) return pinOk;
+  pinChecked = Date.now();
+  try { pinOk = await store.hasEmailColumns(); } catch (err) { pinOk = false; }
+  return pinOk;
+}
+
+// --- Email (Brevo). Needs BREVO_API_KEY and MAIL_FROM (a sender address verified in Brevo).
+const MAIL_ON = !!(process.env.BREVO_API_KEY && process.env.MAIL_FROM);
+function sendMail(to, subject, html) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(process.env.BREVO_API_URL || 'https://api.brevo.com/v3/smtp/email');
+    const body = JSON.stringify({ sender: { name: 'AZAPLUG', email: process.env.MAIL_FROM }, to: [{ email: to }], subject, htmlContent: html });
+    const r = require(url.protocol === 'http:' ? 'http' : 'https').request(url, {
+      method: 'POST', timeout: 15000,
+      headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json', 'content-length': Buffer.byteLength(body) }
+    }, resp => {
+      let out = ''; resp.on('data', c => { out += c; });
+      resp.on('end', () => (resp.statusCode < 300 ? resolve() : reject(new Error('Email service said ' + resp.statusCode + ': ' + out.slice(0, 200)))));
+    });
+    r.on('timeout', () => r.destroy(new Error('Email service timed out')));
+    r.on('error', reject); r.end(body);
+  });
+}
+const validEmail = e => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length <= 120;
+const maskEmail = e => e.replace(/^(.{2})[^@]*(@.*)$/, '$1•••$2');
+// --- One-time codes (kept in memory for 10 minutes)
+const codes = new Map();
+const hashCode = c => crypto.createHash('sha256').update(String(c)).digest('hex');
+async function issueCode(key, email, extra) {
+  const old = codes.get(key);
+  if (old && old.email === email && Date.now() - old.sentAt < 45000) return false;   // one was just sent: keep using it
+  const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+  codes.set(key, { hash: hashCode(code), exp: Date.now() + 10 * 60000, n: 0, sentAt: Date.now(), email, ...(extra || {}) });
+  try {
+    await sendMail(email, `${code} is your AZAPLUG code`,
+      `<div style="font-family:Arial,sans-serif;max-width:420px;margin:auto;padding:24px"><h2 style="color:#0D4DC7;margin:0 0 12px">AZAPLUG</h2><p style="font-size:15px;color:#111827">Your verification code is</p><p style="font-size:34px;font-weight:700;letter-spacing:8px;color:#111827;margin:8px 0 16px">${code}</p><p style="font-size:13px;color:#6B7280">It works for 10 minutes. If you did not ask for this, ignore this email and do not share the code with anyone.</p></div>`);
+  } catch (err) { codes.delete(key); console.error('Email error:', err.message); throw Object.assign(new Error('We could not send the email. Check the address and try again.'), { status: 502 }); }
+  return true;
+}
+function checkCode(key, code, email) {
+  const c = codes.get(key);
+  if (!c || c.exp < Date.now()) { codes.delete(key); return 'That code has expired. Ask for a new one.'; }
+  if (email && c.email !== email) return 'That code was sent to a different email.';
+  c.n += 1;
+  if (c.n > 5) { codes.delete(key); return 'Too many wrong tries. Ask for a new code.'; }
+  if (c.hash !== hashCode(String(code || '').trim())) return 'That code is not correct.';
+  codes.delete(key);
+  return null;
+}
+const kindOf = b => ((b || {}).role === 'staff' ? 'staff' : 'user');
+const findByPhone = (kind, phone) => (kind === 'staff' ? store.findStaffByPhone(phone) : store.findUserByPhone(phone));
+const fail = (res, err, fallback) => { if (!err.status) console.error(err); res.status(err.status || 500).json({ error: err.status ? err.message : fallback }); };
+
+// What the apps should show: PIN + email fields only once the database is ready; the code step only if email is set up.
+app.get('/api/auth/config', async (req, res) => { const pin = await pinReady(); res.json({ pin, email: pin && MAIL_ON }); });
+
+// Checks the email part of a sign-up. Returns { value } (the email to save, or undefined) or { error }.
+async function signupEmail(kind, b) {
+  if (!(await pinReady())) return {};
+  const email = String(b.email || '').trim().toLowerCase();
+  if (!validEmail(email)) return { error: 'Enter a valid email address.' };
+  if (await store.findByEmail(kind, email)) return { error: 'That email is already used by another account.' };
+  if (MAIL_ON) { const bad = checkCode(`signup:${kind}:${email}`, b.code, email); if (bad) return { error: bad }; }
+  return { value: email };
+}
+// Step 1 of sign-up: email a code.
+app.post('/api/auth/signup-code', async (req, res) => {
+  try {
+    const b0 = req.body || {}, kind = kindOf(b0), email = String(b0.email || '').trim().toLowerCase(), phone = String(b0.phone || '').trim();
+    if (!(await pinReady())) return res.json({ ok: true, skip: true });
+    if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+    if (phone && await findByPhone(kind, phone)) return res.status(409).json({ error: 'An account with this phone number already exists.' });
+    if (await store.findByEmail(kind, email)) return res.status(409).json({ error: 'That email is already used by another account.' });
+    if (!MAIL_ON) return res.json({ ok: true, skip: true });
+    if (b0.password !== undefined && badPin(b0.password)) return res.status(400).json({ error: badPin(b0.password) });
+    const sent = await issueCode(`signup:${kind}:${email}`, email);
+    res.json({ ok: true, email: maskEmail(email), wait: !sent });
+  } catch (err) { fail(res, err, 'Could not send the code.'); }
+});
+// People who signed up before PINs: after logging in with the old password they add an email and choose a PIN.
+const sessionId = (req, kind) => (kind === 'staff' ? req.session.staffId : req.session.userId);
+app.post('/api/auth/setup-code', async (req, res) => {
+  try {
+    const kind = kindOf(req.body), id = sessionId(req, kind), email = String((req.body || {}).email || '').trim().toLowerCase();
+    if (!id) return res.status(401).json({ error: 'Please log in first.' });
+    if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+    const taken = await store.findByEmail(kind, email);
+    if (taken && taken.id !== id) return res.status(409).json({ error: 'That email is already used by another account.' });
+    if (!MAIL_ON) return res.json({ ok: true, skip: true });
+    const sent = await issueCode(`setup:${kind}:${id}`, email);
+    res.json({ ok: true, email: maskEmail(email), wait: !sent });
+  } catch (err) { fail(res, err, 'Could not send the code.'); }
+});
+app.post('/api/auth/setup', async (req, res) => {
+  try {
+    const kind = kindOf(req.body), id = sessionId(req, kind), b = req.body || {}, email = String(b.email || '').trim().toLowerCase();
+    if (!id) return res.status(401).json({ error: 'Please log in first.' });
+    if (!(await pinReady())) return res.status(400).json({ error: 'PIN login is not switched on yet.' });
+    if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+    if (badPin(b.pin)) return res.status(400).json({ error: badPin(b.pin) });
+    const taken = await store.findByEmail(kind, email);
+    if (taken && taken.id !== id) return res.status(409).json({ error: 'That email is already used by another account.' });
+    if (MAIL_ON) { const bad = checkCode(`setup:${kind}:${id}`, b.code, email); if (bad) return res.status(400).json({ error: bad }); }
+    await store.setLogin(kind, id, { email, passwordHash: bcrypt.hashSync(String(b.pin), 10) });
+    res.json({ ok: true });
+  } catch (err) { fail(res, err, 'Could not save your PIN.'); }
+});
+// Forgot PIN: a code goes to the email on the account, then a new PIN is chosen.
+app.post('/api/auth/forgot', async (req, res) => {
+  try {
+    const kind = kindOf(req.body), phone = String((req.body || {}).phone || '').trim();
+    const acct = phone ? await findByPhone(kind, phone) : null;
+    if (!acct) return res.status(404).json({ error: 'No account uses that phone number.' });
+    if (!acct.email) return res.status(400).json({ error: 'This account has no email yet. Log in with your old password, or contact AZAPLUG support.' });
+    if (!MAIL_ON) return res.status(400).json({ error: 'Email is not set up yet. Contact AZAPLUG support to reset your PIN.' });
+    const sent = await issueCode(`reset:${kind}:${acct.id}`, acct.email);
+    res.json({ ok: true, email: maskEmail(acct.email), wait: !sent });
+  } catch (err) { fail(res, err, 'Could not send the code.'); }
+});
+app.post('/api/auth/reset', async (req, res) => {
+  try {
+    const kind = kindOf(req.body), b = req.body || {}, phone = String(b.phone || '').trim();
+    const acct = phone ? await findByPhone(kind, phone) : null;
+    if (!acct) return res.status(404).json({ error: 'No account uses that phone number.' });
+    if (badPin(b.pin)) return res.status(400).json({ error: badPin(b.pin) });
+    const bad = checkCode(`reset:${kind}:${acct.id}`, b.code);
+    if (bad) return res.status(400).json({ error: bad });
+    await store.setLogin(kind, acct.id, { passwordHash: bcrypt.hashSync(String(b.pin), 10) });
+    clearLock(kind, phone);
+    if (kind === 'staff') req.session.staffId = acct.id; else req.session.userId = acct.id;
+    res.json({ ok: true, status: acct.status });
+  } catch (err) { fail(res, err, 'Could not reset your PIN.'); }
+});
+
+// --- Fingerprint / Face ID login (passkeys kept on the phone; the server only stores the public key)
+const webauthn = require('@simplewebauthn/server');
+const b64u = buf => Buffer.from(buf).toString('base64url');
+const rpOf = req => { const host = req.get('host') || 'localhost'; return { rpID: host.replace(/:\d+$/, ''), origins: ['https://' + host, 'http://' + host] }; };
+const passKind = b => (['user', 'staff', 'admin'].includes((b || {}).kind) ? b.kind : 'user');
+const passOwner = (req, kind) => (kind === 'admin' ? (req.session.isAdmin ? 'admin' : null) : kind === 'staff' ? req.session.staffId : req.session.userId) || null;
+app.post('/api/passkey/register/options', async (req, res) => {
+  try {
+    const kind = passKind(req.body), owner = passOwner(req, kind);
+    if (!owner) return res.status(401).json({ error: 'Please log in first.' });
+    const acct = kind === 'admin' ? { phone: 'Admin', name: 'AZAPLUG Admin' } : kind === 'staff' ? await store.findStaffById(owner) : await store.findUserById(owner);
+    if (!acct) return res.status(401).json({ error: 'Please log in first.' });
+    const options = await webauthn.generateRegistrationOptions({
+      rpName: 'AZAPLUG', rpID: rpOf(req).rpID, userName: `${acct.phone} (${kind})`, userDisplayName: acct.name, userID: Buffer.from(kind + ':' + owner),
+      attestationType: 'none', authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' }
+    });
+    req.session.wa = { c: options.challenge, kind, owner };
+    res.json(options);
+  } catch (err) { console.error('Passkey options error:', err); res.status(500).json({ error: 'Fingerprint login is not available right now.' }); }
+});
+app.post('/api/passkey/register/verify', async (req, res) => {
+  try {
+    const kind = passKind(req.body), owner = passOwner(req, kind), wa = req.session.wa; req.session.wa = null;
+    if (!owner || !wa || wa.kind !== kind || wa.owner !== owner) return res.status(400).json({ error: 'Start again.' });
+    const rp = rpOf(req);
+    const v = await webauthn.verifyRegistrationResponse({ response: req.body.response, expectedChallenge: wa.c, expectedOrigin: rp.origins, expectedRPID: rp.rpID, requireUserVerification: true });
+    if (!v.verified) return res.status(400).json({ error: 'Your phone did not confirm it. Try again.' });
+    const c = v.registrationInfo.credential;
+    await store.savePasskey({ id: c.id, kind, ownerId: owner, publicKey: b64u(c.publicKey), counter: c.counter });
+    res.json({ ok: true, id: c.id });
+  } catch (err) { console.error('Passkey register error:', err); res.status(/passkeys/.test(String(err && err.message)) ? 500 : 400).json({ error: 'Could not turn on fingerprint login on this phone.' }); }
+});
+app.post('/api/passkey/login/options', async (req, res) => {
+  try {
+    const pk = await store.findPasskey(String((req.body || {}).id || ''));
+    if (!pk || pk.kind !== passKind(req.body)) return res.status(404).json({ error: 'Fingerprint login is no longer set up on this phone.', gone: true });
+    const options = await webauthn.generateAuthenticationOptions({ rpID: rpOf(req).rpID, allowCredentials: [{ id: pk.id }], userVerification: 'required' });
+    req.session.wa = { c: options.challenge, kind: pk.kind };
+    res.json(options);
+  } catch (err) { console.error('Passkey login options error:', err); res.status(500).json({ error: 'Fingerprint login is not available right now.' }); }
+});
+app.post('/api/passkey/login/verify', async (req, res) => {
+  try {
+    const wa = req.session.wa; req.session.wa = null;
+    const pk = await store.findPasskey(String(((req.body || {}).response || {}).id || ''));
+    if (!wa || !pk || pk.kind !== wa.kind) return res.status(400).json({ error: 'Start again.' });
+    const rp = rpOf(req);
+    const v = await webauthn.verifyAuthenticationResponse({
+      response: req.body.response, expectedChallenge: wa.c, expectedOrigin: rp.origins, expectedRPID: rp.rpID, requireUserVerification: true,
+      credential: { id: pk.id, publicKey: new Uint8Array(Buffer.from(pk.publicKey, 'base64url')), counter: pk.counter }
+    });
+    if (!v.verified) return res.status(401).json({ error: 'Your phone did not confirm it. Use your PIN.' });
+    store.updatePasskeyCounter(pk.id, v.authenticationInfo.newCounter).catch(() => {});
+    if (pk.kind === 'admin') { req.session.isAdmin = true; return res.json({ ok: true }); }
+    const acct = pk.kind === 'staff' ? await store.findStaffById(pk.ownerId) : await store.findUserById(pk.ownerId);
+    if (!acct) { store.deletePasskey(pk.id).catch(() => {}); return res.status(404).json({ error: 'That account no longer exists.', gone: true }); }
+    if (pk.kind === 'staff') req.session.staffId = acct.id; else req.session.userId = acct.id;
+    res.json({ ok: true, status: acct.status });
+  } catch (err) { console.error('Passkey login error:', err); res.status(401).json({ error: 'Fingerprint login did not work. Use your PIN.' }); }
+});
 
 // ============================================================
 // PUBLIC: rate board + rules
@@ -278,6 +541,25 @@ app.post('/api/trades', requireUser, requireApprovedUser, async (req, res) => {
   }
 });
 
+// Crypto receipts go to the admin only: no account and no staff are attached.
+const COINS = { BTC: 'Bitcoin (BTC)', USDT: 'USDT' };
+app.post('/api/crypto/trades', requireUser, requireApprovedUser, async (req, res) => {
+  try {
+    const { coin, usdAmount, receiptImage, address } = req.body || {};
+    const usd = Number(usdAmount);
+    if (!COINS[coin]) return res.status(400).json({ error: 'Choose Bitcoin or USDT.' });
+    if (!Number.isFinite(usd) || usd <= 0) return res.status(400).json({ error: 'Enter the amount you sent in dollars.' });
+    if (typeof receiptImage !== 'string' || !/^data:image\//i.test(receiptImage)) return res.status(400).json({ error: 'Add a screenshot of your transfer.' });
+    const trade = await store.createTrade({
+      userId: req.user.id, accountId: null, staffId: null, intendedAmount: usd, receiptImage,
+      accountNumberUsed: String(address || '').slice(0, 120), accountTitleUsed: COINS[coin],
+      userPayoutAccount: req.user.accountNumber, userPayoutBank: req.user.bankName
+    });
+    alertTeam({ admin: true }, 'New crypto receipt', `${req.user.name} sent a ${COINS[coin]} receipt for $${plain(usd)}.`, { admin: 'receipts' });
+    res.json({ ok: true, trade });
+  } catch (err) { console.error('Crypto trade error:', err); res.status(500).json({ error: 'Could not submit your receipt.' }); }
+});
+
 app.get('/api/trades', requireUser, requireApprovedUser, async (req, res) => {
   try {
     res.json({ trades: await store.listTradesForUser(req.user.id) });
@@ -344,6 +626,14 @@ app.post('/api/chat/send', requireUser, async (req, res) => {
 // ============================================================
 // STAFF: own accounts
 // ============================================================
+app.delete('/api/chat/messages/:id', requireUser, async (req, res) => {
+  try {
+    const m = await store.findMessageById(req.params.id);
+    if (!m || m.userId !== req.session.userId || m.sender !== 'user') return res.status(404).json({ error: 'You can only delete your own messages.' });
+    await store.deleteMessage(m.id); res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the message.' }); }
+});
+
 app.get('/api/staff/accounts', requireStaff, requireApprovedStaff, async (req, res) => {
   try { res.json({ accounts: await store.listAccountsByStaff(req.staff.id) }); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load accounts.' }); }
@@ -402,6 +692,8 @@ app.get('/api/staff/trades', requireStaff, requireApprovedStaff, async (req, res
       const acc = accounts.find(a => a.id === t.accountId);
       return {
         ...t,
+        // A receipt a chat manager passed on from a chat hides the customer from the account's staff.
+        ...(t.chatMessageId ? { userId: null, userPayoutAccount: null, userPayoutBank: null, fromChat: true } : {}),
         lowestAmount: acc ? acc.lowestAmount : null, lowestRate: acc ? acc.lowestRate : null,
         higherAmount: acc ? acc.higherAmount : null, higherRate: acc ? acc.higherRate : null
       };
@@ -468,9 +760,56 @@ app.get('/api/staff/chats/:userId', requireStaff, requireApprovedStaff, async (r
   try {
     const user = await store.findUserById(req.params.userId);
     if (!user) return res.status(404).json({ error: 'Customer not found.' });
-    res.json({ user: { id: user.id, name: user.name, phone: user.phone }, messages: await store.messagesForUser(req.params.userId) });
+    res.json({ user: { id: user.id, name: user.name, phone: user.phone }, messages: await store.messagesForUser(req.params.userId), routed: await routedFor(req.params.userId) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load conversation.' }); }
 });
+// Which chat photos were already turned into receipts: { messageId: { title, status, amount } }
+async function routedFor(userId) {
+  const out = {};
+  try { (await store.listTradesForUser(userId)).forEach(t => { if (t.chatMessageId) out[t.chatMessageId] = { title: t.accountTitleUsed, status: t.status, amount: t.intendedAmount }; }); } catch (err) {}
+  return out;
+}
+// Accounts a chat manager can send a chat receipt to.
+app.get('/api/staff/route-accounts', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const [accounts, staffList] = await Promise.all([store.listAllAccounts(), store.listStaff()]);
+    res.json({ accounts: accounts.filter(a => a.active).map(a => ({ id: a.id, title: a.title, bankName: a.bankName, accountNumber: a.accountNumber, staffName: (staffList.find(s => s.id === a.staffId) || {}).name || 'Admin' })) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load accounts.' }); }
+});
+// Chat manager turns a receipt photo from the chat into a receipt on the account the customer paid into.
+app.post('/api/staff/chats/:userId/route', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const { messageId, accountId, amount } = req.body || {}, n = Number(amount);
+    const [user, msg, account] = await Promise.all([store.findUserById(req.params.userId), store.findMessageById(messageId), store.findAccountById(accountId)]);
+    if (!user) return res.status(404).json({ error: 'Customer not found.' });
+    if (!msg || msg.userId !== user.id || msg.sender !== 'user' || !/^data:image\//i.test(msg.imageData || '')) return res.status(400).json({ error: 'Pick a receipt photo the customer sent.' });
+    if (!account || !account.active) return res.status(404).json({ error: 'That account is no longer available.' });
+    if (!Number.isFinite(n) || n <= 0) return res.status(400).json({ error: 'Enter the amount on the receipt.' });
+    if ((await routedFor(user.id))[msg.id]) return res.status(400).json({ error: 'This receipt was already sent to an account.' });
+    let trade;
+    try {
+      trade = await store.createTrade({
+        userId: user.id, accountId: account.id, staffId: account.staffId, intendedAmount: n, receiptImage: msg.imageData,
+        accountNumberUsed: account.accountNumber, accountTitleUsed: account.title,
+        userPayoutAccount: user.accountNumber, userPayoutBank: user.bankName, chatMessageId: msg.id
+      });
+    } catch (err) {
+      if (/chat_message_id/.test(String(err && err.message))) return res.status(500).json({ error: 'Run the chat receipt SQL from the README in Supabase first.' });
+      throw err;
+    }
+    alertTeam({ admin: true, staffId: account.staffId }, 'New receipt', `A ${account.title} receipt for ${plain(n)} came in from chat.`, { admin: 'receipts', staff: 'receipts' });
+    res.json({ ok: true, trade: { id: trade.id, status: trade.status } });
+  } catch (err) { console.error('Route receipt error:', err); res.status(500).json({ error: 'Could not send the receipt.' }); }
+});
+async function teamDeleteMessage(req, res) {
+  try {
+    const m = await store.findMessageById(req.params.id);
+    if (!m || m.userId !== req.params.userId) return res.status(404).json({ error: 'Message not found.' });
+    await store.deleteMessage(m.id); res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the message.' }); }
+}
+app.delete('/api/staff/chats/:userId/messages/:id', requireStaff, requireApprovedStaff, teamDeleteMessage);
+app.delete('/api/admin/chats/:userId/messages/:id', requireAdmin, teamDeleteMessage);
 app.post('/api/staff/chats/:userId/send', requireStaff, requireApprovedStaff, async (req, res) => {
   try {
     const { text, imageData } = req.body || {};
@@ -958,10 +1297,15 @@ app.post('/api/team/push/unsubscribe', requireTeam, async (req, res) => {
 // A customer may request up to the admin's limit, one loan at a time. Approving adds the money to their
 // balance. Repayment is automatic: each time a receipt is credited, what is owed is taken out first.
 // ============================================================
+// A customer can only borrow after this much naira has been credited to them from receipts.
+const LOAN_MIN_TRADED = 70000;
+async function tradedTotal(userId) {
+  return (await store.listTradesForUser(userId)).reduce((sum, t) => sum + (t.status === 'approved' && t.creditedAmount ? t.creditedAmount : 0), 0);
+}
 app.get('/api/loans', requireUser, async (req, res) => {
   try {
-    const [limit, loans] = await Promise.all([store.getLoanLimit(), store.listLoansForUser(req.session.userId)]);
-    res.json({ limit, loans });
+    const [limit, loans, traded] = await Promise.all([store.getLoanLimit(), store.listLoansForUser(req.session.userId), tradedTotal(req.session.userId)]);
+    res.json({ limit, loans, traded, required: LOAN_MIN_TRADED, eligible: traded >= LOAN_MIN_TRADED });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Borrowing is not available right now.' }); }
 });
 app.post('/api/loans', requireUser, requireApprovedUser, async (req, res) => {
@@ -969,6 +1313,8 @@ app.post('/api/loans', requireUser, requireApprovedUser, async (req, res) => {
     const amount = Number((req.body || {}).amount);
     if (!amount || amount <= 0) return res.status(400).json({ error: 'Enter a valid amount.' });
     const [limit, loans] = await Promise.all([store.getLoanLimit(), store.listLoansForUser(req.user.id)]);
+    const traded = await tradedTotal(req.user.id);
+    if (traded < LOAN_MIN_TRADED) return res.status(400).json({ error: `You can borrow after trading ₦${plain(LOAN_MIN_TRADED)}. You have traded ₦${plain(traded)} so far.` });
     if (amount > limit) return res.status(400).json({ error: `The most you can borrow is ₦${plain(limit)}.` });
     if (loans.some(l => l.status === 'pending')) return res.status(400).json({ error: 'You already have a loan request being reviewed.' });
     if (loans.some(l => l.status === 'active')) return res.status(400).json({ error: 'Repay your current loan before asking for another.' });
@@ -1012,7 +1358,12 @@ app.post('/api/admin/loans/:id/decide', requireAdmin, async (req, res) => {
 // ============================================================
 // STATIC PAGES
 // ============================================================
-app.use(express.static(path.join(__dirname, 'public')));
+// The apps ask for this when they come back to the screen; if it changed (a new deploy), they reload themselves.
+const BUILD = process.env.RENDER_GIT_COMMIT || String(Date.now());
+app.get('/api/version', (req, res) => res.json({ v: BUILD }));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders(res, file) { if (/\.(html|js|webmanifest)$/.test(file)) res.setHeader('Cache-Control', 'no-cache'); }
+}));
 
 app.listen(PORT, () => {
   console.log(`\nRECIO EXCHANGE backend running at http://localhost:${PORT}`);

@@ -337,6 +337,30 @@ form .g2{margin-top:14px;row-gap:14px}form .g2 .cl{margin-top:0}
 .recmid .wave i{flex:none}
 @keyframes recp{0%,100%{opacity:1}50%{opacity:.25}}
 @media (prefers-reduced-motion:reduce){.recmid .dot{animation:none}}
+.cfm{position:fixed;inset:0;background:rgba(17,24,39,.45);display:grid;place-items:center;z-index:99;padding:24px}
+.cfm-b{background:#fff;border-radius:18px;padding:20px;max-width:320px;width:100%;color:var(--slate)}.cfm-b b{font:600 17px var(--head)}.cfm-b p{color:#6B7280;font-size:14px;margin:6px 0 16px}
+.cfm-b div{display:flex;gap:10px}.cfm-b button{flex:1;height:44px;border-radius:12px;font-weight:600;background:#F1F3F7}.cfm-b .dg{background:var(--red);color:#fff}
+.msg time .md{display:inline-flex;margin-left:10px;opacity:.7;vertical-align:-2px;color:inherit;padding:2px}.msg time .md svg{width:13px;height:13px}
+.rtd{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;background:#E7F8F1;color:#047857;border-radius:999px;padding:4px 10px;margin:0 0 6px}
+/* PIN, email code and fingerprint screens */
+.pin{letter-spacing:.45em;font-size:20px!important;font-weight:600}
+.pin::placeholder{letter-spacing:.3em;font-weight:400}
+.ax{min-height:100dvh;background:#fff;color:var(--slate);padding:26px 24px calc(26px + env(safe-area-inset-bottom));display:flex;flex-direction:column}
+.ax .bk2{width:42px;height:42px;border-radius:50%;background:#F1F3F7;display:grid;place-items:center;color:var(--slate)}
+.ax h1{font:700 27px var(--head);margin:26px 0 6px;color:var(--slate)}.ax .sub{color:#6B7280;font-size:14.5px;line-height:1.5;margin-bottom:14px}
+.ax label{display:block;font-weight:600;font-size:14px;margin:16px 0 8px;color:var(--slate)}
+.ax .axi{width:100%;height:56px;border:1.5px solid #E1E5EC;border-radius:14px;padding:0 16px;font-size:16px;background:#fff;color:var(--slate)}
+.ax .axi:focus{border-color:var(--blue);outline:none}
+.ax .btn.axb{width:100%;height:56px;border-radius:14px;background:var(--blue);color:#fff;font-weight:700;font-size:16px;margin-top:26px;box-shadow:0 10px 22px -10px rgba(13,77,199,.7)}
+.ax .axl{color:var(--blue);font-weight:600;font-size:14.5px;margin-top:18px;align-self:center;padding:6px}
+.ax.lock{align-items:center;justify-content:center;text-align:center;background:linear-gradient(180deg,#0D4DC7,#0A3BA0);color:#fff}
+.ax.lock h1{color:#fff;margin:22px 0 6px}.ax.lock .sub{color:rgba(255,255,255,.8)}
+.ax.lock .fp{width:96px;height:96px;border-radius:50%;background:rgba(255,255,255,.14);display:grid;place-items:center;color:#fff;animation:fpp 2s ease-in-out infinite}
+.ax.lock .fp svg{width:46px;height:46px}
+.ax.lock .btn.axb{background:#fff;color:var(--blue);max-width:320px;box-shadow:none}.ax.lock .axl{color:#fff;opacity:.9}
+@keyframes fpp{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.35)}50%{box-shadow:0 0 0 18px rgba(255,255,255,0)}}
+@media (prefers-reduced-motion:reduce){.ax.lock .fp{animation:none}}
+.cfm-b .ok{background:var(--blue);color:#fff}
 </style>
 </head>
 <body>
@@ -455,7 +479,7 @@ const escBanner=()=>{const e=lastEsc(S.id),ic=I('alertc','style="width:15px;heig
   if(e)return `${ic}<span class="grow">Returned from Admin: "${esc(e.adminFeedback||'Resolved')}"</span><button data-go="forward">Escalate</button>`;
   return `${ic}<span class="grow">Need an admin to step in on this chat?</span><button data-go="forward">Escalate</button>`};
 const home=()=>S.portal==='chat'?'chats':'dash';
-async function enter(){const me=await loadMe();if(!me)return go('role');if(me.status!=='approved')return go('pending');await refresh();
+async function enter(){const me=await loadMe();if(!me)return go('role');if(me.needsPin)return go('setpin');if(me.status!=='approved')return go('pending');await refresh();
   pushState().then(()=>{if(S.route==='dash'||S.route==='chats')render()});const h=location.hash.slice(1);go(V[h]&&LIVE.includes(h)&&(h==='chats')===(S.portal==='chat')?h:home())}
 function compress(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onerror=rej;fr.onload=e=>{const img=new Image();img.onerror=rej;img.onload=()=>{
   const c=document.createElement('canvas'),k=Math.min(1,1000/img.width);c.width=img.width*k;c.height=img.height*k;
@@ -471,6 +495,7 @@ const hd=(t,s,b,r,cls)=>`<header class="hd ${cls||''}">${b?`<button class="bk" d
 const av=(n,cls)=>`<span class="av ${cls||''}">${esc(ini(n))}</span>`;
 const search=ph=>`<div class="field srch">${I('search','style="width:17px;height:17px"')}<input id="q" placeholder="${ph}" aria-label="${ph}" autocomplete="off"></div>`;
 const gfield=(id,l,ph,type,ac)=>`<label class="gl" for="${id}">${l}</label><div class="field glass"><input id="${id}" type="${type||'text'}" placeholder="${ph}" autocomplete="${ac||'off'}"></div>`;
+const gpin=(id,l,ac)=>`<label class="gl" for="${id}">${l}</label><div class="field glass"><input class="pin" id="${id}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="${ac}"></div>`;
 const gpw=(id,l,ph,ac)=>`<label class="gl" for="${id}">${l}</label><div class="field glass"><input id="${id}" type="password" placeholder="${ph}" autocomplete="${ac}"><button type="button" data-act="show" data-for="${id}" style="font-size:12px;font-weight:700;opacity:.8">SHOW</button></div>`;
 const logo=sm=>`<div class="logo-dot" style="width:${sm?64:80}px;height:${sm?64:80}px;margin-top:${sm?30:60}px">${I('swap',`style="width:${sm?26:32}px;height:${sm?26:32}px;stroke-width:2"`)}</div><div class="wordmark" style="font-size:${sm?24:30}px;margin-top:${sm?12:20}px">AZAPLUG</div>`;
 const acctForm=edit=>{const f=S.form,img=safeImg(f.imageData);return `<form data-form="account" novalidate><div class="g2">
@@ -502,8 +527,8 @@ role:()=>`<section class="screen blue">${logo()}
 login:()=>`<section class="screen blue">${logo()}
   <span class="pill-w">STAFF PORTAL · ${S.portal==='chat'?'CHAT MANAGER':'VENDOR'}</span>
   <div style="height:130px"></div>
-  <form data-form="login" novalidate>${gfield('lg-id','Phone Number','e.g. 0801 234 5678','tel','username')}${gpw('lg-pw','Password','Enter security key','current-password')}
-  <p style="text-align:right;margin:22px 0 30px"><button type="button" data-act="soon" style="font-size:14px">Reset Security PIN?</button></p>
+  <form data-form="login" novalidate>${gfield('lg-id','Phone Number','e.g. 0801 234 5678','tel','username')}${S.oldpw?gpw('lg-pw','Old Password','Enter your old password','current-password'):gpin('lg-pw','6-digit PIN','current-password')}
+  <p class="between" style="margin:18px 0 28px;font-size:14px"><button type="button" data-ax="oldpw">${S.oldpw?'Use my PIN':'I still use my old password'}</button><button type="button" data-go="forgot">Forgot PIN?</button></p>
   <button class="btn white" style="font-size:16px">Access Staff Panel</button></form>
   <p style="text-align:center;font-size:14px;margin-top:22px">New staff? <button data-go="signup" style="font-weight:700;text-decoration:underline">Sign Up</button> · <button data-go="role" style="opacity:.85">Change role</button></p>
   <div class="grow" style="min-height:40px"></div>
@@ -513,7 +538,7 @@ signup:()=>`<section class="screen blue">${logo(1)}
   <h1 style="text-align:center;font-size:24px;font-weight:800;margin-top:26px">Staff Sign Up</h1><p style="text-align:center;opacity:.75;font-size:14px;margin-top:4px">Create your employee account</p>
   <form data-form="signup" novalidate>${gfield('su-n','Full Name','John Doe','text','name')}${gfield('su-p','Phone Number','+234 800 000 0000','tel','username')}
   <label class="gl" for="su-d">Department</label><div class="field glass"><select id="su-d"><option value="vendor" ${S.portal==='vendor'?'selected':''}>Vendor</option><option value="chat" ${S.portal==='chat'?'selected':''}>Chat Manager</option></select>${I('cd')}</div>
-  ${gpw('su-pw','Password','Create a password','new-password')}${gpw('su-pw2','Confirm Password','Repeat your password','new-password')}
+  ${AX.cfg.pin?gfield('su-e','Email Address','you@example.com','email','email'):''}${gpin('su-pw','Create a 6-digit PIN','new-password')}${gpin('su-pw2','Type the PIN again','new-password')}
   <button class="btn white" style="font-size:16px;margin-top:24px">Create Account</button></form>
   <p style="text-align:center;font-size:14px;margin-top:20px">Already have an account? <button data-go="login" style="font-weight:700;text-decoration:underline">Sign In</button></p></section>`,
 
@@ -599,6 +624,16 @@ chat:()=>{const u=S.chatUser||(S.convos.find(c=>c.userId===S.id)||{name:'Custome
   <form class="composer" data-form="chat"><label class="rb" aria-label="Attach photo" style="cursor:pointer">${I('clip')}<input id="c-file" type="file" accept="image/*" hidden></label>
    <span class="inp"><input id="c-in" placeholder="Type a message..." aria-label="Message" autocomplete="off"></span><button type="button" class="rb mic" data-vn="recStart" aria-label="Record voice note">${I('mic')}</button><button class="rb send tx" aria-label="Send message">${I('send')}</button></form></section>`},
 
+routeRc:()=>{const m=S.chat.find(x=>x.id===(S.rt||{}).mid)||{},list=S.rtAccts,rt=S.rt||{};
+ return `<section class="scr">${hd('Send Receipt','Choose the account the customer paid into','chat',`<button class="fbtn" data-go="chat">Cancel</button>`,'bluef')}
+ <div class="bd" style="padding-left:0;padding-right:0"><div style="padding:0 20px">
+  ${safeImg(m.imageData)?`<img src="${safeImg(m.imageData)}" alt="Receipt from the customer" style="width:100%;max-height:200px;object-fit:contain;background:#fff;border-radius:12px;border:1px solid var(--line)">`:''}
+  <p class="muted" style="font-size:12.5px;margin:8px 0 0">The staff who owns the account gets this receipt to verify. They will not see the customer's name or number.</p>
+  <label class="cl" for="rt-a">Amount on the receipt</label><input class="in" id="rt-a" inputmode="decimal" placeholder="e.g. 500" value="${esc(rt.amount||'')}">
+  <div class="between" style="margin:16px 0 8px"><span class="cl" style="margin:0;color:var(--muted)">Accounts</span><small style="color:var(--blue);font-weight:600">${list?list.length+' available':''}</small></div></div>
+  <div id="list" role="radiogroup" aria-label="Accounts">${!list?'<p class="empty">Loading…</p>':list.length?list.map(a=>`<button class="rcp ${rt.accountId===a.id?'on':''}" role="radio" aria-checked="${rt.accountId===a.id}" data-act="pickAcct" data-id="${esc(a.id)}">${av(a.title,rt.accountId===a.id?'solid':'')}<span class="grow" style="min-width:0"><b>${esc(a.title)} · ${esc(a.bankName)}</b><small>${esc(a.accountNumber)} · Staff: ${esc(a.staffName)}</small></span><i class="radio"></i></button>`).join(''):'<p class="empty">No verified accounts yet</p>'}</div>
+  <div style="padding:6px 20px 0"><form data-form="routeRc" novalidate><button class="b blue" style="height:48px">Send Receipt to Staff ${I('send','style="width:15px;height:15px"')}</button></form></div></div></section>`},
+
 forwardMsg:()=>{const m=S.chat.find(x=>x.id===S.fwd.mid)||{},u=S.chatUser||{name:'Customer'},list=S.recips;
  return `<section class="scr">${hd('Forward Message','Select recipient below','chat',`<button class="fbtn" data-go="chat">Cancel</button>`,'bluef')}
  <div class="bd" style="padding-left:0;padding-right:0"><div style="padding:0 20px"><div class="cl" style="margin-top:0;color:var(--muted)">Message preview</div>
@@ -616,9 +651,10 @@ forward:()=>{const u=S.chatUser||{name:'Customer'},e=lastEsc(S.id);return `<sect
   ${e&&e.status==='open'?`<p class="hint">This chat is already with the admin (sent ${ago(e.createdAt)}). You can forward it again after they reply.</p>`:e&&e.adminFeedback?`<div class="afb"><b>${I('checkc','style="width:15px;height:15px"')}ADMIN FEEDBACK</b><p>"${esc(e.adminFeedback)}"</p><small>${ago(e.updatedAt)}</small></div>`:''}
   <button class="b green" style="height:50px;border-radius:999px;margin-top:22px">Forward Chat</button></form><button class="b ghost" style="height:50px;border-radius:999px;border:1.5px solid var(--slate)" data-go="chat">Cancel</button></div></section>`}
 };
+const RTS={checking:'Checking',seen:'Seen',confirmed:'Confirmed',approved:'Approved',failed:'Failed'};
 function msgsHtml(){if(!S.chat.length)return '<p class="empty">No messages yet</p>';let day='';
   return S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender!=='user';const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(m.createdAt)}<button class="fw" data-act="fwdMsg" data-id="${esc(m.id)}" aria-label="Forward this message">${I('fwd','style="width:13px;height:13px"')}Forward</button></time></div>`}).join('')}
+    return `${head}<div class="msg ${mine?'out':'in'}">${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>${m.sender==='user'&&S.portal==='chat'?((S.routed||{})[m.id]?`<span class="rtd">${I('checkc','style="width:13px;height:13px"')}Sent to ${esc(S.routed[m.id].title)} · ${esc(RTS[S.routed[m.id].status]||S.routed[m.id].status)}</span><br>`:`<button class="svp" data-act="routeOpen" data-id="${esc(m.id)}">${I('send','style="width:13px;height:13px"')}Send receipt to an account</button><br>`):''}`:''}${voiceHtml(m)}${esc(m.text||'').replace(/\n/g,'<br>')}<time>${ft(m.createdAt)}<button class="fw" data-act="fwdMsg" data-id="${esc(m.id)}" aria-label="Forward this message">${I('fwd','style="width:13px;height:13px"')}Forward</button>${mdBtn(m)}</time></div>`}).join('')}
 
 /* ---------- Render + navigation ---------- */
 function savePic(src,name){src=safeImg(src);if(!src)return toast('No picture to save');
@@ -662,7 +698,7 @@ function liveRefresh(){const r=S.route;if(!LIVE.includes(r)||typing())return;ref
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')liveRefresh()});
 if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{const d=e.data||{};if(!(S.me&&S.me.status==='approved'))return;if(d.go&&V[d.go]&&LIVE.includes(d.go))return go(d.go);if(d.refresh)liveRefresh()});
 /* ---------- Back gesture: each screen is a history entry, so swiping back returns to the previous screen ---------- */
-const NAV={stack:[],keys:['id','form','done','rcTab','chatTab','fwd'],roots:['loading','role','pending','dash','chats']};
+const NAV={stack:[],keys:['id','form','done','rcTab','chatTab','fwd','rt'],roots:['loading','role','pending','dash','chats']};
 function navPush(r){const snap={r,c:{}};NAV.keys.forEach(k=>snap.c[k]=S[k]);const st=NAV.stack;
   if(NAV.roots.includes(r)||!st.length){NAV.stack=[snap];try{history.replaceState({n:0},'')}catch(e){}}
   else if(st[st.length-1].r===r)st[st.length-1]=snap;
@@ -741,6 +777,23 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-vn]');if(!
 const vnSync=()=>{const i=$('#c-in');if(i)i.closest('.composer').classList.toggle('typing',!!i.value.trim())};
 document.addEventListener('input',e=>{if(e.target.id==='c-in')vnSync()});
 document.addEventListener('submit',()=>setTimeout(vnSync,0),true);
+/* ---------- Auto-update: when a new version is deployed, the app reloads itself the next time it is opened ---------- */
+const sig=a=>(a||[]).map(m=>m.id).join();
+let BUILD_V=null;
+function checkVersion(){fetch('/api/version',{cache:'no-store'}).then(r=>r.json()).then(d=>{if(!d||!d.v)return;if(BUILD_V===null){BUILD_V=d.v;return}
+  if(d.v!==BUILD_V&&!VN.rec&&!(document.activeElement&&document.activeElement.matches('input,textarea,select')))location.reload()}).catch(()=>{})}
+checkVersion();document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkVersion()});setInterval(checkVersion,300000);
+/* ---------- Deleting a chat message ---------- */
+const MD_URL=id=>'/api/staff/chats/'+encodeURIComponent(S.id)+'/messages/'+encodeURIComponent(id);
+const mdBtn=m=>`<button type="button" class="md" data-md="${esc(m.id)}" aria-label="Delete this message">${I('trash')}</button>`;
+function uiConfirm(title,text,ok){return new Promise(res=>{const d=document.createElement('div');d.className='cfm';
+  d.innerHTML=`<div class="cfm-b" role="alertdialog" aria-modal="true" aria-label="${esc(title)}"><b>${esc(title)}</b><p>${esc(text)}</p><div><button type="button" data-k="0">Cancel</button><button type="button" data-k="1" class="dg">${esc(ok)}</button></div></div>`;
+  d.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(!b&&e.target!==d)return;d.remove();res(!!b&&b.dataset.k==='1')});document.body.appendChild(d)})}
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-md]');if(!b)return;const id=b.dataset.md;
+  if(!await uiConfirm('Delete this message?','It will be removed from the chat for everyone.','Delete'))return;
+  try{await api('DELETE',MD_URL(id));if(String(VN.id)===id)vnStop();S.chat=S.chat.filter(m=>String(m.id)!==id);
+    const box=$('#msgs');if(box&&S.route==='chat'){const y=box.scrollTop;box.innerHTML=msgsHtml();vnPaint();box.scrollTop=y}toast('Message deleted')}
+  catch(err){toast(err.message||'Could not delete the message')}});
 let poll=null;
 const typing=()=>document.activeElement&&document.activeElement.matches('input,textarea,select');
 function render(){$('#app').innerHTML=V[S.route]();if(S.route==='chat')chatBottom()}
@@ -750,7 +803,8 @@ function go(r,o,pop){
   const from=S.route;Object.assign(S,o||{});S.route=r;if(!pop)navPush(r);render();if(r!=='chat')window.scrollTo(0,0);
   clearInterval(poll);poll=null;
   if(r==='forwardMsg'){api('GET','/api/staff/recipients').then(d=>{S.recips=d.recipients||[];if(S.route==='forwardMsg'&&!typing())render()}).catch(e=>{S.recips=[];toast(e.message);if(S.route==='forwardMsg')render()});return}
-  if(r==='chat'){if(from!=='forward'&&from!=='forwardMsg'&&!(pop&&S.chatUser)){S.chat=[];S.chatUser=null}const pull=()=>{loadEscs().then(()=>{const b=$('#escb');if(b&&S.route==='chat')b.innerHTML=escBanner()});return api('GET','/api/staff/chats/'+encodeURIComponent(S.id)).then(d=>{const first=!S.chatUser,n=(d.messages||[]).length!==S.chat.length;S.chatUser=d.user||S.chatUser;S.chat=d.messages||[];
+  if(r==='routeRc'){api('GET','/api/staff/route-accounts').then(d=>{S.rtAccts=d.accounts||[];if(S.route==='routeRc'&&!typing())render()}).catch(e=>{S.rtAccts=[];toast(e.message);if(S.route==='routeRc')render()});return}
+  if(r==='chat'){if(from!=='forward'&&from!=='forwardMsg'&&from!=='routeRc'&&!(pop&&S.chatUser)){S.chat=[];S.chatUser=null}const pull=()=>{loadEscs().then(()=>{const b=$('#escb');if(b&&S.route==='chat')b.innerHTML=escBanner()});return api('GET','/api/staff/chats/'+encodeURIComponent(S.id)).then(d=>{const first=!S.chatUser,n=sig(d.messages)!==sig(S.chat)||JSON.stringify(d.routed||{})!==JSON.stringify(S.routed||{});S.chatUser=d.user||S.chatUser;S.chat=d.messages||[];S.routed=d.routed||{};
       if(S.route!=='chat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{})};pull();poll=setInterval(pull,5000);return}
   if(['dash','receipts','acctAll','chats'].includes(r))refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{});
 }
@@ -759,10 +813,12 @@ async function reload(r,o){await refresh();go(r||S.route,o)}
 /* ---------- Actions ---------- */
 const ACT={
   soon(){toast('Coming soon')},
+  routeOpen(el,id){S.rt={mid:id,accountId:'',amount:''};S.rtAccts=null;go('routeRc')},
+  pickAcct(el,id){S.rt.amount=val('rt-a');S.rt.accountId=id;render()},
   pick(el){S.portal=el.dataset.portal;store.set('az_portal',S.portal);go('login')},
   show(el){const i=$('#'+el.dataset.for),sh=i.type==='password';i.type=sh?'text':'password';el.textContent=sh?'HIDE':'SHOW'},
   loop(el){S.loop=!S.loop;el.classList.toggle('on',S.loop);el.setAttribute('aria-checked',S.loop)},
-  async logout(){try{await pushDetach()}catch(e){}try{await api('POST','/api/staff/logout')}catch(e){}S.me=null;go('role')},
+  async logout(){try{await pushDetach()}catch(e){}try{await api('POST','/api/staff/logout')}catch(e){}S.me=null;go(lsGet(BIO.key)?'lock':'role')},
   async alertsOn(){try{await pushOn();toast('Alerts turned on')}catch(e){toast(e.message||'Could not turn on alerts')}render()},
   savePic(el,id){const k=el.dataset.kind,t=S.trades.find(x=>x.id===id)||{};savePic(k==='chat'?(S.chat.find(m=>m.id===id)||{}).imageData:k==='fail'?t.failImage:t.receiptImage,k==='chat'?'azaplug-chat-photo':'azaplug-receipt-'+String(id).slice(0,8))},
   async recheck(){await enter();if(S.route==='pending')toast('Not approved yet')},
@@ -794,15 +850,15 @@ document.addEventListener('change',async e=>{const t=e.target;
 });
 const val=id=>$('#'+id).value.trim();
 const FORMS={
-  async login(){const phone=val('lg-id'),password=$('#lg-pw').value;if(!phone||!password)throw new Error('Enter your phone number and password');await api('POST','/api/staff/login',{phone,password});await enter()},
-  async signup(){const b={name:val('su-n'),phone:val('su-p'),password:$('#su-pw').value};if(Object.values(b).some(v=>!v))throw new Error('Fill in every field');
-    if(b.password.length<6)throw new Error('Password must be at least 6 characters');if(b.password!==$('#su-pw2').value)throw new Error('Passwords do not match');
-    S.portal=$('#su-d').value==='chat'?'chat':'vendor';store.set('az_portal',S.portal);await api('POST','/api/staff/register',b);await enter()},
+  async login(){const phone=val('lg-id'),password=$('#lg-pw').value;if(!phone||!password)throw new Error(S.oldpw?'Enter your phone number and password':'Enter your phone number and PIN');await api('POST','/api/staff/login',{phone,password});S.oldpw=false;await enter();bioOffer()},
+  async signup(){S.portal=$('#su-d').value==='chat'?'chat':'vendor';store.set('az_portal',S.portal);await axSignup({name:val('su-n'),phone:val('su-p'),email:AX.cfg.pin?val('su-e').toLowerCase():'',password:$('#su-pw').value},$('#su-pw2').value)},
   async account(){const b={title:val('f-title'),bankName:val('f-bank'),accountNumber:val('f-num'),minAmount:num(val('f-min')),maxAmount:num(val('f-max')),imageData:S.form.imageData||null};
     if(!b.title||!b.bankName||!b.accountNumber)throw new Error('Country, bank name and account number are required');
     if(S.form.id){await api('PUT','/api/staff/accounts/'+S.form.id,b);toast('Account saved');S.form=null;await reload('acctAll')}
     else{const d=await api('POST','/api/staff/accounts',b);S.form=null;await refresh();go('acctDone',{done:d.account||b})}},
   async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';const d=await api('POST','/api/staff/chats/'+encodeURIComponent(S.id)+'/send',{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();chatBottom();i.focus()},
+  async routeRc(){const rt=S.rt||{},amount=num(val('rt-a'));if(!rt.accountId)throw new Error('Choose the account the customer paid into');if(!amount)throw new Error('Enter the amount on the receipt');
+    await api('POST','/api/staff/chats/'+encodeURIComponent(S.id)+'/route',{messageId:rt.mid,accountId:rt.accountId,amount});toast('Receipt sent to the account staff');S.rt=null;go('chat')},
   async forward(){const reason=val('fw-r');if(!reason)throw new Error('Enter the reason for forwarding');await api('POST','/api/staff/chats/'+encodeURIComponent(S.id)+'/escalate',{reason});await loadEscs();toast('Sent to admin. It is now in their Admin Console.');go('chat')},
   async forwardMsg(){if(!S.fwd.to)throw new Error('Select a recipient first');const r=S.recips.find(x=>x.id===S.fwd.to);throw new Error('Forwarding to '+r.name+' is not connected yet')}
 };
@@ -813,7 +869,89 @@ document.addEventListener('submit',async e=>{
   finally{delete f.dataset.busy;if(b&&b.isConnected){b.disabled=false;b.innerHTML=label}}
 });
 render();
-enter().catch(()=>go('role'));
+/* ---------- Fingerprint / Face ID login ----------
+   The phone keeps a passkey; the server checks it. localStorage only remembers which passkey belongs to this phone. */
+const BIO={kind:'staff',key:'az_bio_staff',busy:false,away:0};
+const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}},lsSet=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}};
+const bu={enc:b=>btoa(String.fromCharCode.apply(null,new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''),dec:s=>Uint8Array.from(atob(String(s).replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0))};
+const bioCan=async()=>{try{return !!(window.PublicKeyCredential&&navigator.credentials&&await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable())}catch(e){return false}};
+const FPI='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 16h.01"/><path d="M21.8 16c.2-2 .131-5.354 0-6"/><path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/><path d="M8.65 22c.21-.66.45-1.32.57-2"/><path d="M9 6.8a6 6 0 0 1 9 5.2v2"/></svg>';
+function uiChoice(title,text,ok,no){return new Promise(res=>{const d=document.createElement('div');d.className='cfm';
+  d.innerHTML=`<div class="cfm-b" role="alertdialog" aria-modal="true" aria-label="${esc(title)}"><b>${esc(title)}</b><p>${esc(text)}</p><div><button type="button" data-k="0">${esc(no)}</button><button type="button" data-k="1" class="ok">${esc(ok)}</button></div></div>`;
+  d.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(!b)return;d.remove();res(b.dataset.k==='1')});document.body.appendChild(d)})}
+async function bioRegister(){const o=await api('POST','/api/passkey/register/options',{kind:BIO.kind});
+  o.challenge=bu.dec(o.challenge);o.user.id=bu.dec(o.user.id);(o.excludeCredentials||[]).forEach(c=>c.id=bu.dec(c.id));
+  const c=await navigator.credentials.create({publicKey:o}),r=c.response;
+  const d=await api('POST','/api/passkey/register/verify',{kind:BIO.kind,response:{id:c.id,rawId:bu.enc(c.rawId),type:c.type,response:{clientDataJSON:bu.enc(r.clientDataJSON),attestationObject:bu.enc(r.attestationObject),transports:r.getTransports?r.getTransports():[]},clientExtensionResults:c.getClientExtensionResults(),authenticatorAttachment:c.authenticatorAttachment||undefined}});
+  lsSet(BIO.key,d.id);lsSet(BIO.key+'_no',null)}
+// After a PIN/password login: offer fingerprint once on phones that have it.
+async function bioOffer(){if(lsGet(BIO.key)||lsGet(BIO.key+'_no')||!(await bioCan()))return;
+  if(!await uiChoice('Use fingerprint or Face ID next time?','Open AZAPLUG on this phone with your fingerprint or face instead of typing.','Turn on','Not now')){lsSet(BIO.key+'_no','1');return}
+  try{await bioRegister();toast('Fingerprint login is on for this phone')}catch(e){if(e&&e.name!=='NotAllowedError'&&e.name!=='AbortError')toast(e.message&&!e.name?e.message:'Could not turn on fingerprint login on this phone')}}
+async function bioLogin(){const id=lsGet(BIO.key);if(!id)throw new Error('Fingerprint login is not set up on this phone');
+  let o;try{o=await api('POST','/api/passkey/login/options',{kind:BIO.kind,id})}catch(e){if(/no longer/i.test(e.message||''))lsSet(BIO.key,null);throw e}
+  o.challenge=bu.dec(o.challenge);(o.allowCredentials||[]).forEach(c=>c.id=bu.dec(c.id));
+  const c=await navigator.credentials.get({publicKey:o}),r=c.response;
+  await api('POST','/api/passkey/login/verify',{kind:BIO.kind,response:{id:c.id,rawId:bu.enc(c.rawId),type:c.type,response:{clientDataJSON:bu.enc(r.clientDataJSON),authenticatorData:bu.enc(r.authenticatorData),signature:bu.enc(r.signature),userHandle:r.userHandle?bu.enc(r.userHandle):undefined},clientExtensionResults:c.getClientExtensionResults()}})}
+async function bioUnlock(auto){if(BIO.busy)return;BIO.busy=true;
+  try{await bioLogin();BIO.busy=false;await bioEnter()}
+  catch(e){BIO.busy=false;if(!lsGet(BIO.key)){toast('Fingerprint login was removed. Sign in again.');return go(BIO.login)}
+    if(!auto&&e&&e.name!=='NotAllowedError'&&e.name!=='AbortError')toast(e.message||'Fingerprint login did not work. Use your PIN.')}}
+V.lock=()=>`<section class="ax lock"><span class="fp">${FPI}</span><h1>Welcome back</h1><p class="sub">Unlock AZAPLUG with your fingerprint or Face ID</p>
+  <button type="button" class="btn axb" data-ax="unlock">Unlock</button><button type="button" class="axl" data-ax="usePin">Use PIN instead</button></section>`;
+NAV.roots.push('lock');
+document.addEventListener('click',e=>{const b=e.target.closest('[data-ax]');if(!b)return;const k=b.dataset.ax;
+  if(k==='unlock')bioUnlock(false);else if(k==='usePin')go(BIO.login);else if(AXA[k])AXA[k](b)});
+const AXA={};
+// Coming back after 5 minutes away locks the app again.
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){BIO.away=Date.now();return}
+  if(BIO.away&&Date.now()-BIO.away>300000&&lsGet(BIO.key)&&!BIO.open.includes(S.route)&&!VN.rec){go('lock');bioUnlock(true)}});
+BIO.login='login';BIO.open=['loading','role','login','signup','verify','setpin','forgot','reset','lock','pending'];
+const bioEnter=()=>enter();
+/* ---------- 6-digit PIN, email code, forgot PIN ---------- */
+const AX={role:'staff',cfg:{pin:true,email:true}};
+api('GET','/api/auth/config').then(c=>{AX.cfg=c;if(S.route==='signup'&&!(document.activeElement&&document.activeElement.matches('input,select')))render()}).catch(()=>{});
+const pinOk=(a,b)=>{if(!/^\d{6}$/.test(a))throw new Error('Your PIN must be exactly 6 digits');if(/^(\d)\1{5}$/.test(a)||'0123456789012345'.includes(a)||'9876543210987654'.includes(a))throw new Error('That PIN is too easy to guess. Choose another one');if(b!==undefined&&a!==b)throw new Error('The two PINs do not match')};
+const axIn=(id,label,attrs)=>`<label for="${id}">${label}</label><input class="axi" id="${id}" ${attrs}>`;
+const axPin=(id,label,ac)=>`<label for="${id}">${label}</label><input class="axi pin" id="${id}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="${ac}">`;
+const axTop=back=>`<button type="button" class="bk2" data-go="${back}" aria-label="Back">${I('al')}</button>`;
+Object.assign(V,{
+ verify:()=>{const v=S.vf||{};return `<section class="ax">${axTop(v.mode==='setup'?'setpin':'signup')}<h1>Check your email</h1><p class="sub">We sent a 6-digit code to <b>${esc(v.shown||'your email')}</b>. It works for 10 minutes. Check your spam folder too.</p>
+  <form data-form="verify" novalidate><label for="vf-c">Verification code</label><input class="axi pin" id="vf-c" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="one-time-code">
+  <button class="btn axb">${v.mode==='setup'?'Verify and Save PIN':'Verify and Create Account'}</button></form><button type="button" class="axl" data-ax="resend">Send the code again</button></section>`},
+ setpin:()=>`<section class="ax"><span></span><h1>Create your 6-digit PIN</h1><p class="sub">AZAPLUG now uses a 6-digit PIN instead of a password. Add your email too, so you can get back in if you ever forget your PIN.</p>
+  <form data-form="setpin" novalidate>${axIn('sp-e','Email address','type="email" inputmode="email" placeholder="you@example.com" autocomplete="email" value="'+esc((S.sp||{}).email||'')+'"')}${axPin('sp-p','New 6-digit PIN','new-password')}${axPin('sp-p2','Type the PIN again','new-password')}
+  <button class="btn axb">Continue</button></form><button type="button" class="axl" data-ax="logout">Log out</button></section>`,
+ forgot:()=>`<section class="ax">${axTop('login')}<h1>Forgot your PIN?</h1><p class="sub">Enter the phone number on your account. We will email a code to the address you signed up with.</p>
+  <form data-form="forgot" novalidate>${axIn('fg-p','Phone number','type="tel" placeholder="0801 234 5678" autocomplete="username"')}<button class="btn axb">Send Code</button></form></section>`,
+ reset:()=>{const v=S.vf||{};return `<section class="ax">${axTop('forgot')}<h1>Choose a new PIN</h1><p class="sub">We sent a 6-digit code to <b>${esc(v.shown||'your email')}</b>. Enter it below with your new PIN.</p>
+  <form data-form="reset" novalidate><label for="rs-c">Code from the email</label><input class="axi pin" id="rs-c" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="one-time-code">
+  ${axPin('rs-p','New 6-digit PIN','new-password')}${axPin('rs-p2','Type the PIN again','new-password')}<button class="btn axb">Save New PIN</button></form></section>`}
+});
+async function axRegister(b,code){await api('POST','/api/staff/register',Object.assign({},b,code?{code}:{}));S.vf=null;await enter();bioOffer()}
+// Sign-up: collect the form, email a code (when email is set up), then create the account.
+async function axSignup(b,pin2){if(Object.keys(b).some(k=>k!=='email'&&!b[k]))throw new Error('Fill in every field');
+  if(AX.cfg.pin&&!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(b.email||''))throw new Error('Enter a valid email address');
+  pinOk(b.password,pin2);
+  const d=await api('POST','/api/auth/signup-code',{role:AX.role,email:b.email,phone:b.phone,password:b.password});
+  if(d.skip)return axRegister(b);
+  S.vf={mode:'signup',data:b,shown:d.email};go('verify')}
+Object.assign(FORMS,{
+ async verify(){const v=S.vf||{},code=val('vf-c');if(!/^\d{6}$/.test(code))throw new Error('Enter the 6-digit code from your email');
+  if(v.mode==='setup'){await api('POST','/api/auth/setup',Object.assign({role:AX.role,code},v.data));S.vf=null;toast('Your PIN is saved');await enter();bioOffer()}else await axRegister(v.data,code)},
+ async setpin(){const email=val('sp-e').toLowerCase(),pin=$('#sp-p').value;S.sp={email};if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))throw new Error('Enter a valid email address');pinOk(pin,$('#sp-p2').value);
+  const d=await api('POST','/api/auth/setup-code',{role:AX.role,email});
+  if(d.skip){await api('POST','/api/auth/setup',{role:AX.role,email,pin});toast('Your PIN is saved');await enter();bioOffer();return}
+  S.vf={mode:'setup',data:{email,pin},shown:d.email};go('verify')},
+ async forgot(){const phone=val('fg-p');if(!phone)throw new Error('Enter your phone number');const d=await api('POST','/api/auth/forgot',{role:AX.role,phone});S.vf={mode:'reset',phone,shown:d.email};go('reset')},
+ async reset(){const v=S.vf||{},code=val('rs-c'),pin=$('#rs-p').value;if(!/^\d{6}$/.test(code))throw new Error('Enter the 6-digit code from your email');pinOk(pin,$('#rs-p2').value);
+  await api('POST','/api/auth/reset',{role:AX.role,phone:v.phone,code,pin});S.vf=null;toast('Your new PIN is saved');await enter();bioOffer()}
+});
+AXA.resend=async()=>{const v=S.vf||{};try{const d=v.mode==='setup'?await api('POST','/api/auth/setup-code',{role:AX.role,email:v.data.email}):await api('POST','/api/auth/signup-code',{role:AX.role,email:v.data.email,phone:v.data.phone});toast(d.wait?'We just sent one. Wait a minute before asking again':'We sent a new code')}catch(e){toast(e.message)}};
+AXA.logout=async()=>{try{await api('POST','/api/staff/logout')}catch(e){}S.me=null;go(BIO.login)};
+AXA.oldpw=()=>{S.oldpw=!S.oldpw;render()};
+document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.contains('pin'))e.target.value=e.target.value.replace(/\D/g,'').slice(0,6)});
+if(lsGet(BIO.key)){go('lock');bioUnlock(true)}else enter().catch(()=>go('role'));
 </script>
 </body>
 </html>
