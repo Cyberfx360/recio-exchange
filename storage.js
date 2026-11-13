@@ -22,7 +22,7 @@ function userRow(r) {
   return {
     id: r.id, name: r.name, phone: r.phone,
     accountNumber: r.account_number, bankName: r.bank_name,
-    passwordHash: r.password_hash, status: r.status, email: r.email || null,
+    passwordHash: r.password_hash, status: r.status, email: r.email == null ? null : r.email,
     balance: Number(r.balance), createdAt: r.created_at
   };
 }
@@ -31,7 +31,7 @@ async function createUser({ name, phone, accountNumber, bankName, passwordHash, 
   const id = uid();
   const { error } = await supabase.from('users').insert({
     id, name, phone, account_number: accountNumber, bank_name: bankName,
-    password_hash: passwordHash, status: 'approved', balance: 0, ...(email ? { email } : {})
+    password_hash: passwordHash, status: 'approved', balance: 0, ...(email !== undefined ? { email } : {})
   });
   if (error) throw error;
   return findUserById(id);
@@ -94,11 +94,11 @@ async function addToBalance(id, amount) {
 // ============================================================
 
 function staffRow(r) {
-  return { id: r.id, name: r.name, phone: r.phone, passwordHash: r.password_hash, status: r.status, email: r.email || null, createdAt: r.created_at };
+  return { id: r.id, name: r.name, phone: r.phone, passwordHash: r.password_hash, status: r.status, email: r.email == null ? null : r.email, createdAt: r.created_at };
 }
 async function createStaff({ name, phone, passwordHash, email }) {
   const id = uid();
-  const { error } = await supabase.from('staff').insert({ id, name, phone, password_hash: passwordHash, status: 'pending', ...(email ? { email } : {}) });
+  const { error } = await supabase.from('staff').insert({ id, name, phone, password_hash: passwordHash, status: 'pending', ...(email !== undefined ? { email } : {}) });
   if (error) throw error;
   return findStaffById(id);
 }
