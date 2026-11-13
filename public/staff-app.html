@@ -1054,17 +1054,19 @@ function insShow(){if(!(insAndroid||insIOS)||insStandalone()||insSkipped()||docu
 setTimeout(()=>{if(!INS.ev)insShow()},5000);
 /* ---------- Alerts must be on before the dashboard (Staff and Admin) ----------
    Only a browser that cannot do push at all is let through. */
-const gateNeeded=()=>PUSH==='install'||PUSH==='denied'||(PUSH==='off'&&!(PUSH_OK&&Notification.permission==='granted'));
-async function gateGo(dest){await Promise.race([pushState(),new Promise(r=>setTimeout(r,2500))]).catch(()=>{});S.after=dest;go(gateNeeded()?'alertGate':dest)}
-V.alertGate=()=>{const den=PUSH==='denied',inst=PUSH==='install';return `<section class="ax gate"><div style="flex:1"></div><span class="gbell">${I('bell')}</span>
-  <h1>${den?'Alerts are blocked':'Turn on alerts'}</h1><p class="sub">${den?'Alerts are switched off for AZAPLUG on this device. You need them to work.':'You need alerts on to work, so you never miss '+(S.portal==='chat'?'a customer message':'a new receipt')+'.'}</p>
-  ${inst?'<ol><li>Tap the <b>Share</b> button in Safari.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Open the app from your Home Screen and log in.</li><li>Tap <b>Turn on alerts</b>.</li></ol>':den?'<ol><li>Open your phone or browser <b>Settings</b>.</li><li>Find <b>Notifications</b> (or Site settings) and choose AZAPLUG.</li><li>Switch notifications to <b>Allow</b>.</li><li>Come back and tap <b>Check again</b>.</li></ol>':''}
-  <div style="flex:1"></div>${inst?'':`<button type="button" class="btn axb" data-ax="${den?'gateCheck':'gateAllow'}">${den?'Check again':'Turn on alerts'}</button>`}<button type="button" class="axl" data-ax="gateOut">Log out</button></section>`};
+const gateNeeded=()=>PUSH!=='on';   // alerts must really be on (saved on our server)
+async function pushRetry(){for(let i=0;i<3;i++){try{await Promise.race([pushOn(),new Promise((_,rej)=>setTimeout(()=>rej(new Error('slow')),9000))]);return true}catch(e){if(PUSH==='denied')return false;await new Promise(r=>setTimeout(r,1200))}}return false}
+async function gateGo(dest){await Promise.race([pushState(),new Promise(r=>setTimeout(r,2500))]).catch(()=>{});if(PUSH==='off'&&PUSH_OK&&Notification.permission==='granted')await pushRetry();S.after=dest;go(gateNeeded()?'alertGate':dest)}
+V.alertGate=()=>{const den=PUSH==='denied',inst=PUSH==='install',bad=PUSH==='unsupported';return `<section class="ax gate"><div style="flex:1"></div><span class="gbell">${I('bell')}</span>
+  <h1>${bad?'Open in Chrome or Safari':den?'Alerts are blocked':'Turn on alerts'}</h1><p class="sub">${bad?'This browser cannot show AZAPLUG alerts (for example the browser inside WhatsApp or Instagram). You need alerts to work.':den?'Alerts are switched off for AZAPLUG on this device. You need them to work.':'You need alerts on to work, so you never miss '+(S.portal==='chat'?'a customer message':'a new receipt')+'.'}</p>
+  ${bad?'<ol><li>Tap <b>Copy link</b> below.</li><li>Open <b>Chrome</b> (Android) or <b>Safari</b> (iPhone).</li><li>Paste the link and open it, then log in.</li></ol>':inst?'<ol><li>Tap the <b>Share</b> button in Safari.</li><li>Choose <b>Add to Home Screen</b>.</li><li>Open the app from your Home Screen and log in.</li><li>Tap <b>Turn on alerts</b>.</li></ol>':den?'<ol><li>Open your phone or browser <b>Settings</b>.</li><li>Find <b>Notifications</b> (or Site settings) and choose AZAPLUG.</li><li>Switch notifications to <b>Allow</b>.</li><li>Come back and tap <b>Check again</b>.</li></ol>':''}
+  <div style="flex:1"></div>${bad?'<button type="button" class="btn axb" data-ax="copyLink">Copy link</button>':inst?'':`<button type="button" class="btn axb" data-ax="${den?'gateCheck':'gateAllow'}" ${S.gateBusy?'disabled':''}>${den?'Check again':S.gateBusy?'Turning on…':'Turn on alerts'}</button>`}<button type="button" class="axl" data-ax="gateOut">Log out</button></section>`};
 NAV.roots.push('alertGate');
 AXA.gateAllow=async()=>{let perm='default';try{perm=await Notification.requestPermission()}catch(e){}
-  if(perm==='granted'){go(S.after||'dash');pushOn().then(()=>{toast('Alerts turned on');render()}).catch(()=>{});return}
+  if(perm==='granted'){S.gateBusy=true;render();const ok=await pushRetry();S.gateBusy=false;if(ok){toast('Alerts turned on');return go(S.after||'dash')}toast('Could not finish turning on alerts. Check your internet and tap again.');return render()}
   PUSH=perm==='denied'?'denied':'off';toast(perm==='denied'?'Alerts are blocked on this device':'Please allow alerts to continue');render()};
-AXA.gateCheck=async()=>{await pushState();if(!gateNeeded())return go(S.after||'dash');toast('Still blocked. Allow notifications for AZAPLUG in Settings.')};
+AXA.copyLink=()=>{const u=location.origin+location.pathname;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>toast('Link copied. Paste it in Chrome or Safari')).catch(()=>prompt('Copy this link',u))};
+AXA.gateCheck=async()=>{await pushState();if(PUSH==='off'&&PUSH_OK&&Notification.permission==='granted')await pushRetry();if(!gateNeeded())return go(S.after||'dash');toast('Still blocked. Allow notifications for AZAPLUG in Settings.')};
 AXA.gateOut=()=>ACT.logout();
 // Coming back to the app with alerts switched off brings the alerts screen back.
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||S.route==='alertGate'||BIO.open.includes(S.route)||!(S.me&&S.me.status==='approved'))return;

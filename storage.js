@@ -847,7 +847,50 @@ async function setStaffRole(id, role) {
   if (error) throw error;
 }
 
+// ============================================================
+// GIVEAWAYS: "first N customers to say hi after the start time win"
+// ============================================================
+function giveawayRow(r) {
+  return { id: r.id, title: r.title, amount: Number(r.amount), winners: Number(r.winners), keyword: r.keyword, startsAt: r.starts_at, status: r.status, createdAt: r.created_at };
+}
+function entryRow(r) {
+  return { id: r.id, giveawayId: r.giveaway_id, userId: r.user_id, installed: !!r.installed, alertsOn: !!r.alerts_on, won: !!r.won, credited: !!r.credited, createdAt: r.created_at };
+}
+async function createGiveaway(g) {
+  const id = uid();
+  const { error } = await supabase.from('giveaways').insert({ id, title: g.title, amount: g.amount, winners: g.winners, keyword: g.keyword, starts_at: g.startsAt, status: 'open' });
+  if (error) throw error;
+  return id;
+}
+async function listGiveaways() {
+  const { data, error } = await supabase.from('giveaways').select('*').order('created_at', { ascending: false }).limit(30);
+  if (error) throw error;
+  return data.map(giveawayRow);
+}
+async function setGiveawayStatus(id, status) {
+  const { error } = await supabase.from('giveaways').update({ status }).eq('id', id);
+  if (error) throw error;
+}
+async function listEntries(giveawayId) {
+  const { data, error } = await supabase.from('giveaway_entries').select('*').eq('giveaway_id', giveawayId).order('created_at', { ascending: true });
+  if (error) throw error;
+  return data.map(entryRow);
+}
+async function addEntry(e) {
+  const { data, error } = await supabase.from('giveaway_entries').insert({ id: uid(), giveaway_id: e.giveawayId, user_id: e.userId, installed: !!e.installed, alerts_on: !!e.alertsOn, won: !!e.won }).select('*').maybeSingle();
+  if (error) { if (/duplicate|unique/i.test(error.message)) return null; throw error; }
+  return data ? entryRow(data) : null;
+}
+async function updateEntry(id, patch) {
+  const p = {};
+  if (patch.won !== undefined) p.won = patch.won;
+  if (patch.credited !== undefined) p.credited = patch.credited;
+  const { error } = await supabase.from('giveaway_entries').update(p).eq('id', id);
+  if (error) throw error;
+}
+
 module.exports = {
+  createGiveaway, listGiveaways, setGiveawayStatus, listEntries, addEntry, updateEntry,
   mediaReady, getMediaFile, migrateMediaBatch, mediaLeftInDatabase, cleanOldChatMedia,
   hasStaffRole, setStaffRole,
   addTeamMessage, listTeamMessagesFor, listAdminTeamMessages, markTeamRead, findTeamMessage, deleteTeamMessage,
