@@ -692,7 +692,7 @@ top:()=>{const t=S.top,ch=t&&t.challenge,tab=S.topTab||(ch?'chal':'month'),list=
   ${tab==='chal'&&ch?chalCard(ch):''}
   <div class="tpc" style="margin-top:14px">${!list?'<p class="empty">Loading…</p>':list.length?list.map(topRow).join(''):`<p class="empty">${tab==='chal'?(Date.now()<ch.start?'The challenge starts on 14 November at 4:00 AM.':'No approved trades yet. Be the first!'):tab==='month'?'No approved trades this month yet. Be the first!':'No approved trades yet'}</p>`}</div>
   ${tab==='chal'&&ch?'<p class="muted" style="font-size:12.5px;margin:12px 6px 0">Receipts you send from 14 November, 4:00 AM until 23 December, 4:00 PM count, even if they are approved after. Only approved trades count. Winners get the prize in their AZAPLUG balance.</p>':''}
-  <p class="muted" style="font-size:12.5px;text-align:center;margin:14px 8px 28px">Names are hidden for privacy. Totals come from approved trades and update every few minutes.</p></section>`},
+  <p class="muted" style="font-size:12.5px;text-align:center;margin:14px 8px 28px">Names are hidden for privacy. Totals come from approved trades. Failed receipts do not count.</p></section>`},
 
 send:()=>{const ts=titles();if(!ts.length)return `<section class="screen"><div class="top left">${back('home',1)}<span class="title">Send Receipt</span></div><p class="empty">No accounts available right now. Please check back soon.</p></section>`;
  if(!ts.includes(S.send.title))S.send.title=ts[0];

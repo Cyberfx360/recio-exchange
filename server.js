@@ -1068,6 +1068,7 @@ app.get('/api/staff/trades', requireStaff, requireApprovedStaff, async (req, res
 });
 
 app.post('/api/staff/trades/:id/mark', requireStaff, requireApprovedStaff, ADMIN_MONEY, async (req, res) => {
+  res.once('finish', topChanged);
   try {
     const trade = await store.findTradeById(req.params.id);
     if (!trade || trade.staffId !== req.staff.id) return res.status(403).json({ error: 'You can only act on receipts for accounts you provided.' });
@@ -1538,6 +1539,7 @@ app.get('/api/admin/trades', requireAdmin, async (req, res) => {
 });
 
 app.post('/api/admin/trades/:id/mark', requireAdmin, ADMIN_MONEY, async (req, res) => {
+  res.once('finish', topChanged);
   try {
     const trade = await store.findTradeById(req.params.id);
     if (!trade) return res.status(404).json({ error: 'Trade not found.' });
@@ -1567,6 +1569,7 @@ app.post('/api/admin/trades/:id/mark', requireAdmin, ADMIN_MONEY, async (req, re
 // This is also the moment the customer's CURRENT payout account/bank gets locked into the
 // trade record permanently — even if the user later changes or deletes their account.
 app.post('/api/admin/trades/:id/credit', requireAdmin, ADMIN_MONEY, async (req, res) => {
+  res.once('finish', topChanged);
   try {
     const trade = await store.findTradeById(req.params.id);
     if (!trade) return res.status(404).json({ error: 'Trade not found.' });
@@ -1865,6 +1868,7 @@ app.post('/api/team/push/unsubscribe', requireTeam, async (req, res) => {
 // A customer can only borrow after this much naira has been credited to them from receipts.
 // ---- Top Traders (trust board): first 3 letters of the name + total traded through approved trades.
 let TOP = { at: 0, data: null };
+const topChanged = () => { TOP.at = 0; }; // a receipt was approved, credited or failed: work the boards out again
 // ---- December Challenge: the top 3 traders win prizes. Receipts SENT between start and end (Lagos time) count,
 // even if they are approved later. The banner shows in the app until showUntil.
 const CHALLENGE = { id: 'dec2026', title: 'December Top Traders', start: Date.parse('2026-11-14T04:00:00+01:00'), end: Date.parse('2026-12-23T16:00:00+01:00'),
@@ -1874,7 +1878,7 @@ const chalPaidKey = rank => 'chal:' + CHALLENGE.id + ':' + rank;
 const maskName = n => { const w = String(n || '').replace(/[^\p{L}\p{N}]/gu, ''); return (w.slice(0, 3) || 'Cus').replace(/^./, c => c.toUpperCase()) + '***'; };
 const lagosMonth = d => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit' }).format(new Date(d));
 async function topTraders(fresh) {
-  if (!fresh && TOP.data && Date.now() - TOP.at < 300000) return TOP.data; // worked out at most every 5 minutes
+  if (!fresh && TOP.data && Date.now() - TOP.at < 60000) return TOP.data; // worked out at most once a minute (and right after any receipt changes)
   const [trades, users] = await Promise.all([store.listApprovedTradeTotals(), store.listUsers()]);
   const ok = new Map(users.filter(u => u.status === 'approved').map(u => [u.id, u]));
   const month = lagosMonth(Date.now()), all = new Map(), mon = new Map(), chal = new Map();
