@@ -641,7 +641,7 @@ login:()=>`<section class="screen blue">
   <form data-form="login" novalidate>
   <label for="lg-pw" style="display:block;font-weight:600;font-size:14px;opacity:.75;margin-bottom:10px">Password</label>
   <div class="field glass"><input id="lg-pw" type="password" autocomplete="current-password"><button type="button" data-act="show" style="font-size:12px;font-weight:700;opacity:.8">SHOW</button></div>
-  <p style="text-align:right;margin:22px 0 30px"><button type="button" data-act="adminForgot" style="font-size:14px">Forgot Password?</button></p>
+  <div style="height:30px"></div>
   <button class="btn white" style="font-size:16px">Sign In to Admin Dashboard</button></form>
   <div class="grow"></div>
   <p style="text-align:center;font-size:14px;opacity:.9"><a href="/app.html" style="color:#fff">Back to AZAPLUG</a></p></section>`,
@@ -1114,7 +1114,6 @@ const ACT={
     if(!await ask('Reset PIN?',`${who.name} will get a new temporary PIN. Their old PIN stops working. Only do this after you are sure it is really them (call their number).`,'Reset PIN'))return;
     const d=await api('POST',`/api/admin/${kind}/${encodeURIComponent(id)}/reset-pin`);
     await ask(`New PIN: ${d.pin}`,`Tell ${d.name} (${d.phone}) this PIN by phone call, not in a group. They should sign in and change it with "Change PIN".`,'Done',0)},
-  async adminForgot(){await ask('Forgot the admin password?','Your admin password is the ADMIN_PASSWORD setting on Render. Sign in to render.com, open your recio-exchange service, then Environment, and tap the eye icon to see it or edit it to set a new one. Saving restarts the app in about 2 minutes.','OK',0)},
   async addMoney(el,id){const u=S.users.find(x=>x.id===id)||{name:'this customer'};
     const t=await askText('Add money to balance',`How much should go into ${u.name}'s balance? You can add a reason after the amount, like: 1000 giveaway`,'e.g. 1000 giveaway','Next');if(!t)return;
     const m=String(t).replace(/,/g,'').match(/(\d+(?:\.\d+)?)/);if(!m)throw new Error('Type an amount, like 1000');
