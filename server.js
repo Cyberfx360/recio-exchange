@@ -470,6 +470,41 @@ app.get('/api/staff/me', async (req, res) => {
 // 5 wrong tries from one device/network locks admin login on THAT device for 15 minutes (it never signs anyone out).
 // Many wrong passwords in total sends the admin a warning notification.
 // With Google Authenticator on, the password alone is not enough: the 6-digit code from the admin's phone is needed too.
+// ---- PIN changes (in the app) and PIN resets by the admin (for people who forgot their PIN and have no email).
+function tempPin() { let p; do { p = String(crypto.randomInt(0, 1000000)).padStart(6, '0'); } while (badPin(p)); return p; }
+async function changeOwnPin(kind, acct, body, res) {
+  const { current, pin } = body || {};
+  if (!acct) return res.status(404).json({ error: 'Account not found.' });
+  const lock = lockedOut(kind, acct.phone); if (lock) return res.status(429).json({ error: lock });
+  if (!(await bcrypt.compare(String(current || ''), acct.passwordHash || ''))) { wrongPin(kind, acct.phone); return res.status(400).json({ error: 'Your current PIN is not right.' }); }
+  const bad = badPin(String(pin || '')); if (bad) return res.status(400).json({ error: bad });
+  if (String(pin) === String(current)) return res.status(400).json({ error: 'Choose a PIN different from your current one.' });
+  await store.setLogin(kind, acct.id, { passwordHash: bcrypt.hashSync(String(pin), 10) });
+  res.json({ ok: true });
+}
+app.post('/api/me/pin', requireUser, async (req, res) => {
+  try { await changeOwnPin('user', await store.findUserById(req.session.userId), req.body, res); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Could not change your PIN.' }); }
+});
+app.post('/api/staff/me/pin', requireStaff, async (req, res) => {
+  try { await changeOwnPin('staff', await store.findStaffById(req.session.staffId), req.body, res); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Could not change your PIN.' }); }
+});
+// Admin gives a customer or staff member a new temporary PIN (shown once to the admin, who tells them).
+app.post('/api/admin/:kind(users|staff)/:id/reset-pin', requireAdmin, async (req, res) => {
+  try {
+    const kind = req.params.kind === 'staff' ? 'staff' : 'user';
+    const acct = kind === 'staff' ? await store.findStaffById(req.params.id) : await store.findUserById(req.params.id);
+    if (!acct) return res.status(404).json({ error: 'Account not found.' });
+    const pin = tempPin();
+    await store.setLogin(kind, acct.id, { passwordHash: bcrypt.hashSync(pin, 10) });
+    tries.delete(lockKey(kind, acct.phone));   // clear any "too many wrong tries" lock
+    const msg = 'AZAPLUG support reset your PIN. Sign in with the new PIN they gave you, then change it with "Change PIN".';
+    if (kind === 'staff') alertTeam({ staffId: acct.id }, 'Your PIN was reset', msg, {}); else notify(acct.id, 'tx', 'Your PIN was reset', msg);
+    res.json({ ok: true, pin, name: acct.name, phone: acct.phone });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not reset the PIN.' }); }
+});
+
 app.post('/api/admin/login', (req, res) => {
   const mins = ipBlocked('admin', req);
   if (mins) return res.status(429).json({ error: `Too many wrong tries. Try again in ${mins} minute(s).` });
