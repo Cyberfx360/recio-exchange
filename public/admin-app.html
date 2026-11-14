@@ -427,6 +427,12 @@ img,svg,video{max-width:100%}
 @media (prefers-reduced-motion:reduce){#callui .cav,#callui .cb .c-green i{animation:none}}
 .pinh{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--muted);padding:12px 20px 6px}
 .pinic{color:var(--muted);display:inline-flex}.newb{background:var(--blue);color:#fff;font-size:11px;font-weight:700;min-width:20px;height:20px;border-radius:999px;display:inline-grid;place-items:center;padding:0 6px}
+.hlab{background:linear-gradient(135deg,#059669,#047857)!important}
+.hli{background:#fff;border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-top:10px}
+.hli .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}.hli .top b{font-size:14.5px}.hli .top span{font-family:var(--mono);font-size:13.5px;white-space:nowrap}
+.hbar{height:10px;border-radius:99px;background:#EEF2F8;margin:10px 0 8px;overflow:hidden}.hbar i{display:block;height:100%;border-radius:99px}
+.hli small{display:block;color:var(--muted);font-size:12.5px;line-height:1.4}.hgrp{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--muted);margin:20px 2px 2px;text-transform:uppercase}
+.hrow{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-top:1px solid var(--line);font-size:14px}.hrow:first-child{border-top:0}.hrow b{font-family:var(--mono);font-size:13.5px;text-align:right}
 .chab{background:linear-gradient(135deg,#D97706,#B45309)!important}
 .chr{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}.chr:first-child{border-top:0}
 .chr .rk{width:34px;height:34px;flex:none;border-radius:50%;display:grid;place-items:center;font-weight:700;background:#EEF2F8;color:var(--muted)}.chr .r1{background:#FEF3C7;color:#B45309}.chr .r2{background:#E5E7EB;color:#374151}.chr .r3{background:#FFEDD5;color:#C2410C}
@@ -451,6 +457,7 @@ const P={
  gift:'<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5" rx="1"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>',
  belloff:'<path d="M13.73 21a2 2 0 0 1-3.46 0M18.63 13A17.89 17.89 0 0 1 18 8M6.26 6.26A5.86 5.86 0 0 0 6 8c0 7-3 9-3 9h14M18 8a6 6 0 0 0-9.33-5M1 1l22 22"/>',
  mobile:'<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>',
+ activity:'<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
  trophy:'<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
  home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
  repeat:'<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>',
@@ -544,6 +551,7 @@ async function api(method,url,body){
 const fwBody=f=>`<div class="fwb">${safeImg(f.imageData)?`<img src="${safeImg(f.imageData)}" alt="Forwarded photo"><button class="svp" style="color:var(--blue)" data-act="savePic" data-kind="chat" data-id="${esc(f.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(f)}${esc(f.text||'').replace(/\n/g,'<br>')}</div>`;
 const fwNew=()=>(S.fwds||[]).filter(f=>f.status==='new').length;
 async function loadGas(){try{S.gas=(await api('GET','/api/admin/giveaways')).giveaways||[];S.gaErr=''}catch(e){S.gas=[];S.gaErr=e.message}if(S.route==='giveaway'&&!typing())render()}
+async function loadHealth(){try{S.health=await api('GET','/api/admin/health');if(S.route==='health')render()}catch(e){toast(e.message)}}
 async function refresh(){
   const [u,s,a,t,w,st,c]=await Promise.all(['users','staff','accounts','trades','withdrawals','settings','chats'].map(x=>api('GET','/api/admin/'+x)));
   S.users=u.users||[];S.staff=s.staff||[];S.accounts=a.accounts||[];S.trades=t.trades||[];S.wds=w.withdrawals||[];S.settings=st||{};S.convos=c.conversations||[];
@@ -598,6 +606,24 @@ const acctForm=(edit)=>{const f=S.form,img=safeImg(f.imageData),fl=(id,l,v,ph,im
 /* ---------- Screens ---------- */
 const V={
 loading:()=>`<section class="screen blue"><div class="grow"></div><div class="logo-dot">${I('swap')}</div><div class="wordmark" style="margin-top:22px">AZAPLUG</div><div class="grow"></div></section>`,
+
+health:()=>{const h=S.health,col=p=>p==null?'#CBD5E1':p>=95?'#EF4444':p>=80?'#F59E0B':p>=60?'#EAB308':'#10B981',
+  fmt=v=>v==null?'—':v>=100?Math.round(v).toLocaleString():v>=10?v.toFixed(1):v.toFixed(2),
+  amt=i=>i.used==null?'—':i.unit==='GB'?`${i.used<1?(i.used*1024).toFixed(1)+' MB':i.used.toFixed(2)+' GB'} / ${i.limit} GB`:i.unit==='MB'?`${Math.round(i.used)} / ${i.limit} MB`:`${Math.round(i.used).toLocaleString()} / ${i.limit.toLocaleString()} ${i.unit}`;
+ const worst=h?Math.max(0,...h.items.filter(i=>i.pct!=null&&i.used!=null).map(i=>i.pct)):0;
+ return `<section class="scr">${hd('System Health','Free plan limits and usage','dash','')}
+ <div class="bd">${!h?'<p class="empty">Loading…</p>':`
+  <div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:12px;background:${worst>=95?'#FEF2F2':worst>=80?'#FFFBEB':'#ECFDF5'};border-color:transparent">
+   <span style="width:12px;height:12px;border-radius:50%;flex:none;background:${col(worst)}"></span>
+   <span class="grow"><b style="display:block">${worst>=95?'A limit is almost reached':worst>=80?'Something needs attention':'Everything is within the limits'}</b><small class="muted">Highest use: ${worst}% · You get an alert at 80% and 95%</small></span>
+   <button class="sb" style="height:38px;padding:0 12px;background:#fff;color:var(--slate);border:1px solid var(--line)" data-act="healthReload" aria-label="Refresh">${I('repeat','style="width:15px;height:15px"')}</button></div>
+  ${h.saved?'':`<div class="card" style="margin-top:10px;padding:12px 14px;background:#FEF3C7;border-color:#FDE68A;font-size:13px">Run the <b>System Health SQL</b> from the README in Supabase, so counts are kept after restarts and database/storage sizes show.</div>`}
+  ${['Supabase','Render','Brevo'].map(g=>`<div class="hgrp">${g}</div>${h.items.filter(i=>i.group===g).map(i=>`<div class="hli"><div class="top"><b>${esc(i.name)}</b><span>${esc(amt(i))}${i.pct!=null&&i.used!=null?` · <b style="color:${col(i.pct)}">${i.pct}%</b>`:''}</span></div>
+   <div class="hbar"><i style="width:${i.used==null?0:Math.min(100,i.pct)}%;background:${col(i.pct)}"></i></div><small>${esc(i.note)}</small>
+   ${i.correct?`<button class="link" style="font-size:13px;margin-top:6px" data-act="healthCorrect" data-id="${i.id}">Correct this number</button>`:''}</div>`).join('')}`).join('')}
+  <div class="hgrp">Other</div><div class="card" style="padding:4px 16px">${h.info.map(r=>`<div class="hrow"><span>${esc(r.name)}</span><b style="color:${r.ok?'inherit':'#B45309'}">${esc(String(r.value??'—'))}</b></div>`).join('')}</div>
+  <p class="muted" style="font-size:12px;margin:14px 4px 24px">Supabase egress and Render hours are counted by the app${h.since?` since ${new Date(h.since).toLocaleDateString('en-GB',{day:'numeric',month:'short'})}`:''}. Use "Correct this number" to match the Supabase or Render dashboard.</p>`}
+ </div></section>`},
 
 chal:()=>{const c=S.chal,fmt=t=>new Date(t).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
  return `<section class="scr">${hd('December Challenge','Top 3 traders win prizes','dash','')}
@@ -664,6 +690,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
   <h2 class="sh">Quick Actions</h2>
   <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
   <button class="gab" data-go="giveaway"><span class="gai">${I('gift','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Giveaways</b><small>Reward the first customers to say hi</small></span>${I('cr','style="width:18px;height:18px"')}</button>
+  <button class="gab hlab" data-go="health"><span class="gai">${I('activity','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>System Health</b><small>Supabase, Render, Brevo limits in one place</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <button class="gab chab" data-go="chal"><span class="gai">${I('trophy','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>December Challenge</b><small>Top 3 traders: real names and prizes</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <button class="gab tfab" data-go="tfa"><span class="gai">${I('shielda','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Two-Step Login</b><small>Google Authenticator code for admin sign-in</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <div class="between" style="margin:22px 0 10px"><h2 class="sh" style="margin:0">Recent Activity Feed</h2><button class="link" style="font-size:14px" data-go="receipts">View All</button></div>
@@ -1094,6 +1121,7 @@ function go(r,o,pop){
       if(S.route!=='staffChat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(e=>{if(S.route==='staffChat'&&!S.staffPerson){toast(e.message);go('chats')}});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
   if(r==='chat'){S.chat=[];const cv=(S.convos||[]).find(c=>c.userId===S.id);if(cv)cv.unread=false;const pull=()=>api('GET','/api/admin/chats/'+encodeURIComponent(S.id)).then(d=>{const n=sig(d.messages)!==sig(S.chat);S.chat=d.messages||[];
       if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
+  if(r==='health'){S.health=null;loadHealth()}
   if(r==='chal'){S.chal=null;api('GET','/api/admin/challenge').then(d=>{S.chal=d;if(S.route==='chal')render()}).catch(e=>toast(e.message))}
   if(r==='tfa'){if(!S.tfa||!S.tfa.done)api('GET','/api/admin/2fa').then(d=>{S.tfa=d;if(S.route==='tfa')render()}).catch(e=>toast(e.message))}
   if(r==='giveaway'){loadGas();clearInterval(S.gaT);S.gaT=setInterval(()=>S.route==='giveaway'?loadGas():clearInterval(S.gaT),10000)}
@@ -1107,6 +1135,10 @@ const ACT={
   show(el){const i=$('#lg-pw'),sh=i.type==='password';i.type=sh?'text':'password';el.textContent=sh?'HIDE':'SHOW'},
   async logout(){if(!await ask('Log out of admin?','To sign in again you will need your admin password and the code from Google Authenticator.','Log out',1))return;try{await pushDetach()}catch(e){}try{await api('POST','/api/admin/logout')}catch(e){}go(lsGet(BIO.key)?'lock':'login')},
   async staffRole(el,id){if(el.classList.contains('blue'))return;await api('PUT','/api/admin/staff/'+encodeURIComponent(id)+'/role',{role:el.dataset.role});toast('Department changed');await reload()},
+  async healthReload(){S.health=null;render();await loadHealth()},
+  async healthCorrect(el){const id=el.dataset.id,isEg=id==='egress';
+    const t=await askText(isEg?'Supabase egress':'Render free hours',isEg?'Type the egress number the Supabase dashboard shows now, in GB (e.g. 2.86).':'Type the free instance hours Render shows for this month (e.g. 312).',isEg?'e.g. 2.86':'e.g. 312','Save');if(t===false||t==null||t==='')return;
+    const v=Number(String(t).replace(/[^0-9.]/g,''));if(!(v>=0))throw new Error('Type a number');await api('POST','/api/admin/health/correct',{id,value:v});toast('Saved');await loadHealth()},
   async chalPay(el){const r=(S.chal.board||[]).find(x=>String(x.rank)===el.dataset.rank);if(!r)return;
     if(!await ask(`Pay the ${['1st','2nd','3rd'][r.rank-1]} prize?`,`₦${n0(r.prize)} will be added to ${r.name}'s AZAPLUG balance (${r.phone}). This can only be done once.`,'Pay prize'))return;
     const d=await api('POST','/api/admin/challenge/pay',{rank:r.rank,userId:r.userId});toast(`Paid ₦${n0(d.paid)} to ${d.name}`);S.chal=await api('GET','/api/admin/challenge');render()},

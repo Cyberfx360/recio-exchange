@@ -20,6 +20,12 @@
 > not inside the database. Old pictures already in the database move there by themselves in the background.
 > Chat photos and voice notes older than 90 days are removed (receipts are kept forever); change this with `MEDIA_DAYS` on Render.
 >
+> **System Health page (Admin Panel → System Health):** run this once in the Supabase SQL editor so the counts are saved and database/storage sizes show:
+> ```sql
+> create table if not exists app_metrics (id text primary key, value bigint not null default 0, updated_at timestamptz not null default now()); alter table app_metrics enable row level security; create or replace function app_sizes() returns json language sql security definer set search_path = public as $$ select json_build_object('db', pg_database_size(current_database()), 'storage', coalesce((select sum((metadata->>'size')::bigint) from storage.objects where bucket_id = 'media'), 0)) $$; revoke execute on function app_sizes() from public, anon, authenticated; grant execute on function app_sizes() to service_role;
+> ```
+> Limits can be raised when you upgrade: `LIMIT_EGRESS_GB`, `LIMIT_DB_GB`, `LIMIT_STORAGE_GB`, `LIMIT_RENDER_HOURS`, `LIMIT_RAM_MB`, `LIMIT_EMAILS_DAY`. Supabase usage resets on day `SUPABASE_CYCLE_DAY` (default 21).
+>
 > **Admin two-step login (Google Authenticator):** in the admin app open **Two-Step Login**, add AZAPLUG to Google Authenticator,
 > check one code, then add `ADMIN_TOTP_SECRET` on Render with the key it shows. Lost the phone? Delete `ADMIN_TOTP_SECRET` on Render.
 >
