@@ -871,11 +871,21 @@ profile:()=>{const u=S.me,ini=u.name.trim().split(/\s+/).map(x=>x[0]).slice(0,2)
   <div style="height:10px"></div>
   <button class="menu" data-go="edit"><span class="ic">${I('user')}</span>Edit Profile Details<span class="chev">${I('cr')}</span></button>
   <button class="menu" data-go="top"><span class="ic">${I('trophy')}</span>Top Traders<span class="chev">${I('cr')}</span></button>
+  <button class="menu" data-go="chpin"><span class="ic">${I('lock')}</span>Change PIN<span class="chev">${I('cr')}</span></button>
   ${insStandalone()?'':`<button class="menu" data-act="install"><span class="ic">${I('dl')}</span>Install AZAPLUG App<span class="chev">${I('cr')}</span></button>`}
   <button class="menu" data-act="shareApp"><span class="ic">${I('share')}</span>Share AZAPLUG with Friends<span class="chev">${I('cr')}</span></button>
   <button class="menu" data-go="chat"><span class="ic">${I('help')}</span>Help &amp; Customer Support<span class="chev">${I('cr')}</span></button>
   <button class="menu danger" data-act="logout"><span class="ic">${I('logout')}</span>Log Out of Device<span class="chev">${I('cr')}</span></button>
   ${nav('profile')}</section>`},
+
+chpin:()=>`<section class="screen">
+  <div class="top">${back('profile')}<span class="title">Change PIN</span><span></span></div>
+  <form data-form="chpin" class="card" novalidate>
+  <label class="lb" style="margin-top:0" for="cp-o">Current PIN</label><div class="field"><input id="cp-o" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password"></div>
+  <label class="lb" for="cp-n">New PIN (6 digits)</label><div class="field"><input id="cp-n" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></div>
+  <label class="lb" for="cp-c">Type the new PIN again</label><div class="field"><input id="cp-c" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></div>
+  <p class="muted" style="font-size:13px;margin:14px 0 18px">Never share your PIN. AZAPLUG staff will never ask for it.</p>
+  <button class="btn sq">Save New PIN</button></form></section>`,
 
 edit:()=>{const u=S.me;return `<section class="screen">
   <div class="top">${back('profile')}<span class="title">Edit Profile Details</span><span></span></div>
@@ -1144,6 +1154,8 @@ const FORMS={
     const d=await api('POST','/api/withdrawals',{amount});S.wd=d.withdrawal;go('withdrawn')},
   async loan(){const amount=num(val('l-a'));if(!amount)throw new Error('Enter a loan amount');if(S.loan&&amount>S.loan.limit)throw new Error('The most you can borrow is '+naira(S.loan.limit));
     await api('POST','/api/loans',{amount});toast('Loan request sent for review');await loadLoan();render()},
+  async chpin(){const o=val('cp-o'),n=val('cp-n'),c=val('cp-c');if(!/^\d{6}$/.test(o))throw new Error('Enter your current 6-digit PIN');if(!/^\d{6}$/.test(n))throw new Error('Your new PIN must be 6 digits');if(n!==c)throw new Error('The two new PINs are not the same');
+    await api('POST','/api/me/pin',{current:o,pin:n});toast('Your new PIN is saved');go('profile')},
   async edit(){const b={name:val('e-n'),bankName:val('e-b'),accountNumber:val('e-a')};if(Object.values(b).some(v=>!v))throw new Error('All fields are required');
     await api('PUT','/api/me',b);await loadMe();toast('Details saved');go('profile')},
   async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';
