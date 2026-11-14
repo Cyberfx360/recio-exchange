@@ -1188,7 +1188,7 @@ async function callCheck(){if(document.visibilityState!=='visible'||CALL.id||CAL
   try{const d=await api('GET','/api/call/incoming?as='+CALL.as);const c=(d.calls||[]).find(x=>!CALL.seen.has(x.id));if(c)callIncoming(c)}catch(e){}}
 setInterval(callCheck,3000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')setTimeout(callCheck,300)});
 window.addEventListener('pagehide',()=>{if(CALL.id&&CALL.ui==='active')navigator.sendBeacon&&navigator.sendBeacon('/api/call/'+CALL.id+'/end',new Blob([JSON.stringify({as:CALL.as})],{type:'application/json'}))});
-BIO.login='login';BIO.open=['alertGate','loading','role','login','signup','verify','setpin','forgot','reset','lock','pending'];
+BIO.login='login';BIO.open=['alertGate','loading','role','login','signup','vcode','setpin','forgot','reset','lock','pending'];
 const bioEnter=()=>enter();
 /* ---------- 6-digit PIN, email code, forgot PIN ---------- */
 const AX={role:'staff',cfg:{pin:true,email:true}};
@@ -1198,7 +1198,7 @@ const axIn=(id,label,attrs)=>`<label for="${id}">${label}</label><input class="a
 const axPin=(id,label,ac)=>`<label for="${id}">${label}</label><input class="axi pin" id="${id}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="${ac}">`;
 const axTop=back=>`<button type="button" class="bk2" data-go="${back}" aria-label="Back">${I('al')}</button>`;
 Object.assign(V,{
- verify:()=>{const v=S.vf||{};return `<section class="ax">${axTop(v.mode==='setup'?'setpin':'signup')}<h1>Check your email</h1><p class="sub">We sent a 6-digit code to <b>${esc(v.shown||'your email')}</b>. It works for 10 minutes. Check your spam folder too.</p>
+ vcode:()=>{const v=S.vf||{};return `<section class="ax">${axTop(v.mode==='setup'?'setpin':'signup')}<h1>Check your email</h1><p class="sub">We sent a 6-digit code to <b>${esc(v.shown||'your email')}</b>. It works for 10 minutes. Check your spam folder too.</p>
   <form data-form="verify" novalidate><label for="vf-c">Verification code</label><input class="axi pin" id="vf-c" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="one-time-code">
   <button class="btn axb">${v.mode==='setup'?'Verify and Save PIN':'Verify and Create Account'}</button></form><button type="button" class="axl" data-ax="resend">Send the code again</button></section>`},
  setpin:()=>`<section class="ax"><span></span><h1>Create your 6-digit PIN</h1><p class="sub">AZAPLUG now uses a 6-digit PIN instead of a password. You can add your email too, so you can get back in if you ever forget your PIN.</p>
@@ -1217,14 +1217,14 @@ async function axSignup(b,pin2){if(Object.keys(b).some(k=>k!=='email'&&!b[k]))th
   pinOk(b.password,pin2);
   const d=await api('POST','/api/auth/signup-code',{role:AX.role,email:b.email,phone:b.phone,password:b.password});
   if(d.skip)return axRegister(b);
-  S.vf={mode:'signup',data:b,shown:d.email};go('verify')}
+  S.vf={mode:'signup',data:b,shown:d.email};go('vcode')}
 Object.assign(FORMS,{
  async verify(){const v=S.vf||{},code=val('vf-c');if(!/^\d{6}$/.test(code))throw new Error('Enter the 6-digit code from your email');
   if(v.mode==='setup'){await api('POST','/api/auth/setup',Object.assign({role:AX.role,code},v.data));S.vf=null;toast('Your PIN is saved');await enter();bioOffer()}else await axRegister(v.data,code)},
  async setpin(){const email=val('sp-e').toLowerCase(),pin=$('#sp-p').value;S.sp={email};if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))throw new Error('That email does not look right. Check it, or leave it empty');pinOk(pin,$('#sp-p2').value);
   const d=email?await api('POST','/api/auth/setup-code',{role:AX.role,email}):{skip:true};
   if(d.skip){await api('POST','/api/auth/setup',{role:AX.role,email,pin});toast('Your PIN is saved');await enter();bioOffer();return}
-  S.vf={mode:'setup',data:{email,pin},shown:d.email};go('verify')},
+  S.vf={mode:'setup',data:{email,pin},shown:d.email};go('vcode')},
  async forgot(){const phone=val('fg-p');if(!phone)throw new Error('Enter your phone number');const d=await api('POST','/api/auth/forgot',{role:AX.role,phone});S.vf={mode:'reset',phone,shown:d.email};go('reset')},
  async reset(){const v=S.vf||{},code=val('rs-c'),pin=$('#rs-p').value;if(!/^\d{6}$/.test(code))throw new Error('Enter the 6-digit code from your email');pinOk(pin,$('#rs-p2').value);
   await api('POST','/api/auth/reset',{role:AX.role,phone:v.phone,code,pin});S.vf=null;toast('Your new PIN is saved');await enter();bioOffer()}
