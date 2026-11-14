@@ -536,6 +536,9 @@ const ini=n=>(String(n||'?').trim().split(/\s+/).map(x=>x[0]).slice(0,2).join(''
 const fd=d=>new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
 const ft=d=>new Date(d).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
 const fdt=d=>fd(d)+' • '+ft(d);
+// "Seen by Osemiha · 5:32 PM" (green) or "Not opened by staff yet" (orange) on a receipt
+const seenTag=t=>{const s=t.seenBy||[],fin=t.status==='failed'||(t.status==='approved'&&t.creditedAmount!=null);
+  return s.length?`<small class="d" style="color:#059669;font-weight:600;display:flex;align-items:center;gap:5px">${I('eye','style="width:13px;height:13px;flex:none"')}Seen by ${s.map(x=>esc(x.name)).join(', ')} · ${ft(s[0].at)}</small>`:fin?'':`<small class="d" style="color:#D97706;font-weight:600;display:flex;align-items:center;gap:5px">${I('eyeoff','style="width:13px;height:13px;flex:none"')}Not opened by staff yet</small>`};
 const today=d=>new Date(d).toDateString()===new Date().toDateString();
 const ago=d=>{const s=(Date.now()-new Date(d))/1000;if(s<60)return 'Just now';if(s<3600)return Math.floor(s/60)+' mins ago';if(s<86400)return Math.floor(s/3600)+' hours ago';if(s<172800)return 'Yesterday';return fd(d)};
 const tid=t=>'#'+String(t.id).slice(0,4).toUpperCase();
@@ -744,7 +747,7 @@ receipts:()=>{const list=S.trades.filter(t=>S.rcTab==='all'||pending(t));
   <div class="between" style="margin:18px 0 12px"><h2 class="sh" style="margin:0">${S.rcTab==='all'?'All Receipts':'Pending Receipts'}</h2><button class="link" style="font-size:13px;font-weight:600" data-set="rcTab:${S.rcTab==='all'?'pending':'all'}">${S.rcTab==='all'?'Pending only':'Show all'}</button></div>
   ${list.length?list.map(t=>{const img=safeImg(t.receiptImage),b=tBadge(t),fin=t.status==='failed'||(t.status==='approved'&&t.creditedAmount!=null);return `<article class="card rc">
    <button class="row" style="gap:12px;width:100%;text-align:left;align-items:flex-start" data-go="trade" data-id="${esc(t.id)}">${img?`<img class="th" src="${img}" alt="Receipt">`:`<span class="th">${I('file')}</span>`}
-    <span class="grow" style="min-width:0"><b class="h" style="font-size:16px">${n0(t.intendedAmount)}</b><small class="d">${esc(t.accountTitleUsed||'Account')} • ${esc(t.userName)}</small><small class="d">${fdt(t.createdAt)}</small></span><span class="badge ${b[1]} xs">${b[0]}</span></button>
+    <span class="grow" style="min-width:0"><b class="h" style="font-size:16px">${n0(t.intendedAmount)}</b><small class="d">${esc(t.accountTitleUsed||'Account')} • ${esc(t.userName)}</small><small class="d">${fdt(t.createdAt)}</small>${seenTag(t)}</span><span class="badge ${b[1]} xs">${b[0]}</span></button>
    ${fin?'':`<div class="row" style="gap:8px;margin-top:12px"><button class="sb s-red" data-go="trade" data-id="${esc(t.id)}">Failed</button><button class="sb s-green" data-act="tradeMark" data-status="confirmed" data-id="${esc(t.id)}">Confirm</button><button class="sb s-blue" data-act="tradeMark" data-status="approved" data-id="${esc(t.id)}">Approve</button></div>`}
    ${t.status==='approved'&&t.creditedAmount==null?`<button class="b green" style="margin-top:10px" data-go="trade" data-id="${esc(t.id)}">Verify and Credit Balance</button>`:''}</article>`}).join(''):'<p class="empty">No receipts waiting</p>'}</div></section>`},
 
@@ -755,6 +758,7 @@ trade:()=>{const t=S.trades.find(x=>x.id===S.id);if(!t)return V.receipts();const
   <div class="card" style="margin-top:14px;padding:12px"><div class="cl" style="margin-top:2px">User uploaded receipt</div>
    ${img?`<img src="${img}" alt="Receipt uploaded by the customer" style="width:100%;max-height:460px;object-fit:contain;background:#EEF2F8;border-radius:10px;display:block"><button class="b soft" style="margin-top:10px" data-act="savePic" data-kind="receipt" data-id="${esc(t.id)}">${I('dl','style="width:16px;height:16px"')}Save to Device</button>`:'<div class="noimg" style="margin-top:0">No receipt image</div>'}</div>
   <div class="card tp" style="margin-top:14px"><b style="font-size:14px">Trade Parameters</b>
+   ${row('Seen by staff',(t.seenBy||[]).length?t.seenBy.map(x=>`${esc(x.name)} · ${fd(x.at)} ${ft(x.at)}`).join('<br>'):`<span style="color:#D97706">Not opened yet</span>`)}
    ${row('Amount',n0(t.intendedAmount))}${row('Country',esc(t.accountTitleUsed||'—'))}${row('Account Paid To',`<span style="white-space:pre-wrap">${esc(t.accountNumberUsed||'—')}</span>`)}
    ${row('User account',esc([t.userPayoutBank,t.userPayoutAccount].filter(Boolean).join(' • ')||'—'))}${row('Staff Handled','Staff: '+esc(t.staffName))}${row('Date &amp; Time',fdt(t.createdAt))}
    ${!t.accountId&&/bitcoin|usdt/i.test(t.accountTitleUsed||'')?(r=>row('Crypto receipt',`$${n0(t.intendedAmount)} sent`+(r?`<br>At $1 = ${naira(r)}: <b>${naira(t.intendedAmount*r)}</b>`:'<br>Set the rate under Edit Rates')))(/bitcoin/i.test(t.accountTitleUsed)?S.settings.btcRate:S.settings.usdtRate):''}

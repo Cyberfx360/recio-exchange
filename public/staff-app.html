@@ -952,11 +952,13 @@ let poll=null;
 const typing=()=>document.activeElement&&document.activeElement.matches('input,textarea,select');
 const inChat=()=>S.route==='chat'||S.route==='teamChat';
 function render(){$('#app').innerHTML=V[S.route]();if(inChat())chatBottom()}
+const SEEN=new Set(); // receipts this staff member has opened (so the admin knows)
 function go(r,o,pop){
   if(S.route!==r)$('#toast').classList.remove('show');
   if(r!=='chat'&&r!=='teamChat'||r!==S.route){recEnd(true);vnStop()}
   const from=S.route;Object.assign(S,o||{});S.route=r;if(!pop)navPush(r);render();if(r!=='chat'&&r!=='teamChat')window.scrollTo(0,0);
   clearInterval(poll);poll=null;
+  if(r==='verify'&&S.id&&!SEEN.has(S.id)){SEEN.add(S.id);api('POST','/api/staff/trades/'+encodeURIComponent(S.id)+'/seen').catch(()=>SEEN.delete(S.id))}
   if(r==='forwardMsg'){api('GET','/api/staff/recipients').then(d=>{S.recips=d.recipients||[];if(S.route==='forwardMsg'&&!typing())render()}).catch(e=>{S.recips=[];toast(e.message);if(S.route==='forwardMsg')render()});return}
   if(r==='routeRc'){api('GET','/api/staff/route-accounts').then(d=>{S.rtAccts=d.accounts||[];if(S.route==='routeRc'&&!typing())render()}).catch(e=>{S.rtAccts=[];toast(e.message);if(S.route==='routeRc')render()});return}
   if(r==='teamChat'){if(!pop||!S.teamPerson||S.teamPerson.id!==S.tid){S.chat=[];S.teamPerson=null}
