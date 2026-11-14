@@ -1102,6 +1102,28 @@ app.get('/api/staff/trades', requireStaff, requireApprovedStaff, async (req, res
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load trades.' }); }
 });
 
+// A staff member opened a receipt: remember the first time each staff member saw it (admin sees "Seen by ...").
+app.post('/api/staff/trades/:id/seen', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const trade = await store.findTradeById(req.params.id);
+    if (!trade || trade.staffId !== req.staff.id) return res.status(403).json({ error: 'Not your receipt.' });
+    const key = 'tseen:' + trade.id + ':' + req.staff.id;
+    if (!csGet(key)) csSet(key, Date.now(), 0);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not save.' }); }
+});
+function tradeSeenIndex(staffList) {   // tradeId -> [{ name, at }] from the saved "seen" marks
+  const idx = new Map();
+  for (const [k, at] of CS) {
+    if (!k.startsWith('tseen:')) continue;
+    const [, tradeId, staffId] = k.split(':');
+    const st = staffList.find(x => x.id === staffId);
+    if (!idx.has(tradeId)) idx.set(tradeId, []);
+    idx.get(tradeId).push({ name: st ? st.name : 'Staff', at });
+  }
+  for (const v of idx.values()) v.sort((a, b) => a.at - b.at);
+  return idx;
+}
 app.post('/api/staff/trades/:id/mark', requireStaff, requireApprovedStaff, ADMIN_MONEY, async (req, res) => {
   res.once('finish', topChanged);
   try {
@@ -1558,10 +1580,12 @@ app.get('/api/admin/trades', requireAdmin, async (req, res) => {
     const users = await store.listUsers();
     const staffList = await store.listStaff();
     const accounts = await store.listAllAccounts();
+    const seen = tradeSeenIndex(staffList);
     const enriched = trades.map(t => {
       const acc = accounts.find(a => a.id === t.accountId);
       return {
         ...t,
+        seenBy: seen.get(t.id) || [],
         userName: (users.find(u => u.id === t.userId) || {}).name || 'Unknown',
         userPhone: (users.find(u => u.id === t.userId) || {}).phone || '',
         staffName: (staffList.find(s => s.id === t.staffId) || {}).name || 'Unassigned',
