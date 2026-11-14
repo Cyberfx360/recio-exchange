@@ -836,7 +836,8 @@ app.post('/api/trades', requireUser, requireApprovedUser, async (req, res) => {
     if (!(Number(intendedAmount) > 0) || !isFinite(Number(intendedAmount))) return res.status(400).json({ error: 'Enter the amount you sent.' });
     if (badAttachment(receiptImage) || !/^data:image\//i.test(receiptImage)) return res.status(400).json({ error: 'Add a photo of your receipt (JPG or PNG).' });
     const settings = await store.getSettings();
-    if (Number(intendedAmount) > settings.maxDeposit) {
+    const cap = Number(settings.maxDeposit); // 0 or empty = no limit (an empty box must never block every receipt)
+    if (cap > 0 && Number(intendedAmount) > cap) {
       return res.status(400).json({ error: 'This amount is above what we can process directly through the site — please chat with us instead.' });
     }
     const account = await store.findAccountById(accountId);

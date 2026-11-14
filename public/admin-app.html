@@ -854,7 +854,7 @@ rates:()=>`<section class="scr">${hd('Rates &amp; Rules','Admin Controls • Str
    <button class="b blue" style="margin-top:12px">Save Crypto Rates</button></form>
   <div class="pol"><b>System Policy Rules List</b><p>${esc((S.settings.rulesText||'No rules posted yet.').slice(0,220))}${(S.settings.rulesText||'').length>220?'…':''}</p><button class="link" style="font-size:13px" data-set="ratesTab:rules">+ Configure Policy Rules</button></div>`
  :`<form data-form="rules" novalidate><label class="cl" for="r-text" style="margin-top:0">Rules shown to customers</label><textarea class="in" id="r-text" rows="16">${esc(S.settings.rulesText||'')}</textarea>
-  <label class="cl" for="r-max">Maximum deposit (₦)</label><input class="in" id="r-max" inputmode="decimal" value="${esc(S.settings.maxDeposit??'')}"><button class="b blue">Save Change</button></form>`}</div></section>`,
+  <label class="cl" for="r-max">Maximum receipt amount</label><input class="in" id="r-max" inputmode="decimal" placeholder="No limit" value="${+S.settings.maxDeposit>0?esc(S.settings.maxDeposit):''}"><small class="muted" style="display:block;font-size:12px;margin-top:6px">Receipts above this amount are told to chat with you. Leave empty for no limit.</small><button class="b blue">Save Change</button></form>`}</div></section>`,
 
 console:()=>{const open=S.escs.filter(e=>e.status==='open'),list=S.escTab==='open'?open:S.escTab==='resolved'?S.escs.filter(e=>e.status!=='open'):S.escs;
  return `<section class="scr">${hd('Admin Console <span class="sec">SECURE</span>','Priority &amp; Escalated Chats','chats',`<button class="bk" data-act="soon" aria-label="Console settings">${I('gear')}</button>`,'dark con')}
