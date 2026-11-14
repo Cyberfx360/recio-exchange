@@ -82,6 +82,7 @@ async function deleteUser(id) {
   const { error } = await supabase.from('users').delete().eq('id', id);
   if (error) throw error;
   dropMediaFolder('u/' + safeOwner(id));   // their receipts, chat photos and voice notes
+  msgChanged(id);
 }
 // Changes a balance safely: the update only goes through if the balance is still what we read,
 // so two changes at the same moment can never overwrite each other (it simply tries again).
@@ -328,6 +329,7 @@ const MIGRATE = [
   { table: 'team_messages', col: 'image_data', folder: r => 'team/' + safeOwner(r.from_staff_id), extra: 'from_staff_id' }
 ];
 async function migrateMediaBatch() {
+  msgChanged(null);
   if (!(await mediaReady())) return { moved: 0, left: true };
   let moved = 0, left = false;
   for (const m of MIGRATE) {
@@ -354,6 +356,7 @@ async function mediaLeftInDatabase() {
 }
 // Chat photos and voice notes older than `days` are removed (receipts are kept forever).
 async function cleanOldChatMedia(days) {
+  msgChanged(null);
   const cutoff = new Date(Date.now() - days * 864e5).toISOString();
   let removed = 0;
   for (const t of [{ table: 'messages', text: 'text' }, { table: 'team_messages', text: 'message_text' }, { table: 'forwards', text: 'message_text' }]) {
@@ -493,6 +496,13 @@ async function updateSettings(fields) {
 // CHAT (customer <-> admin)
 // ============================================================
 
+// ---- Chat cache. The apps ask for chats every few seconds; answer from memory until a message changes,
+// instead of downloading every message from Supabase each time (this is what used most of the free egress).
+let CONVS = null;                  // { at, data } — the chat list
+const THREADS = new Map();         // userId -> { at, data } — one customer's chat
+const CHAT_TTL = 60000;            // safety refresh even with no change (e.g. an edit made in the Supabase dashboard)
+function msgChanged(userId) { CONVS = null; if (userId) THREADS.delete(String(userId)); else THREADS.clear(); }
+const copyMsgs = list => list.map(m => ({ ...m }));
 function msgRow(r) {
   return { id: r.id, userId: r.user_id, sender: r.sender, text: r.text, imageData: pubMedia(r.image_data), createdAt: r.created_at };
 }
@@ -503,13 +513,19 @@ async function addMessage(m) {
     id, user_id: m.userId, sender: m.sender, text: m.text || '', image_data: m.imageData || null
   });
   if (error) throw error;
+  msgChanged(m.userId);
   const { data } = await supabase.from('messages').select('*').eq('id', id).single();
   return msgRow(data);
 }
 async function messagesForUser(userId) {
+  const key = String(userId), c = THREADS.get(key);
+  if (c && Date.now() - c.at < CHAT_TTL) return copyMsgs(c.data);
   const { data, error } = await supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true });
   if (error) throw error;
-  return data.map(msgRow);
+  const list = data.map(msgRow);
+  THREADS.set(key, { at: Date.now(), data: list });
+  if (THREADS.size > 400) THREADS.delete(THREADS.keys().next().value);  // keep memory small
+  return copyMsgs(list);
 }
 async function findMessageById(id) {
   const { data, error } = await supabase.from('messages').select('*').eq('id', id).maybeSingle();
@@ -517,18 +533,30 @@ async function findMessageById(id) {
   return data ? msgRow(data) : null;
 }
 async function deleteMessage(id) {
-  const { data: row } = await supabase.from('messages').select('image_data').eq('id', id).maybeSingle();
+  const { data: row } = await supabase.from('messages').select('image_data, user_id').eq('id', id).maybeSingle();
   const { error } = await supabase.from('messages').delete().eq('id', id);
   if (error) throw error;
+  msgChanged(row && row.user_id);
   if (row && parseRef(row.image_data)) dropMedia(row.image_data);
 }
 async function listConversations() {
-  const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: false });
-  if (error) throw error;
+  if (CONVS && Date.now() - CONVS.at < CHAT_TTL) return CONVS.data.map(c => ({ ...c }));
+  const data = [];
+  for (let from = 0; ; from += 1000) {   // only the columns the list needs, paged past Supabase's 1,000-row limit
+    const r = await supabase.from('messages').select('user_id, sender, text, image_data, created_at').order('created_at', { ascending: false }).range(from, from + 999);
+    if (r.error) throw r.error;
+    data.push(...r.data);
+    if (r.data.length < 1000) break;
+  }
   const seen = new Map();
   for (const m of data) if (!seen.has(m.user_id)) seen.set(m.user_id, m);
-  const users = await Promise.all([...seen.keys()].map(findUserById));
-  return [...seen.entries()].map(function(entry) {
+  const ids = [...seen.keys()], users = [];
+  for (let i = 0; i < ids.length; i += 200) {   // one request per 200 customers instead of one per customer
+    const r = await supabase.from('users').select('id, name, phone').in('id', ids.slice(i, i + 200));
+    if (r.error) throw r.error;
+    users.push(...r.data);
+  }
+  const list = [...seen.entries()].map(function(entry) {
     var userId = entry[0], lastMsg = entry[1];
     const user = users.find(function(u){ return u && u.id === userId; });
     return {
@@ -537,6 +565,8 @@ async function listConversations() {
       lastSender: lastMsg.sender, lastAt: lastMsg.created_at
     };
   });
+  CONVS = { at: Date.now(), data: list };
+  return list.map(c => ({ ...c }));
 }
 
 // ============================================================
