@@ -10,7 +10,16 @@ if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_KEY) {
 }
 
 const { createClient } = require('@supabase/supabase-js');
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+// Every reply from Supabase passes through here so the app can count its own egress (System Health page).
+const EGRESS = { bytes: 0 };
+async function countingFetch(input, init) {
+  const res = await fetch(input, init);
+  const len = Number(res.headers.get('content-length'));
+  if (len > 0) EGRESS.bytes += len + 300;               // + headers
+  else { try { EGRESS.bytes += (await res.clone().arrayBuffer()).byteLength + 300; } catch (e) { /* ignore */ } }
+  return res;
+}
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, { global: { fetch: countingFetch } });
 
 function uid() { return crypto.randomUUID(); }
 
@@ -954,7 +963,34 @@ async function saveChatState(rows) {
   if (error) throw error;
 }
 
+// ============================================================
+// SYSTEM HEALTH: saved counters (table app_metrics) and sizes (function app_sizes)
+// ============================================================
+async function listMetrics() {
+  const { data, error } = await supabase.from('app_metrics').select('id, value');
+  if (error) throw error;
+  return data || [];
+}
+async function saveMetrics(rows) {
+  if (!rows.length) return;
+  const { error } = await supabase.from('app_metrics').upsert(rows, { onConflict: 'id' });
+  if (error) throw error;
+}
+async function appSizes() {
+  const { data, error } = await supabase.rpc('app_sizes');
+  if (error) throw error;
+  return typeof data === 'string' ? JSON.parse(data) : data;
+}
+async function countRows(table, filter) {
+  let q = supabase.from(table).select('*', { count: 'exact', head: true });
+  if (filter) q = filter(q);
+  const { count, error } = await q;
+  if (error) throw error;
+  return count || 0;
+}
+
 module.exports = {
+  EGRESS, listMetrics, saveMetrics, appSizes, countRows,
   listChatState, saveChatState,
   createGiveaway, listGiveaways, setGiveawayStatus, listEntries, addEntry, updateEntry,
   mediaReady, getMediaFile, migrateMediaBatch, mediaLeftInDatabase, cleanOldChatMedia,

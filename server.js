@@ -107,7 +107,7 @@ async function csFlush() {
 csLoad();
 setInterval(() => csFlush().catch(() => {}), 10000);
 // Render stops the old server with SIGTERM when it deploys: save chat status first so nothing is lost.
-for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => { Promise.race([csFlush().catch(() => {}), new Promise(r => setTimeout(r, 4000))]).then(() => process.exit(0)); });
+for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => { Promise.race([Promise.all([csFlush().catch(() => {}), metSave().catch(() => {})]), new Promise(r => setTimeout(r, 4000))]).then(() => process.exit(0)); });
 // Who is calling the API right now (the same browser can be signed in as customer, staff and admin).
 function whoIs(req) {
   const s = req.session || {}, p = req.path, as = String((req.query && req.query.as) || (req.body && req.body.as) || '');
@@ -607,7 +607,7 @@ function sendMail(to, subject, html) {
       headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json', 'content-length': Buffer.byteLength(body) }
     }, resp => {
       let out = ''; resp.on('data', c => { out += c; });
-      resp.on('end', () => (resp.statusCode < 300 ? resolve() : reject(new Error('Email service said ' + resp.statusCode + ': ' + out.slice(0, 200)))));
+      resp.on('end', () => (resp.statusCode < 300 ? (metAdd('emails:' + dayKey(), 1), resolve()) : reject(new Error('Email service said ' + resp.statusCode + ': ' + out.slice(0, 200)))));
     });
     r.on('timeout', () => r.destroy(new Error('Email service timed out')));
     r.on('error', reject); r.end(body);
@@ -2031,7 +2031,129 @@ app.post('/api/admin/loans/:id/decide', requireAdmin, ADMIN_MONEY, async (req, r
 // ============================================================
 // The apps ask for this when they come back to the screen; if it changed (a new deploy), they reload themselves.
 const BUILD = process.env.RENDER_GIT_COMMIT || String(Date.now());
-app.get('/api/version', (req, res) => res.json({ v: BUILD }));
+app.get('/api/version', (req, res) => {
+  if (/cron-job|uptime|pinger|monitor/i.test(String(req.get('user-agent') || ''))) lastKeepAlive = Date.now();   // the keep-alive ping
+  res.json({ v: BUILD });
+});
+
+// ============================================================
+// SYSTEM HEALTH (Admin Panel -> System Health): every free-plan limit in one place, with alerts at 80% and 95%.
+// Limits can be raised on Render when you upgrade, e.g. LIMIT_EGRESS_GB=250 for Supabase Pro.
+// ============================================================
+const LIMITS = { egressGB: Number(process.env.LIMIT_EGRESS_GB) || 5, dbGB: Number(process.env.LIMIT_DB_GB) || 0.5, storageGB: Number(process.env.LIMIT_STORAGE_GB) || 1,
+  renderHours: Number(process.env.LIMIT_RENDER_HOURS) || 750, ramMB: Number(process.env.LIMIT_RAM_MB) || 512, emailsDay: Number(process.env.LIMIT_EMAILS_DAY) || 300 };
+const CYCLE_DAY = Math.min(28, Math.max(1, Number(process.env.SUPABASE_CYCLE_DAY) || 21));   // Supabase usage resets on this day each month
+const GB = 1024 ** 3;
+let lastKeepAlive = 0;
+function egressCycle(now = new Date()) {
+  const y = now.getUTCFullYear(), m = now.getUTCMonth();
+  const start = new Date(Date.UTC(y, now.getUTCDate() >= CYCLE_DAY ? m : m - 1, CYCLE_DAY));
+  return { key: start.toISOString().slice(0, 10), start: start.getTime(), end: Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, CYCLE_DAY) };
+}
+const monthKey = (d = new Date()) => d.toISOString().slice(0, 7);          // Render counts free hours per calendar month
+const dayKey = () => new Date(Date.now() + 3600000).toISOString().slice(0, 10); // Lagos day
+const MET = new Map(), metDirty = new Set();
+let metLoaded = false, metTried = 0, egressSeen = 0;
+const metGet = id => MET.get(id) || 0;
+function metAdd(id, v) { MET.set(id, metGet(id) + v); metDirty.add(id); }
+function metSet(id, v) { MET.set(id, v); metDirty.add(id); }
+async function metLoad() {
+  metTried = Date.now();
+  try { (await store.listMetrics()).forEach(r => MET.set(r.id, metGet(r.id) + Number(r.value))); metLoaded = true; } catch (e) { /* table not created yet */ }
+}
+async function metSave() {
+  if (!metLoaded) { if (Date.now() - metTried < 300000) return; await metLoad(); if (!metLoaded) return; }
+  if (!metDirty.size) return;
+  const ids = [...metDirty]; metDirty.clear();
+  try { await store.saveMetrics(ids.map(id => ({ id, value: Math.round(metGet(id)), updated_at: new Date().toISOString() }))); }
+  catch (e) { ids.forEach(i => metDirty.add(i)); metLoaded = false; }
+}
+metLoad();
+setInterval(() => {   // once a minute: count egress and awake time, then save
+  const eg = store.EGRESS.bytes - egressSeen; egressSeen += eg;
+  if (eg > 0) metAdd('egress:' + egressCycle().key, eg);
+  metAdd('awake:' + monthKey(), 1);
+  if (!MET.has('since')) metSet('since', Date.now());
+  metSave().catch(() => {});
+}, 60000);
+let SIZES = { at: 0, data: null, err: null }, COUNTS = { at: 0, data: null }, BREVO = { at: 0, data: null };
+async function sizes() {
+  if (Date.now() - SIZES.at < 1800000) return SIZES;
+  try { SIZES = { at: Date.now(), data: await store.appSizes(), err: null }; } catch (e) { SIZES = { at: Date.now(), data: null, err: 'sql' }; }
+  return SIZES;
+}
+async function counts() {
+  if (COUNTS.data && Date.now() - COUNTS.at < 600000) return COUNTS.data;
+  const c = (t, f) => store.countRows(t, f).catch(() => null);
+  const [customers, staff, approved, messages, devices] = await Promise.all([c('users'), c('staff'), c('trades', q => q.eq('status', 'approved')), c('messages'), c('push_subscriptions')]);
+  COUNTS = { at: Date.now(), data: { customers, staff, approved, messages, devices } };
+  return COUNTS.data;
+}
+async function brevo() {
+  if (!process.env.BREVO_API_KEY) return null;
+  if (BREVO.data && Date.now() - BREVO.at < 600000) return BREVO.data;
+  try {
+    const r = await fetch('https://api.brevo.com/v3/account', { headers: { 'api-key': process.env.BREVO_API_KEY, accept: 'application/json' } });
+    const j = await r.json().catch(() => ({}));
+    const p = (j.plan || []).find(x => x.creditsType === 'sendLimit') || (j.plan || [])[0] || {};
+    BREVO = { at: Date.now(), data: r.ok ? { plan: p.type || '', credits: p.credits != null ? Number(p.credits) : null } : { error: r.status } };
+  } catch (e) { BREVO = { at: Date.now(), data: { error: 'offline' } }; }
+  return BREVO.data;
+}
+const lagosDate = t => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Africa/Lagos' });
+async function healthReport() {
+  const now = Date.now(), cyc = egressCycle(), sz = await sizes(), cn = await counts(), br = await brevo();
+  const mStart = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1), mEnd = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1);
+  const awakeH = metGet('awake:' + monthKey()) / 60, hoursLeftInMonth = (mEnd - now) / 3600000;
+  const item = (o) => ({ ...o, pct: o.limit ? Math.min(999, Math.round(o.used / o.limit * 100)) : null });
+  const items = [
+    item({ id: 'egress', group: 'Supabase', name: 'Egress (data sent to the app)', used: metGet('egress:' + cyc.key) / GB, limit: LIMITS.egressGB, unit: 'GB',
+      note: `Resets ${lagosDate(cyc.end)}. Counted by the app; tap Correct to match the Supabase dashboard.`, correct: true }),
+    item({ id: 'db', group: 'Supabase', name: 'Database size', used: sz.data ? sz.data.db / GB : null, limit: LIMITS.dbGB, unit: 'GB', note: sz.err ? 'Run the System Health SQL from the README to see this.' : 'All tables together.' }),
+    item({ id: 'storage', group: 'Supabase', name: 'Photo & voice note storage', used: sz.data ? sz.data.storage / GB : null, limit: LIMITS.storageGB, unit: 'GB', note: sz.err ? 'Run the System Health SQL from the README to see this.' : `Chat photos and voice notes are removed after ${process.env.MEDIA_DAYS || 90} days.` }),
+    item({ id: 'render', group: 'Render', name: 'Free instance hours this month', used: awakeH, limit: LIMITS.renderHours, unit: 'hours',
+      note: `Resets ${lagosDate(mEnd)}. If it stays awake all month: about ${Math.round(awakeH + hoursLeftInMonth)} hours.`, correct: true }),
+    item({ id: 'ram', group: 'Render', name: 'Server memory', used: process.memoryUsage().rss / 1048576, limit: LIMITS.ramMB, unit: 'MB', note: `Running for ${Math.round(process.uptime() / 3600 * 10) / 10} hours since the last restart.` }),
+    item({ id: 'emails', group: 'Brevo', name: 'Emails sent today', used: metGet('emails:' + dayKey()), limit: LIMITS.emailsDay, unit: 'emails',
+      note: br && br.credits != null ? `Brevo says ${br.credits} credits left on your ${br.plan || ''} plan.` : process.env.BREVO_API_KEY ? 'Forgot PIN codes. Free plan: 300 a day.' : 'Email is not set up.' })
+  ];
+  const info = [
+    { group: 'Keep-alive', name: 'Last keep-alive ping', value: lastKeepAlive ? Math.round((now - lastKeepAlive) / 60000) + ' min ago' : 'Not seen since the last restart', ok: lastKeepAlive && now - lastKeepAlive < 15 * 60000 },
+    { group: 'Calls', name: 'Calls this month', value: `${metGet('calls:' + monthKey())} calls · ${Math.round(metGet('callsec:' + monthKey()) / 60)} minutes`, ok: true },
+    { group: 'App', name: 'Customers', value: cn.customers, ok: true }, { group: 'App', name: 'Staff', value: cn.staff, ok: true },
+    { group: 'App', name: 'Approved receipts', value: cn.approved, ok: true }, { group: 'App', name: 'Chat messages', value: cn.messages, ok: true },
+    { group: 'App', name: 'Phones with alerts on (customers)', value: cn.devices, ok: true }
+  ];
+  return { items, info, saved: metLoaded, since: metGet('since') || null, now };
+}
+app.get('/api/admin/health', requireAdmin, async (req, res) => {
+  try { res.json(await healthReport()); } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load system health.' }); }
+});
+// Set a counter to what the provider's own dashboard shows (e.g. Supabase says 2.86 GB egress).
+app.post('/api/admin/health/correct', requireAdmin, async (req, res) => {
+  const { id, value } = req.body || {}, v = Number(value);
+  if (!(v >= 0) || v > 100000) return res.status(400).json({ error: 'Enter a number.' });
+  if (id === 'egress') metSet('egress:' + egressCycle().key, v * GB);
+  else if (id === 'render') metSet('awake:' + monthKey(), v * 60);
+  else return res.status(400).json({ error: 'That one cannot be corrected.' });
+  await metSave().catch(() => {});
+  res.json({ ok: true });
+});
+// Every hour: warn the admin once a day when anything reaches 80% and again at 95%.
+const HEALTH_WARNED = new Set();
+setInterval(async () => {
+  try {
+    const r = await healthReport();
+    for (const it of r.items) {
+      if (it.used == null || it.pct == null) continue;
+      const level = it.pct >= 95 ? 95 : it.pct >= 80 ? 80 : 0;
+      const key = it.id + ':' + level + ':' + dayKey();
+      if (!level || HEALTH_WARNED.has(key)) continue;
+      HEALTH_WARNED.add(key);
+      alertTeam({ admin: true }, `${it.group}: ${it.name} at ${it.pct}%`, `${Math.round(it.used * 100) / 100} of ${it.limit} ${it.unit} used. ${it.note}`, { admin: 'health' });
+    }
+  } catch (e) { /* try again next hour */ }
+}, 3600000);
 // The old website pages are retired: everyone goes to the new apps (which require notifications).
 const OLD_PAGES = { '/': '/app.html', '/index.html': '/app.html', '/login.html': '/app.html', '/dashboard.html': '/app.html', '/pending.html': '/app.html',
   '/account-center.html': '/app.html', '/staff.html': '/staff-app.html', '/staff-login.html': '/staff-app.html', '/admin.html': '/admin-app.html' };
@@ -2215,6 +2337,7 @@ function finishCall(c, state, by) {
   if (c.state === 'ended' || c.state === 'declined' || c.state === 'missed') return;
   const wasActive = c.state === 'active';
   c.state = wasActive ? 'ended' : state; c.endedAt = Date.now(); c.endedBy = by || null;
+  if (wasActive) { metAdd('calls:' + monthKey(), 1); metAdd('callsec:' + monthKey(), Math.round((c.endedAt - c.answeredAt) / 1000)); }
   if (c.userId) {   // leave a note in the customer chat, like WhatsApp
     const kind = c.video ? 'video' : 'voice';
     const text = wasActive ? `${c.video ? 'Video' : 'Voice'} call · ${mmss(c.endedAt - c.answeredAt)}` : `Missed ${kind} call`;
