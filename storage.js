@@ -445,6 +445,12 @@ async function listAllTrades() {
   if (error) throw error;
   return data.map(tradeRow);
 }
+// Moves a receipt from "checking" to "seen" only if nobody has changed it yet (never overwrites Confirmed/Approved/Failed).
+async function markTradeSeen(id) {
+  const { data, error } = await supabase.from('trades').update({ status: 'seen', updated_at: new Date().toISOString() }).eq('id', id).eq('status', 'checking').select('id');
+  if (error) throw error;
+  return !!(data && data.length);
+}
 async function updateTradeStatus(id, opts) {
   const patch = { status: opts.status, updated_at: new Date().toISOString() };
   if (opts.failReason !== undefined) patch.fail_reason = opts.failReason;
@@ -990,6 +996,7 @@ async function countRows(table, filter) {
 }
 
 module.exports = {
+  markTradeSeen,
   EGRESS, listMetrics, saveMetrics, appSizes, countRows,
   listChatState, saveChatState,
   createGiveaway, listGiveaways, setGiveawayStatus, listEntries, addEntry, updateEntry,

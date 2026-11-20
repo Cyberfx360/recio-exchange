@@ -913,7 +913,8 @@ app.post('/api/crypto/trades', requireUser, requireApprovedUser, async (req, res
 
 app.get('/api/trades', requireUser, requireApprovedUser, async (req, res) => {
   try {
-    res.json({ trades: await store.listTradesForUser(req.user.id) });
+    const trades = await store.listTradesForUser(req.user.id);
+    res.json({ trades: trades.map(t => ({ ...t, seenAt: tradeSeenAt(t.id) })) });   // when the AZAPLUG team first opened it
   } catch (err) {
     console.error('List trades error:', err);
     res.status(500).json({ error: 'Could not load trades.' });
@@ -1107,8 +1108,23 @@ app.post('/api/staff/trades/:id/seen', requireStaff, requireApprovedStaff, async
   try {
     const trade = await store.findTradeById(req.params.id);
     if (!trade || trade.staffId !== req.staff.id) return res.status(403).json({ error: 'Not your receipt.' });
-    const key = 'tseen:' + trade.id + ':' + req.staff.id;
-    if (!csGet(key)) csSet(key, Date.now(), 0);
+    await tradeOpened(trade, req.staff.id);
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not save.' }); }
+});
+// Someone on the team opened a receipt: remember who and when, and the first time tell the customer
+// "We have seen your receipt and are checking it" (the Seen step lights up in their app).
+async function tradeOpened(trade, who) {
+  const key = 'tseen:' + trade.id + ':' + who;
+  if (!csGet(key)) csSet(key, Date.now(), 0);
+  if (trade.status === 'checking' && await store.markTradeSeen(trade.id).catch(() => false)) notifyTrade(trade, 'seen');
+}
+const tradeSeenAt = id => { let first = 0; for (const [k, at] of CS) if (k.startsWith('tseen:' + id + ':') && (!first || at < first)) first = at; return first || null; };
+app.post('/api/admin/trades/:id/seen', requireAdmin, async (req, res) => {
+  try {
+    const trade = await store.findTradeById(req.params.id);
+    if (!trade) return res.status(404).json({ error: 'Receipt not found.' });
+    await tradeOpened(trade, 'admin');
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not save.' }); }
 });
@@ -1119,7 +1135,7 @@ function tradeSeenIndex(staffList) {   // tradeId -> [{ name, at }] from the sav
     const [, tradeId, staffId] = k.split(':');
     const st = staffList.find(x => x.id === staffId);
     if (!idx.has(tradeId)) idx.set(tradeId, []);
-    idx.get(tradeId).push({ name: st ? st.name : 'Staff', at });
+    idx.get(tradeId).push({ name: staffId === 'admin' ? 'Admin' : st ? st.name : 'Staff', at });
   }
   for (const v of idx.values()) v.sort((a, b) => a.at - b.at);
   return idx;
