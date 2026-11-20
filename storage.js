@@ -398,22 +398,32 @@ function tradeRow(r) {
     userPayoutAccount: r.user_payout_account, userPayoutBank: r.user_payout_bank,
     settlementScreenshot: pubMedia(r.settlement_screenshot), settlementStatus: r.settlement_status,
     chatMessageId: r.chat_message_id || null,   // set when a chat manager turned a chat photo into this receipt
+    card: r.card ? { ...r.card, images: (r.card.images || []).map(pubMedia) } : null,   // gift card details (sell-a-card trades only)
     createdAt: r.created_at, updatedAt: r.updated_at
   };
 }
 async function createTrade(t) {
   const id = uid();
-  t = { ...t, receiptImage: await toRef(t.receiptImage, 'u/' + safeOwner(t.userId)) };
+  const folder = 'u/' + safeOwner(t.userId);
+  t = { ...t, receiptImage: await toRef(t.receiptImage, folder) };
+  if (t.card) t.card = { ...t.card, images: await Promise.all((t.card.images || []).map(i => toRef(i, folder))) };
   const { error } = await supabase.from('trades').insert({
     id, user_id: t.userId, account_id: t.accountId, staff_id: t.staffId,
-    intended_amount: t.intendedAmount, receipt_image: t.receiptImage,
+    intended_amount: t.intendedAmount, receipt_image: t.receiptImage || '',
     status: 'checking', account_number_used: t.accountNumberUsed, account_title_used: t.accountTitleUsed,
     user_payout_account: t.userPayoutAccount, user_payout_bank: t.userPayoutBank,
     settlement_status: 'pending',
-    ...(t.chatMessageId ? { chat_message_id: t.chatMessageId } : {})
+    ...(t.chatMessageId ? { chat_message_id: t.chatMessageId } : {}),
+    ...(t.card ? { card: t.card } : {})
   });
   if (error) throw error;
   return findTradeById(id);
+}
+// Gift card trades with this e-code (letters and numbers only, upper case), so one code cannot be sold twice.
+async function findTradesByCardCode(key) {
+  const { data, error } = await supabase.from('trades').select('id, status').eq('card->>codeKey', key).limit(20);
+  if (error) throw error;
+  return data || [];
 }
 async function findTradeById(id) {
   const { data, error } = await supabase.from('trades').select('*').eq('id', id).maybeSingle();
@@ -485,7 +495,8 @@ async function getSettings() {
   return {
     rulesText: data.rules_text, settlementAccount: data.settlement_account,
     settlementBank: data.settlement_bank, maxDeposit: Number(data.max_deposit),
-    btcRate: Number(data.btc_rate) || 0, usdtRate: Number(data.usdt_rate) || 0   // naira for 1 BTC / 1 USDT; 0 = not set
+    btcRate: Number(data.btc_rate) || 0, usdtRate: Number(data.usdt_rate) || 0,   // naira for 1 BTC / 1 USDT; 0 = not set
+    giftOn: data.gift_on !== false   // Gift Cards switched on for customers (on until the admin turns it off)
   };
 }
 async function updateSettings(fields) {
@@ -496,6 +507,7 @@ async function updateSettings(fields) {
   if (fields.maxDeposit !== undefined) patch.max_deposit = fields.maxDeposit;
   if (fields.btcRate !== undefined) patch.btc_rate = fields.btcRate;
   if (fields.usdtRate !== undefined) patch.usdt_rate = fields.usdtRate;
+  if (fields.giftOn !== undefined) patch.gift_on = !!fields.giftOn;
   if (!Object.keys(patch).length) return;
   const { error } = await supabase.from('settings').update(patch).eq('id', 1);
   if (error) throw error;
@@ -950,6 +962,101 @@ async function updateEntry(id, patch) {
 }
 
 // ============================================================
+// GIFT CARDS: the cards customers can sell (the admin sets each card's rates),
+// and AZAPLUG gift codes a customer types to get money in their balance.
+// Tables: gift_cards, gift_codes, gift_redemptions (SQL in the README).
+// ============================================================
+function giftCardRow(r) {
+  return { id: r.id, name: r.name, rows: Array.isArray(r.rows) ? r.rows : [], image: pubMedia(r.image) || null, note: r.note || '',
+    active: !!r.active, sort: Number(r.sort) || 0, createdAt: r.created_at };
+}
+async function listGiftCards() {
+  const { data, error } = await supabase.from('gift_cards').select('*').order('sort', { ascending: true }).order('created_at', { ascending: true });
+  if (error) throw error;
+  return data.map(giftCardRow);
+}
+async function findGiftCard(id) {
+  const { data, error } = await supabase.from('gift_cards').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? giftCardRow(data) : null;
+}
+// Saves a new card (no id) or changes one. image: data: URL (new picture), /api/media link (kept) or null (removed).
+async function saveGiftCard(c) {
+  const row = { name: c.name, rows: c.rows, note: c.note || '', active: !!c.active, sort: Number(c.sort) || 0 };
+  if (c.image !== undefined) row.image = c.image ? await toRef(c.image, 'pub/gift') : null;
+  if (c.id) {
+    const old = c.image !== undefined ? await supabase.from('gift_cards').select('image').eq('id', c.id).maybeSingle() : { data: null };
+    const { error } = await supabase.from('gift_cards').update(row).eq('id', c.id);
+    if (error) throw error;
+    if (old.data && old.data.image && old.data.image !== row.image && parseRef(old.data.image)) dropMedia(old.data.image);
+    return c.id;
+  }
+  const id = uid();
+  const { error } = await supabase.from('gift_cards').insert({ id, ...row });
+  if (error) throw error;
+  return id;
+}
+async function deleteGiftCard(id) {
+  const { data: row } = await supabase.from('gift_cards').select('image').eq('id', id).maybeSingle();
+  const { error } = await supabase.from('gift_cards').delete().eq('id', id);
+  if (error) throw error;
+  if (row && parseRef(row.image)) dropMedia(row.image);
+}
+function giftCodeRow(r) {
+  return { code: r.code, amount: Number(r.amount), maxUses: Number(r.max_uses), used: Number(r.used), note: r.note || '',
+    expiresAt: r.expires_at || null, active: !!r.active, createdAt: r.created_at };
+}
+async function listGiftCodes() {
+  const { data, error } = await supabase.from('gift_codes').select('*').order('created_at', { ascending: false }).limit(200);
+  if (error) throw error;
+  return data.map(giftCodeRow);
+}
+async function findGiftCode(code) {
+  const { data, error } = await supabase.from('gift_codes').select('*').eq('code', code).maybeSingle();
+  if (error) throw error;
+  return data ? giftCodeRow(data) : null;
+}
+// Returns false when that code already exists.
+async function createGiftCode(c) {
+  const { error } = await supabase.from('gift_codes').insert({ code: c.code, amount: c.amount, max_uses: c.maxUses, used: 0, note: c.note || '', expires_at: c.expiresAt || null, active: true });
+  if (error) { if (/duplicate|unique/i.test(error.message)) return false; throw error; }
+  return true;
+}
+async function setGiftCodeActive(code, active) {
+  const { error } = await supabase.from('gift_codes').update({ active: !!active }).eq('code', code);
+  if (error) throw error;
+}
+// Only a code nobody has used can be deleted (used ones stay as a record; turn them off instead).
+async function deleteGiftCode(code) {
+  const { data, error } = await supabase.from('gift_codes').delete().eq('code', code).eq('used', 0).select('code');
+  if (error) throw error;
+  return !!(data && data.length);
+}
+// Changes the use count only if nobody else changed it in between (safe with two people at the same second).
+async function bumpGiftCodeUse(code, from, by) {
+  const { data, error } = await supabase.from('gift_codes').update({ used: from + by }).eq('code', code).eq('used', from).select('code');
+  if (error) throw error;
+  return !!(data && data.length);
+}
+// One row per customer per code (the database refuses a second one). Returns null if they already used it.
+async function addRedemption(r) {
+  const { data, error } = await supabase.from('gift_redemptions').insert({ id: uid(), code: r.code, user_id: r.userId, amount: r.amount }).select('*').maybeSingle();
+  if (error) { if (/duplicate|unique/i.test(error.message)) return null; throw error; }
+  return data ? { id: data.id, code: data.code, userId: data.user_id, amount: Number(data.amount), createdAt: data.created_at } : null;
+}
+async function deleteRedemption(id) {
+  const { error } = await supabase.from('gift_redemptions').delete().eq('id', id);
+  if (error) throw error;
+}
+async function listRedemptions(opts) {
+  let q = supabase.from('gift_redemptions').select('*').order('created_at', { ascending: false }).limit(500);
+  if (opts && opts.userId) q = q.eq('user_id', opts.userId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data.map(d => ({ id: d.id, code: d.code, userId: d.user_id, amount: Number(d.amount), createdAt: d.created_at }));
+}
+
+// ============================================================
 // CHAT STATUS (last seen + read up to) — table chat_state(id, at)
 // ============================================================
 async function listChatState() {
@@ -990,6 +1097,8 @@ async function countRows(table, filter) {
 }
 
 module.exports = {
+  listGiftCards, findGiftCard, saveGiftCard, deleteGiftCard,
+  listGiftCodes, findGiftCode, createGiftCode, setGiftCodeActive, deleteGiftCode, bumpGiftCodeUse, addRedemption, deleteRedemption, listRedemptions,
   EGRESS, listMetrics, saveMetrics, appSizes, countRows,
   listChatState, saveChatState,
   createGiveaway, listGiveaways, setGiveawayStatus, listEntries, addEntry, updateEntry,
@@ -1006,7 +1115,7 @@ module.exports = {
   createUser, findUserByPhone, findUserById, listUsers, setUserStatus, updateUser, deleteUser, addToBalance,
   createStaff, findStaffByPhone, findStaffById, listStaff, setStaffStatus, deleteStaff,
   listAccountsPublic, listAccountsForAmount, listAllAccounts, listAccountsByStaff, findAccountById, createAccount, updateAccount, deleteAccount,
-  listApprovedTradeTotals, createTrade, findTradeById, listTradesForUser, listTradesForStaff, listAllTrades, updateTradeStatus, setSettlement,
+  listApprovedTradeTotals, createTrade, findTradeById, findTradesByCardCode, listTradesForUser, listTradesForStaff, listAllTrades, updateTradeStatus, setSettlement,
   getSettings, updateSettings,
   addMessage, messagesForUser, listConversations, findMessageById, deleteMessage,
   createWithdrawal, findWithdrawalById, listWithdrawalsForUser, listAllWithdrawals, updateWithdrawalStatus

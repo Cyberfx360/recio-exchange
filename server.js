@@ -234,12 +234,15 @@ function signupProblem(req, b) {
 // ============================================================
 const visitorKey = req => String(req.ip || (req.socket && req.socket.remoteAddress) || 'unknown');
 const IP_FAILS = new Map();   // visitor -> { n, until, first }
-function ipBlocked(kind, req) {
-  const t = IP_FAILS.get(kind + '|' + visitorKey(req));
+const ipBlocked = (kind, req) => keyBlocked(kind + '|' + visitorKey(req));
+const ipFail = (kind, req, max, minutes) => keyFail(kind + '|' + visitorKey(req), max, minutes);
+// Minutes left on a block (0 = not blocked). The key can be a device or a person (e.g. 'giftcode|<customer id>').
+function keyBlocked(k) {
+  const t = IP_FAILS.get(k);
   return t && t.until > Date.now() ? Math.ceil((t.until - Date.now()) / 60000) : 0;
 }
-function ipFail(kind, req, max, minutes) {
-  const k = kind + '|' + visitorKey(req), now = Date.now();
+function keyFail(k, max, minutes) {
+  const now = Date.now();
   let t = IP_FAILS.get(k);
   if (!t || now - t.first > minutes * 60000) t = { n: 0, until: 0, first: now };
   t.n += 1;
@@ -1723,11 +1726,12 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
       if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'Enter the rate as a number, like 1650.' });
       patch[k] = n;
     }
-    await store.updateSettings(patch); res.json({ ok: true });
+    if (b.giftOn !== undefined) patch.giftOn = b.giftOn === true;
+    await store.updateSettings(patch); if (patch.giftOn !== undefined) GIFT_ON = null; res.json({ ok: true });
   } catch (err) {
     console.error(err);
-    const cryptoCols = /btc_rate|usdt_rate/.test(String(err && err.message));
-    res.status(500).json({ error: cryptoCols ? 'Run the BTC/USDT rates SQL from the README in Supabase first.' : 'Could not update settings.' });
+    const msg = String(err && err.message), cryptoCols = /btc_rate|usdt_rate/.test(msg);
+    res.status(500).json({ error: cryptoCols ? 'Run the BTC/USDT rates SQL from the README in Supabase first.' : /gift_on/.test(msg) ? 'Run the gift card SQL from the README in Supabase first.' : 'Could not update settings.' });
   }
 });
 
@@ -1815,7 +1819,7 @@ function notify(userId, kind, title, body, opts) {
 }
 const plain = n => Number(n || 0).toLocaleString('en-NG');
 function notifyTrade(trade, status, reason) {
-  const what = `${trade.accountTitleUsed || 'your'} receipt for ${plain(trade.intendedAmount)}`;
+  const c = trade.card, what = c ? `${c.name} gift card (${c.cur}${plain(c.value)})` : `${trade.accountTitleUsed || 'your'} receipt for ${plain(trade.intendedAmount)}`;
   if (status === 'seen') notify(trade.userId, 'tx', 'Receipt seen', `We have seen your ${what} and are checking it.`);
   if (status === 'confirmed') notify(trade.userId, 'tx', 'Payment confirmed', `Your ${what} has been confirmed.`);
   if (status === 'approved') notify(trade.userId, 'tx', 'Receipt approved', `Your ${what} was approved. Your balance will be credited shortly.`);
@@ -2274,6 +2278,212 @@ app.post('/api/admin/giveaways/:id/credit', requireAdmin, ADMIN_MONEY, async (re
     }
     res.json({ ok: true, paid, total: paid * g.amount });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not credit the winners.' }); }
+});
+
+// ============================================================
+// GIFT CARDS
+// 1) Sell a card: the customer picks a card and its type (e.g. Apple / iTunes · USA · Physical), types the card value
+//    and adds photos and/or the e-code. It becomes a receipt for the ADMIN ONLY (no account, no vendor sees it),
+//    with today's rate saved on it. The admin approves and credits it like any other receipt.
+// 2) Gift codes: the admin makes a code worth an amount (e.g. AZA-7K3P-Q9XD = ₦5,000). A customer types it under
+//    Gift Cards → Redeem Code and the money goes into their balance. Each customer can use a code once.
+// Needs the gift card SQL from the README (tables gift_cards, gift_codes, gift_redemptions + trades.card).
+// ============================================================
+const giftSqlHint = err => (/gift_(cards|codes|redemptions|on)|'card' column|column "?card"?|trades\.card/i.test(String(err && err.message)) ? 'Run the gift card SQL from the README in Supabase first.' : null);
+const GIFT_CURS = ['$', '£', '€', 'C$', 'A$'];
+const giftKind = k => (k === 'ecode' ? 'E-code' : 'Physical');
+const giftLabel = r => `${r.country} · ${giftKind(r.kind)}`;
+const GIFT_DEFAULTS = [   // added once, with no rates; customers only see a card after the admin sets a rate on it
+  ['Apple / iTunes', [['USA', 'physical', '$'], ['USA', 'ecode', '$'], ['UK', 'physical', '£']]],
+  ['Amazon', [['USA', 'physical', '$'], ['USA', 'ecode', '$']]],
+  ['Steam', [['USA', 'physical', '$'], ['USA', 'ecode', '$']]],
+  ['Google Play', [['USA', 'physical', '$'], ['USA', 'ecode', '$']]],
+  ['Razer Gold', [['Global', 'ecode', '$'], ['Global', 'physical', '$']]],
+  ['Sephora', [['USA', 'physical', '$'], ['USA', 'ecode', '$']]],
+  ['Vanilla (Visa / Mastercard)', [['USA', 'physical', '$']]]
+];
+const rowId = () => crypto.randomBytes(4).toString('hex');
+// Checks the rows the admin typed for one card. Returns { rows } or { error }.
+function giftRows(list) {
+  if (!Array.isArray(list) || !list.length) return { error: 'Add at least one card type (for example USA · Physical).' };
+  if (list.length > 12) return { error: 'A card can have at most 12 types.' };
+  const rows = [];
+  for (const r of list) {
+    const country = String((r && r.country) || '').trim().slice(0, 30), kind = r && r.kind === 'ecode' ? 'ecode' : 'physical';
+    const cur = GIFT_CURS.includes(r && r.cur) ? r.cur : '$';
+    const rate = Number(r && r.rate) || 0, min = Number(r && r.min) || 0, max = Number(r && r.max) || 0;
+    if (!country) return { error: 'Every card type needs a country (for example USA).' };
+    if (![rate, min, max].every(n => Number.isFinite(n) && n >= 0 && n < 1e7)) return { error: 'Rates and limits must be numbers, like 1250.' };
+    if (max && max < min) return { error: `For ${country} · ${giftKind(kind)}, the biggest card is smaller than the smallest card.` };
+    rows.push({ id: /^[a-f0-9]{8}$/.test(r && r.id) ? r.id : rowId(), country, kind, cur, rate, min, max });
+  }
+  return { rows };
+}
+// Cards are read on every customer visit, so they are kept in memory and refreshed when the admin changes one.
+let GIFT_CACHE = null;
+async function giftCards() {
+  if (GIFT_CACHE && Date.now() - GIFT_CACHE.at < 300000) return GIFT_CACHE.list;
+  const list = await store.listGiftCards();
+  GIFT_CACHE = { at: Date.now(), list };
+  return list;
+}
+// The admin's on/off switch for the whole Gift Cards feature (Admin → Gift Cards). Read from settings, kept for a minute.
+let GIFT_ON = null;
+async function giftOn() {
+  if (GIFT_ON && Date.now() - GIFT_ON.at < 60000) return GIFT_ON.on;
+  const on = (await store.getSettings()).giftOn !== false;
+  GIFT_ON = { at: Date.now(), on };
+  return on;
+}
+const GIFT_OFF = 'Gift cards are turned off right now. Please check back later.';
+async function giftSeed() {
+  if (csGet('gift:seeded')) return;
+  if ((await store.listGiftCards()).length) { csSet('gift:seeded', Date.now(), 0); return; }
+  for (let i = 0; i < GIFT_DEFAULTS.length; i++) {
+    const [name, rows] = GIFT_DEFAULTS[i];
+    await store.saveGiftCard({ name, active: true, sort: i, rows: rows.map(([country, kind, cur]) => ({ id: rowId(), country, kind, cur, rate: 0, min: 0, max: 0 })) });
+  }
+  csSet('gift:seeded', Date.now(), 0); GIFT_CACHE = null;
+}
+const giftPublic = c => ({ id: c.id, name: c.name, image: c.image, note: c.note,
+  rows: c.rows.filter(r => Number(r.rate) > 0).map(r => ({ id: r.id, country: r.country, kind: r.kind, cur: r.cur, rate: Number(r.rate), min: Number(r.min) || 0, max: Number(r.max) || 0 })) });
+const codeKey = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+app.get('/api/gift/cards', async (req, res) => {
+  try {
+    if (!(await giftOn())) return res.json({ on: false, cards: [] });
+    res.json({ on: true, cards: (await giftCards()).filter(c => c.active).map(giftPublic).filter(c => c.rows.length) });
+  } catch (err) { if (!giftSqlHint(err)) console.error('Gift cards error:', err); res.json({ on: false, cards: [] }); }
+});
+
+app.post('/api/gift/trades', requireUser, requireApprovedUser, moneyLock(req => 'user:' + req.session.userId), async (req, res) => {
+  try {
+    if (!(await giftOn())) return res.status(403).json({ error: GIFT_OFF });
+    const b = req.body || {};
+    const card = (await giftCards()).find(c => c.id === b.cardId && c.active);
+    if (!card) return res.status(404).json({ error: 'That gift card is not available right now.' });
+    const row = card.rows.find(r => r.id === b.rowId && Number(r.rate) > 0);
+    if (!row) return res.status(400).json({ error: 'Choose the card type.' });
+    const value = Math.round(Number(b.value) * 100) / 100, label = giftLabel(row);
+    if (!Number.isFinite(value) || value <= 0 || value > 1e6) return res.status(400).json({ error: 'Enter the value written on the card.' });
+    if (row.min > 0 && value < row.min) return res.status(400).json({ error: `The smallest ${card.name} card (${label}) we take is ${row.cur}${plain(row.min)}.` });
+    if (row.max > 0 && value > row.max) return res.status(400).json({ error: `The biggest ${card.name} card (${label}) we take is ${row.cur}${plain(row.max)}. Chat with us for bigger cards.` });
+    const images = (Array.isArray(b.images) ? b.images : []).filter(Boolean);
+    if (images.length > 4) return res.status(400).json({ error: 'Add at most 4 photos.' });
+    if (images.some(i => typeof i !== 'string' || !/^data:image\//i.test(i) || badAttachment(i) || i.length > 3000000)) return res.status(400).json({ error: 'Photos must be JPG or PNG pictures.' });
+    const code = String(b.code || '').trim().slice(0, 300), key = codeKey(code);
+    if (row.kind === 'ecode' && key.length < 4) return res.status(400).json({ error: 'Type the e-code of the card.' });
+    if (row.kind === 'physical' && !images.length) return res.status(400).json({ error: 'Add a clear photo of the card, with the code showing.' });
+    const mine = await store.listTradesForUser(req.user.id);
+    if (mine.filter(t => t.card && ['checking', 'seen', 'confirmed'].includes(t.status)).length >= 10) return res.status(429).json({ error: 'You already have 10 cards waiting. Please wait for them to be checked first.' });
+    // The same code can only be sold once (unless the first one failed).
+    if (key.length >= 4 && (await store.findTradesByCardCode(key)).some(t => t.status !== 'failed')) return res.status(409).json({ error: 'This card code has already been sent to AZAPLUG. Chat with us if you think this is a mistake.' });
+    const rate = Number(row.rate), est = Math.round(value * rate * 100) / 100;
+    const trade = await store.createTrade({
+      userId: req.user.id, accountId: null, staffId: null, intendedAmount: value, receiptImage: images[0] || '',
+      accountNumberUsed: label, accountTitleUsed: card.name + ' gift card',
+      userPayoutAccount: req.user.accountNumber, userPayoutBank: req.user.bankName,
+      card: { cardId: card.id, name: card.name, rowId: row.id, country: row.country, kind: row.kind, cur: row.cur, rate, value, est, code, codeKey: key || null, images: images.slice(1) }
+    });
+    alertTeam({ admin: true }, 'New gift card', `${req.user.name} sent a ${card.name} gift card (${label}) worth ${row.cur}${plain(value)}, about ₦${plain(est)}.`, { admin: 'receipts' });
+    res.json({ ok: true, trade });
+  } catch (err) {
+    const hint = giftSqlHint(err); if (!hint) console.error('Gift card trade error:', err);
+    res.status(500).json({ error: hint ? 'Selling gift cards is not switched on yet. Please chat with support.' : 'Could not send your card. Try again.' });
+  }
+});
+
+// ---- Gift codes
+const showCode = c => (/^AZA[A-Z0-9]{8}$/.test(c) ? `AZA-${c.slice(3, 7)}-${c.slice(7)}` : c);
+const CODE_ABC = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // no 0/O, 1/I/L, so codes are easy to read out
+const newCode = () => 'AZA' + Array.from(crypto.randomBytes(8), x => CODE_ABC[x % CODE_ABC.length]).join('');
+app.post('/api/gift/redeem', requireUser, requireApprovedUser, async (req, res) => {
+  const mine = 'giftcode|' + req.user.id, wait = keyBlocked(mine) || ipBlocked('giftcode', req);
+  if (wait) return res.status(429).json({ error: `Too many wrong codes. Try again in ${wait} minute${wait === 1 ? '' : 's'}.` });
+  const code = codeKey((req.body || {}).code);
+  if (code.length < 4 || code.length > 24) return res.status(400).json({ error: 'Type your gift code.' });
+  try {
+    if (!(await giftOn())) return res.status(403).json({ error: GIFT_OFF });
+    const out = await withLock('giftcode:' + code, async () => {
+      const c = await store.findGiftCode(code);
+      if (!c || !c.active) { keyFail(mine, 5, 30); ipFail('giftcode', req, 10, 30); return { error: 'That code is not correct. Check it and try again.' }; }
+      if (c.expiresAt && Date.parse(c.expiresAt) < Date.now()) return { error: 'This code has expired.' };
+      if (c.used >= c.maxUses) return { error: 'This code has already been used up.' };
+      const r = await store.addRedemption({ code, userId: req.user.id, amount: c.amount });
+      if (!r) return { error: 'You have already used this code.' };
+      try {
+        if (!(await store.bumpGiftCodeUse(code, c.used, 1))) throw new Error('The code is busy. Please try again.');
+        try { await store.addToBalance(req.user.id, c.amount); }
+        catch (e) { await store.bumpGiftCodeUse(code, c.used + 1, -1).catch(() => {}); throw e; }
+      } catch (e) { await store.deleteRedemption(r.id).catch(() => {}); throw e; }
+      return { amount: c.amount, note: c.note };
+    });
+    if (out.error) return res.status(400).json({ error: out.error });
+    notify(req.user.id, 'tx', 'Gift code redeemed', `₦${plain(out.amount)} from gift code ${showCode(code)} has been added to your balance.`, { go: 'home' });
+    alertTeam({ admin: true }, 'Gift code used', `${req.user.name} used gift code ${showCode(code)} (₦${plain(out.amount)}).`, { admin: 'gift' });
+    const me = await store.findUserById(req.user.id);
+    res.json({ ok: true, amount: out.amount, balance: me ? me.balance : null });
+  } catch (err) {
+    const hint = giftSqlHint(err); if (!hint) console.error('Gift code error:', err);
+    res.status(500).json({ error: hint ? 'Gift codes are not switched on yet. Please chat with support.' : (/busy/.test(err.message) ? err.message : 'Could not use the code. Try again.') });
+  }
+});
+
+// ---- Admin: cards, rates and codes
+app.get('/api/admin/gift', requireAdmin, async (req, res) => {
+  try {
+    await giftSeed();
+    const [cards, codes, reds, users] = await Promise.all([store.listGiftCards(), store.listGiftCodes(), store.listRedemptions(), store.listUsers()]);
+    const who = id => { const u = users.find(x => x.id === id) || {}; return { name: u.name || 'Deleted customer', phone: u.phone || '' }; };
+    GIFT_CACHE = { at: Date.now(), list: cards }; GIFT_ON = null;
+    res.json({ on: await giftOn(), cards, codes: codes.map(c => ({ ...c, shown: showCode(c.code), expired: !!(c.expiresAt && Date.parse(c.expiresAt) < Date.now()),
+      by: reds.filter(r => r.code === c.code).map(r => ({ ...who(r.userId), userId: r.userId, at: r.createdAt })) })) });
+  } catch (err) { const hint = giftSqlHint(err); if (!hint) console.error(err); res.status(500).json({ error: hint || 'Could not load gift cards.' }); }
+});
+app.post('/api/admin/gift/cards', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {}, name = String(b.name || '').trim().slice(0, 40);
+    if (!name) return res.status(400).json({ error: 'Type the card name (for example Apple / iTunes).' });
+    const r = giftRows(b.rows); if (r.error) return res.status(400).json({ error: r.error });
+    if (b.image && (typeof b.image !== 'string' || (!/^data:image\//i.test(b.image) && !/^\/api\/media\/pub\//.test(b.image)) || badAttachment(/^data:/.test(b.image) ? b.image : ''))) return res.status(400).json({ error: 'The picture must be JPG or PNG.' });
+    if (b.id && !(await store.findGiftCard(b.id))) return res.status(404).json({ error: 'That card was deleted.' });
+    const all = b.id ? [] : await store.listGiftCards();
+    const id = await store.saveGiftCard({ id: b.id || null, name, rows: r.rows, note: String(b.note || '').trim().slice(0, 200), active: b.active !== false,
+      sort: b.id ? Number(b.sort) || 0 : all.length, image: b.image === undefined ? undefined : (b.image || null) });
+    GIFT_CACHE = null;
+    res.json({ ok: true, id });
+  } catch (err) { const hint = giftSqlHint(err); if (!hint) console.error(err); res.status(500).json({ error: hint || 'Could not save the card.' }); }
+});
+app.delete('/api/admin/gift/cards/:id', requireAdmin, async (req, res) => {
+  try { await store.deleteGiftCard(req.params.id); GIFT_CACHE = null; res.json({ ok: true }); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the card.' }); }
+});
+app.post('/api/admin/gift/codes', requireAdmin, async (req, res) => {
+  try {
+    const b = req.body || {}, amount = Math.round(Number(b.amount) * 100) / 100, maxUses = Math.round(Number(b.maxUses) || 1);
+    if (!(amount > 0 && amount <= 1000000)) return res.status(400).json({ error: 'Enter how much the code is worth (up to ₦1,000,000).' });
+    if (!(maxUses >= 1 && maxUses <= 10000)) return res.status(400).json({ error: 'Enter how many people can use it (1 to 10,000).' });
+    let expiresAt = null;
+    if (b.expiresAt) { const d = new Date(b.expiresAt); if (isNaN(d)) return res.status(400).json({ error: 'Choose a valid end date.' }); if (d < new Date()) return res.status(400).json({ error: 'The end date has already passed.' }); expiresAt = d.toISOString(); }
+    const custom = codeKey(b.code);
+    if (b.code && (custom.length < 5 || custom.length > 20)) return res.status(400).json({ error: 'Your own code must be 5 to 20 letters or numbers.' });
+    const note = String(b.note || '').trim().slice(0, 80);
+    let code = custom || newCode(), ok = await store.createGiftCode({ code, amount, maxUses, note, expiresAt });
+    if (!ok && custom) return res.status(409).json({ error: 'That code already exists. Choose another one.' });
+    for (let i = 0; !ok && i < 5; i++) { code = newCode(); ok = await store.createGiftCode({ code, amount, maxUses, note, expiresAt }); }
+    if (!ok) return res.status(500).json({ error: 'Could not make a new code. Try again.' });
+    res.json({ ok: true, code, shown: showCode(code) });
+  } catch (err) { const hint = giftSqlHint(err); if (!hint) console.error(err); res.status(500).json({ error: hint || 'Could not create the code.' }); }
+});
+app.put('/api/admin/gift/codes/:code', requireAdmin, async (req, res) => {
+  try { await store.setGiftCodeActive(codeKey(req.params.code), !!(req.body || {}).active); res.json({ ok: true }); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Could not change the code.' }); }
+});
+app.delete('/api/admin/gift/codes/:code', requireAdmin, async (req, res) => {
+  try {
+    if (!(await store.deleteGiftCode(codeKey(req.params.code)))) return res.status(400).json({ error: 'Someone has already used this code, so it is kept as a record. Turn it off instead.' });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the code.' }); }
 });
 
 // ============================================================
