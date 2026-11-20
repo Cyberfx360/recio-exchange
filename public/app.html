@@ -129,6 +129,7 @@ label.lb{display:block;font-weight:600;font-size:15px;margin:22px 0 10px}
 .chp i{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;font-style:normal;font-weight:700;font-size:12px;background:#E5E7EB;color:#374151}
 .chp .r1 i{background:#FEF3C7;color:#B45309}.chp .r3 i{background:#FFEDD5;color:#C2410C}.chp b{display:block;font-family:var(--mono);font-size:14.5px;margin-top:6px;color:#FCD34D;white-space:nowrap}
 .chd{margin-top:12px;text-align:center;font-size:14px;opacity:.95}.chd b{font-family:var(--mono);color:#FCD34D}.chd small{display:block;opacity:.7;font-size:12px;margin-top:2px}
+.seenl{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13.5px;font-weight:600;color:#1D6FD8}
 .tpc{background:#fff;border:1px solid var(--line);border-radius:18px;padding:12px 16px 4px;margin:0 0 20px;box-shadow:0 1px 2px rgba(17,24,39,.04)}
 .tph{display:flex;align-items:center;gap:7px;font-size:15.5px;font-family:var(--head)}.tph svg{width:18px;height:18px;color:#D97706}.tph small{font-family:var(--body);font-weight:500;font-size:12px;color:var(--muted);margin-left:2px}
 .tpr{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid var(--line)}.tpc>.tpr:first-child{border-top:0}
@@ -737,7 +738,8 @@ trade:()=>{const t=S.trades.find(x=>x.id===S.tradeId);if(!t)return V.history();c
   <div class="top left">${back(S.tprev||'home',1)}<span class="title" style="font-size:21px">Transaction Details</span></div>
   <div class="card"><div class="between" style="align-items:flex-start"><span><small class="muted">You sent</small><b class="h" style="display:block;font-size:30px;line-height:1.2">${amt(t.intendedAmount)}</b></span><span class="badge ${m[1]}">${m[0]}</span></div>
    ${t.status==='failed'?`<p style="margin-top:16px;background:#FDE8E8;color:#B91C1C;border-radius:12px;padding:12px 14px;font-size:14px"><b>This trade failed.</b>${t.failReason?'<br>'+esc(t.failReason):''}</p>`
-   :`<div class="steps">${['Checking','Seen','Confirmed','Approved'].map((n,i)=>`<div class="${i<=at?'on':''}"><i></i>${n}</div>`).join('')}</div>`}</div>
+   :`<div class="steps">${['Checking','Seen','Confirmed','Approved'].map((n,i)=>`<div class="${i<=at?'on':''}"><i></i>${n}</div>`).join('')}</div>
+   ${t.seenAt?`<p class="seenl"><svg viewBox="0 0 16 11" width="18" height="12"><path fill="#53A0F7" d="M11.1.7 4.9 7.6 2.3 5 1 6.3l3.9 3.9 7.5-8.2zM15 .7 8.8 7.6l-.9-.9-1.3 1.4 2.2 2.2 7.5-8.2z"/></svg>Seen by AZAPLUG · ${fd(new Date(t.seenAt))}, ${ft(new Date(t.seenAt))}</p>`:t.status==='checking'?'<p class="seenl" style="color:var(--muted)">Waiting for our team to open your receipt…</p>':''}`}</div>
   ${fi?`<img src="${fi}" alt="Proof attached by AZAPLUG" style="width:100%;border-radius:14px;margin-top:14px">`:''}
   <div class="card sum" style="margin-top:16px"><div><span>Account</span><b>${esc(t.accountTitleUsed||'Account')}</b></div><div><span>Date</span><b style="font-size:15px">${fd(d)} · ${ft(d)}</b></div>
    <div><span>Recipient gets</span>${t.creditedAmount!=null?`<b style="color:#0E9F6E">${naira(t.creditedAmount)}</b>`:'<b style="font-family:var(--body);font-size:14px;font-weight:500;color:var(--muted)">Set after review</b>'}</div>

@@ -554,6 +554,7 @@ async function api(method,url,body){
 const fwBody=f=>`<div class="fwb">${safeImg(f.imageData)?`<img src="${safeImg(f.imageData)}" alt="Forwarded photo"><button class="svp" style="color:var(--blue)" data-act="savePic" data-kind="chat" data-id="${esc(f.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(f)}${esc(f.text||'').replace(/\n/g,'<br>')}</div>`;
 const fwNew=()=>(S.fwds||[]).filter(f=>f.status==='new').length;
 async function loadGas(){try{S.gas=(await api('GET','/api/admin/giveaways')).giveaways||[];S.gaErr=''}catch(e){S.gas=[];S.gaErr=e.message}if(S.route==='giveaway'&&!typing())render()}
+const TSEEN=new Set(); // receipts the admin opened (the customer sees "Seen")
 async function loadHealth(){try{S.health=await api('GET','/api/admin/health');if(S.route==='health')render()}catch(e){toast(e.message)}}
 async function refresh(){
   // one list failing (e.g. settings) must not lock the admin out: load the rest and say which one failed
@@ -1126,6 +1127,7 @@ function go(r,o,pop){
       if(S.route!=='staffChat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(e=>{if(S.route==='staffChat'&&!S.staffPerson){toast(e.message);go('chats')}});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
   if(r==='chat'){S.chat=[];const cv=(S.convos||[]).find(c=>c.userId===S.id);if(cv)cv.unread=false;const pull=()=>api('GET','/api/admin/chats/'+encodeURIComponent(S.id)).then(d=>{const n=sig(d.messages)!==sig(S.chat);S.chat=d.messages||[];
       if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
+  if(r==='trade'&&S.id&&!TSEEN.has(S.id)){TSEEN.add(S.id);api('POST','/api/admin/trades/'+encodeURIComponent(S.id)+'/seen').catch(()=>TSEEN.delete(S.id))}
   if(r==='health'){S.health=null;loadHealth()}
   if(r==='chal'){S.chal=null;api('GET','/api/admin/challenge').then(d=>{S.chal=d;if(S.route==='chal')render()}).catch(e=>toast(e.message))}
   if(r==='tfa'){if(!S.tfa||!S.tfa.done)api('GET','/api/admin/2fa').then(d=>{S.tfa=d;if(S.route==='tfa')render()}).catch(e=>toast(e.message))}
