@@ -45,6 +45,10 @@
 > ```
 > Then open Admin → Gift Cards and set a rate on each card type. A card only shows to customers once it has a rate.
 > The switch at the top of Admin → Gift Cards turns the whole feature off or on for customers.
+> For **Gift a Friend** (customers turn their balance into a gift code), also run this one line:
+> ```sql
+> alter table gift_codes add column if not exists created_by uuid references users(id) on delete set null;
+> ```
 >
 > For the admin to message every staff member, run this one line:
 > ```sql
