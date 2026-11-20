@@ -1004,7 +1004,7 @@ async function deleteGiftCard(id) {
 }
 function giftCodeRow(r) {
   return { code: r.code, amount: Number(r.amount), maxUses: Number(r.max_uses), used: Number(r.used), note: r.note || '',
-    expiresAt: r.expires_at || null, active: !!r.active, createdAt: r.created_at };
+    expiresAt: r.expires_at || null, active: !!r.active, createdAt: r.created_at, createdBy: r.created_by || null };   // createdBy: a customer who bought it from their balance
 }
 async function listGiftCodes() {
   const { data, error } = await supabase.from('gift_codes').select('*').order('created_at', { ascending: false }).limit(200);
@@ -1018,9 +1018,21 @@ async function findGiftCode(code) {
 }
 // Returns false when that code already exists.
 async function createGiftCode(c) {
-  const { error } = await supabase.from('gift_codes').insert({ code: c.code, amount: c.amount, max_uses: c.maxUses, used: 0, note: c.note || '', expires_at: c.expiresAt || null, active: true });
+  const { error } = await supabase.from('gift_codes').insert({ code: c.code, amount: c.amount, max_uses: c.maxUses, used: 0, note: c.note || '', expires_at: c.expiresAt || null, active: true,
+    ...(c.createdBy ? { created_by: c.createdBy } : {}) });
   if (error) { if (/duplicate|unique/i.test(error.message)) return false; throw error; }
   return true;
+}
+async function listGiftCodesBy(userId) {
+  const { data, error } = await supabase.from('gift_codes').select('*').eq('created_by', userId).order('created_at', { ascending: false }).limit(50);
+  if (error) throw error;
+  return data.map(giftCodeRow);
+}
+// A customer takes back a gift nobody has used yet. Removing the row is one step, so it can never also be redeemed. Returns the code or null.
+async function cancelGiftCode(code, userId) {
+  const { data, error } = await supabase.from('gift_codes').delete().eq('code', code).eq('created_by', userId).eq('used', 0).select('*');
+  if (error) throw error;
+  return data && data.length ? giftCodeRow(data[0]) : null;
 }
 async function setGiftCodeActive(code, active) {
   const { error } = await supabase.from('gift_codes').update({ active: !!active }).eq('code', code);
@@ -1033,8 +1045,11 @@ async function deleteGiftCode(code) {
   return !!(data && data.length);
 }
 // Changes the use count only if nobody else changed it in between (safe with two people at the same second).
-async function bumpGiftCodeUse(code, from, by) {
-  const { data, error } = await supabase.from('gift_codes').update({ used: from + by }).eq('code', code).eq('used', from).select('code');
+// onlyActive: also refuse if the code was turned off or cancelled in between.
+async function bumpGiftCodeUse(code, from, by, onlyActive) {
+  let q = supabase.from('gift_codes').update({ used: from + by }).eq('code', code).eq('used', from);
+  if (onlyActive) q = q.eq('active', true);
+  const { data, error } = await q.select('code');
   if (error) throw error;
   return !!(data && data.length);
 }
@@ -1098,7 +1113,7 @@ async function countRows(table, filter) {
 
 module.exports = {
   listGiftCards, findGiftCard, saveGiftCard, deleteGiftCard,
-  listGiftCodes, findGiftCode, createGiftCode, setGiftCodeActive, deleteGiftCode, bumpGiftCodeUse, addRedemption, deleteRedemption, listRedemptions,
+  listGiftCodes, listGiftCodesBy, cancelGiftCode, findGiftCode, createGiftCode, setGiftCodeActive, deleteGiftCode, bumpGiftCodeUse, addRedemption, deleteRedemption, listRedemptions,
   EGRESS, listMetrics, saveMetrics, appSizes, countRows,
   listChatState, saveChatState,
   createGiveaway, listGiveaways, setGiveawayStatus, listEntries, addEntry, updateEntry,

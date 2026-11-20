@@ -2408,25 +2408,99 @@ app.post('/api/gift/redeem', requireUser, requireApprovedUser, async (req, res) 
       const c = await store.findGiftCode(code);
       if (!c || !c.active) { keyFail(mine, 5, 30); ipFail('giftcode', req, 10, 30); return { error: 'That code is not correct. Check it and try again.' }; }
       if (c.expiresAt && Date.parse(c.expiresAt) < Date.now()) return { error: 'This code has expired.' };
-      if (c.used >= c.maxUses) return { error: 'This code has already been used up.' };
+      if (c.used >= c.maxUses) return { error: c.createdBy ? 'This gift has already been used.' : 'This code has already been used up.' };
+      if (c.createdBy === req.user.id) return { error: 'This is your own gift. To get the money back, cancel it under Gift a Friend.' };
       const r = await store.addRedemption({ code, userId: req.user.id, amount: c.amount });
       if (!r) return { error: 'You have already used this code.' };
       try {
-        if (!(await store.bumpGiftCodeUse(code, c.used, 1))) throw new Error('The code is busy. Please try again.');
+        if (!(await store.bumpGiftCodeUse(code, c.used, 1, true))) throw new Error('The code is busy. Please try again.');
         try { await store.addToBalance(req.user.id, c.amount); }
         catch (e) { await store.bumpGiftCodeUse(code, c.used + 1, -1).catch(() => {}); throw e; }
       } catch (e) { await store.deleteRedemption(r.id).catch(() => {}); throw e; }
-      return { amount: c.amount, note: c.note };
+      return { amount: c.amount, note: c.note, from: c.createdBy };
     });
     if (out.error) return res.status(400).json({ error: out.error });
-    notify(req.user.id, 'tx', 'Gift code redeemed', `₦${plain(out.amount)} from gift code ${showCode(code)} has been added to your balance.`, { go: 'home' });
+    let from = null;
+    if (out.from) {   // a gift from another customer: tell them their friend got it
+      const sender = await store.findUserById(out.from).catch(() => null);
+      from = sender ? firstName(sender.name) : null;
+      notify(out.from, 'tx', 'Your gift was used', `${firstName(req.user.name)} used your gift code ${showCode(code)} and got ₦${plain(out.amount)}.`, { go: 'gift' });
+    }
+    notify(req.user.id, 'tx', from ? `Gift from ${from}` : 'Gift code redeemed', `₦${plain(out.amount)} from ${from ? from + "'s" : ''} gift code ${showCode(code)} has been added to your balance.`.replace('from  gift', 'from gift'), { go: 'home' });
     alertTeam({ admin: true }, 'Gift code used', `${req.user.name} used gift code ${showCode(code)} (₦${plain(out.amount)}).`, { admin: 'gift' });
     const me = await store.findUserById(req.user.id);
-    res.json({ ok: true, amount: out.amount, balance: me ? me.balance : null });
+    res.json({ ok: true, amount: out.amount, balance: me ? me.balance : null, from, message: out.from ? out.note : '' });
   } catch (err) {
     const hint = giftSqlHint(err); if (!hint) console.error('Gift code error:', err);
     res.status(500).json({ error: hint ? 'Gift codes are not switched on yet. Please chat with support.' : (/busy/.test(err.message) ? err.message : 'Could not use the code. Try again.') });
   }
+});
+
+const firstName = n => String(n || '').trim().split(/\s+/)[0] || 'A friend';
+// Check a code before using it: what it is worth and whether it still works. Wrong guesses count like wrong redeems.
+app.post('/api/gift/check', requireUser, requireApprovedUser, async (req, res) => {
+  const mine = 'giftcode|' + req.user.id, wait = keyBlocked(mine) || ipBlocked('giftcode', req);
+  if (wait) return res.status(429).json({ error: `Too many wrong codes. Try again in ${wait} minute${wait === 1 ? '' : 's'}.` });
+  const code = codeKey((req.body || {}).code);
+  if (code.length < 4 || code.length > 24) return res.status(400).json({ error: 'Type your gift code.' });
+  try {
+    if (!(await giftOn())) return res.status(403).json({ error: GIFT_OFF });
+    const c = await store.findGiftCode(code);
+    if (!c) { keyFail(mine, 5, 30); ipFail('giftcode', req, 10, 30); return res.status(400).json({ error: 'That code is not correct. Check it and try again.' }); }
+    const usedByMe = (await store.listRedemptions({ userId: req.user.id })).some(r => r.code === code);
+    const status = !c.active ? 'off' : c.expiresAt && Date.parse(c.expiresAt) < Date.now() ? 'expired' : usedByMe ? 'mine' : c.used >= c.maxUses ? 'used' : c.createdBy === req.user.id ? 'own' : 'ready';
+    let from = null;
+    if (c.createdBy) { const u = await store.findUserById(c.createdBy).catch(() => null); from = u ? firstName(u.name) : null; }
+    res.json({ code: showCode(code), amount: c.amount, status, from, message: c.createdBy ? c.note : '', expiresAt: c.expiresAt,
+      left: c.createdBy ? undefined : Math.max(0, c.maxUses - c.used) });
+  } catch (err) { const hint = giftSqlHint(err); if (!hint) console.error(err); res.status(500).json({ error: hint ? 'Gift codes are not switched on yet.' : 'Could not check the code. Try again.' }); }
+});
+
+// ---- Gift a Friend: a customer turns part of their balance into a one-time code for someone else.
+// The money leaves their balance at once and is held by the code. If nobody has used it, they can cancel it and get it back.
+const GIFT_MIN = 100, GIFT_MAX = 500000, GIFT_WAITING = 10;
+const myGift = c => ({ code: c.code, shown: showCode(c.code), amount: c.amount, message: c.note, used: c.used >= c.maxUses, active: c.active, createdAt: c.createdAt });
+app.get('/api/gift/mine', requireUser, async (req, res) => {
+  try {
+    const list = await store.listGiftCodesBy(req.session.userId), reds = list.some(c => c.used) ? await store.listRedemptions() : [];
+    const users = reds.length ? await store.listUsers() : [];
+    res.json({ on: await giftOn(), codes: list.map(c => { const r = reds.find(x => x.code === c.code), u = r && users.find(x => x.id === r.userId);
+      return { ...myGift(c), usedBy: r ? firstName(u && u.name) : null, usedAt: r ? r.createdAt : null }; }) });
+  } catch (err) { const hint = giftSqlHint(err) || (/created_by/.test(String(err && err.message)) ? 'x' : null); if (!hint) console.error(err); res.json({ on: false, codes: [], setup: !!hint }); }
+});
+app.post('/api/gift/send', requireUser, requireApprovedUser, moneyLock(req => 'user:' + req.session.userId), async (req, res) => {
+  try {
+    if (!(await giftOn())) return res.status(403).json({ error: GIFT_OFF });
+    const amount = Math.round(Number((req.body || {}).amount) * 100) / 100, message = String((req.body || {}).message || '').trim().slice(0, 80);
+    if (!(amount >= GIFT_MIN && amount <= GIFT_MAX)) return res.status(400).json({ error: `A gift can be from ₦${plain(GIFT_MIN)} to ₦${plain(GIFT_MAX)}.` });
+    const waiting = (await store.listGiftCodesBy(req.user.id)).filter(c => c.used < c.maxUses).length;
+    if (waiting >= GIFT_WAITING) return res.status(429).json({ error: `You already have ${GIFT_WAITING} gifts nobody has used. Cancel one first.` });
+    const loan = (await store.listLoansForUser(req.user.id).catch(() => [])).find(l => l.status === 'active' && l.outstanding > 0);
+    if (loan) return res.status(400).json({ error: 'Pay back your loan before sending gifts.' });
+    const held = await store.addToBalance(req.user.id, -amount, { noNegative: true });
+    if (!held.ok) return res.status(400).json({ error: 'Your balance is not enough for this gift.' });
+    let code = null;
+    try {
+      for (let i = 0; i < 6 && !code; i++) { const c = newCode(); if (await store.createGiftCode({ code: c, amount, maxUses: 1, note: message, createdBy: req.user.id })) code = c; }
+      if (!code) throw new Error('no code');
+    } catch (err) { await store.addToBalance(req.user.id, amount).catch(() => {}); throw err; }   // give the money back if the code could not be made
+    notify(req.user.id, 'tx', 'Gift code made', `₦${plain(amount)} left your balance for gift code ${showCode(code)}. Send it to your friend.`, { feed: true, go: 'gift' });
+    alertTeam({ admin: true }, 'Customer gift', `${req.user.name} made a ₦${plain(amount)} gift code.`, { admin: 'gift' });
+    res.json({ ok: true, code: showCode(code), amount, balance: held.balance });
+  } catch (err) {
+    const msg = String(err && err.message), setup = giftSqlHint(err) || /created_by/.test(msg); if (!setup) console.error('Gift send error:', err);
+    res.status(500).json({ error: setup ? 'Gift a Friend is not switched on yet. Please chat with support.' : 'Could not make the gift. Your balance was not changed.' });
+  }
+});
+app.post('/api/gift/mine/:code/cancel', requireUser, moneyLock(req => 'user:' + req.session.userId), async (req, res) => {
+  try {
+    const code = codeKey(req.params.code);
+    const c = await withLock('giftcode:' + code, () => store.cancelGiftCode(code, req.session.userId));
+    if (!c) return res.status(400).json({ error: 'This gift cannot be cancelled. Only a gift you made, that nobody has used yet, can be cancelled.' });
+    const r = await store.addToBalance(req.session.userId, c.amount);
+    notify(req.session.userId, 'tx', 'Gift cancelled', `Gift code ${showCode(code)} was cancelled. ₦${plain(c.amount)} is back in your balance.`, { go: 'home' });
+    res.json({ ok: true, amount: c.amount, balance: r.balance });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not cancel the gift. Try again.' }); }
 });
 
 // ---- Admin: cards, rates and codes
@@ -2437,6 +2511,7 @@ app.get('/api/admin/gift', requireAdmin, async (req, res) => {
     const who = id => { const u = users.find(x => x.id === id) || {}; return { name: u.name || 'Deleted customer', phone: u.phone || '' }; };
     GIFT_CACHE = { at: Date.now(), list: cards }; GIFT_ON = null;
     res.json({ on: await giftOn(), cards, codes: codes.map(c => ({ ...c, shown: showCode(c.code), expired: !!(c.expiresAt && Date.parse(c.expiresAt) < Date.now()),
+      madeBy: c.createdBy ? who(c.createdBy) : null,
       by: reds.filter(r => r.code === c.code).map(r => ({ ...who(r.userId), userId: r.userId, at: r.createdAt })) })) });
   } catch (err) { const hint = giftSqlHint(err); if (!hint) console.error(err); res.status(500).json({ error: hint || 'Could not load gift cards.' }); }
 });
@@ -2481,6 +2556,8 @@ app.put('/api/admin/gift/codes/:code', requireAdmin, async (req, res) => {
 });
 app.delete('/api/admin/gift/codes/:code', requireAdmin, async (req, res) => {
   try {
+    const c = await store.findGiftCode(codeKey(req.params.code));
+    if (c && c.createdBy) return res.status(400).json({ error: 'A customer paid for this gift from their balance. Only they can cancel it (and get the money back). You can turn it off.' });
     if (!(await store.deleteGiftCode(codeKey(req.params.code)))) return res.status(400).json({ error: 'Someone has already used this code, so it is kept as a record. Turn it off instead.' });
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the code.' }); }
