@@ -39,6 +39,13 @@
 > create table if not exists giveaways (id uuid primary key default gen_random_uuid(), title text not null, amount numeric not null, winners int not null, keyword text not null default 'hi', starts_at timestamptz not null, status text not null default 'open', created_at timestamptz not null default now()); create table if not exists giveaway_entries (id uuid primary key default gen_random_uuid(), giveaway_id uuid not null references giveaways(id) on delete cascade, user_id uuid not null references users(id) on delete cascade, installed boolean not null default false, alerts_on boolean not null default false, won boolean not null default false, credited boolean not null default false, created_at timestamptz not null default now(), unique (giveaway_id, user_id)); alter table giveaways enable row level security; alter table giveaway_entries enable row level security;
 > ```
 >
+> For **gift cards** (customers sell Apple, Amazon, Steam… cards; admin gift codes), run this one line:
+> ```sql
+> create table if not exists gift_cards (id uuid primary key default gen_random_uuid(), name text not null, rows jsonb not null default '[]', image text, note text, active boolean not null default true, sort int not null default 0, created_at timestamptz not null default now()); create table if not exists gift_codes (code text primary key, amount numeric not null, max_uses int not null default 1, used int not null default 0, note text, expires_at timestamptz, active boolean not null default true, created_at timestamptz not null default now()); create table if not exists gift_redemptions (id uuid primary key default gen_random_uuid(), code text not null references gift_codes(code) on delete cascade, user_id uuid not null references users(id) on delete cascade, amount numeric not null, created_at timestamptz not null default now(), unique (code, user_id)); alter table trades add column if not exists card jsonb; alter table settings add column if not exists gift_on boolean not null default true; alter table gift_cards enable row level security; alter table gift_codes enable row level security; alter table gift_redemptions enable row level security;
+> ```
+> Then open Admin → Gift Cards and set a rate on each card type. A card only shows to customers once it has a rate.
+> The switch at the top of Admin → Gift Cards turns the whole feature off or on for customers.
+>
 > For the admin to message every staff member, run this one line:
 > ```sql
 > alter table team_messages alter column from_staff_id drop not null, alter column to_staff_id drop not null;
