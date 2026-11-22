@@ -50,6 +50,12 @@
 > alter table gift_codes add column if not exists created_by uuid references users(id) on delete set null;
 > ```
 >
+> For the **December tournament on/off switch** (Admin → December Challenge), run this one line:
+> ```sql
+> alter table settings add column if not exists challenge_on boolean not null default true;
+> ```
+> Turning it off hides the tournament banner and board from customers; you can still see the leaders and pay the winners in the admin page.
+>
 > For the admin to message every staff member, run this one line:
 > ```sql
 > alter table team_messages alter column from_staff_id drop not null, alter column to_staff_id drop not null;

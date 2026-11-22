@@ -496,7 +496,8 @@ async function getSettings() {
     rulesText: data.rules_text, settlementAccount: data.settlement_account,
     settlementBank: data.settlement_bank, maxDeposit: Number(data.max_deposit),
     btcRate: Number(data.btc_rate) || 0, usdtRate: Number(data.usdt_rate) || 0,   // naira for 1 BTC / 1 USDT; 0 = not set
-    giftOn: data.gift_on !== false   // Gift Cards switched on for customers (on until the admin turns it off)
+    giftOn: data.gift_on !== false,   // Gift Cards switched on for customers (on until the admin turns it off)
+    challengeOn: data.challenge_on !== false   // December tournament shown to customers (on until the admin turns it off)
   };
 }
 async function updateSettings(fields) {
@@ -508,6 +509,7 @@ async function updateSettings(fields) {
   if (fields.btcRate !== undefined) patch.btc_rate = fields.btcRate;
   if (fields.usdtRate !== undefined) patch.usdt_rate = fields.usdtRate;
   if (fields.giftOn !== undefined) patch.gift_on = !!fields.giftOn;
+  if (fields.challengeOn !== undefined) patch.challenge_on = !!fields.challengeOn;
   if (!Object.keys(patch).length) return;
   const { error } = await supabase.from('settings').update(patch).eq('id', 1);
   if (error) throw error;

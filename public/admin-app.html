@@ -657,6 +657,7 @@ health:()=>{const h=S.health,col=p=>p==null?'#CBD5E1':p>=95?'#EF4444':p>=80?'#F5
 chal:()=>{const c=S.chal,fmt=t=>new Date(t).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'});
  return `<section class="scr">${hd('December Challenge','Top 3 traders win prizes','dash','')}
  <div class="bd">${!c?'<p class="empty">Loading…</p>':`
+  <div class="gsw"><span class="grow" style="min-width:0"><b>Show tournament to customers</b><small>${c.on?'On: customers see the banner and the top-traders board.':'Off: customers do not see the tournament. You can still pay winners below.'}</small></span><button class="tgl" role="switch" aria-checked="${c.on}" aria-label="Tournament on or off" data-act="chalSwitch"></button></div>
   <div class="card" style="padding:16px"><div class="between"><b>${esc(c.title)}</b><span class="badge ${c.ended?'b-approved':'b-checking'}">${c.ended?'ENDED':c.now<c.start?'NOT STARTED':'LIVE'}</span></div>
    <p class="muted" style="font-size:13px;margin-top:6px">Receipts sent ${fmt(c.start)} to ${fmt(c.end)} count. Prizes: 1st ₦${n0(c.prizes[0])}, 2nd ₦${n0(c.prizes[1])}, 3rd ₦${n0(c.prizes[2])}. Customers only see the first 3 letters of names.</p></div>
   <div class="card" style="padding:4px 16px;margin-top:14px">${c.board.length?c.board.map(r=>`<div class="chr"><span class="rk r${r.rank}">${r.rank}</span><span class="grow" style="min-width:0"><b style="display:block">${esc(r.name)}</b><small class="muted">${esc(r.phone)} · ${r.trades} trade${r.trades===1?'':'s'} · ${naira(r.total)}</small>
@@ -1237,6 +1238,9 @@ const ACT={
     if(!await ask(only?'Pay this winner?':`Pay ${n} winners?`,`${naira(n*g.amount)} will be added to ${only?'their balance':'their balances'} now. Each winner gets a notification.`,'Pay '+naira(n*g.amount)))return;
     const d=await api('POST','/api/admin/giveaways/'+encodeURIComponent(id)+'/credit',only?{entryId:only}:{});toast(`Paid ${d.paid} winner${d.paid===1?'':'s'}`);await loadGas()},
   async gaEnd(el,id){if(!await ask('End this giveaway?','Nobody else can win it after this. Winners not yet paid can still be paid.','End giveaway',true))return;await api('POST','/api/admin/giveaways/'+encodeURIComponent(id)+'/end');toast('Giveaway ended');await loadGas()},
+  async chalSwitch(){const on=!S.chal.on;
+    if(!await ask(on?'Show the tournament?':'Hide the tournament?',on?'Customers will see the December tournament banner and board again.':'Customers will stop seeing the tournament banner and board. The leaders and the prize buttons stay here for you.',on?'Show it':'Hide it',!on))return;
+    await api('PUT','/api/admin/settings',{challengeOn:on});toast(on?'Tournament is showing':'Tournament is hidden');S.chal=await api('GET','/api/admin/challenge');render()},
   async giftSwitch(){const on=!S.gift.on;
     if(!await ask(on?'Turn Gift Cards on?':'Turn Gift Cards off?',on?'Customers will see Gift Cards again and can sell cards and redeem codes.':'Customers will not see Gift Cards and cannot sell cards or use codes. Cards already sent stay in Receipts for you to finish.',on?'Turn on':'Turn off',!on))return;
     await api('PUT','/api/admin/settings',{giftOn:on});toast(on?'Gift Cards are on':'Gift Cards are off');await loadGift()},
