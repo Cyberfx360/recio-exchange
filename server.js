@@ -1727,11 +1727,12 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
       patch[k] = n;
     }
     if (b.giftOn !== undefined) patch.giftOn = b.giftOn === true;
-    await store.updateSettings(patch); if (patch.giftOn !== undefined) GIFT_ON = null; res.json({ ok: true });
+    if (b.challengeOn !== undefined) patch.challengeOn = b.challengeOn === true;
+    await store.updateSettings(patch); if (patch.giftOn !== undefined) GIFT_ON = null; if (patch.challengeOn !== undefined) CHAL_ON = null; res.json({ ok: true });
   } catch (err) {
     console.error(err);
     const msg = String(err && err.message), cryptoCols = /btc_rate|usdt_rate/.test(msg);
-    res.status(500).json({ error: cryptoCols ? 'Run the BTC/USDT rates SQL from the README in Supabase first.' : /gift_on/.test(msg) ? 'Run the gift card SQL from the README in Supabase first.' : 'Could not update settings.' });
+    res.status(500).json({ error: cryptoCols ? 'Run the BTC/USDT rates SQL from the README in Supabase first.' : /gift_on/.test(msg) ? 'Run the gift card SQL from the README in Supabase first.' : /challenge_on/.test(msg) ? 'Run the tournament switch SQL from the README in Supabase first.' : 'Could not update settings.' });
   }
 });
 
@@ -1937,6 +1938,14 @@ const topChanged = () => { TOP.at = 0; }; // a receipt was approved, credited or
 const CHALLENGE = { id: 'dec2026', title: 'December Top Traders', start: Date.parse('2026-11-14T04:00:00+01:00'), end: Date.parse('2026-12-23T16:00:00+01:00'),
   showUntil: Date.parse('2027-01-05T00:00:00+01:00'), prizes: [20000, 15000, 10000] };
 const inChallenge = t => { const c = Date.parse(t.createdAt); return c >= CHALLENGE.start && c < CHALLENGE.end; };
+// The admin's on/off switch for showing the tournament to customers (Admin -> December Challenge). Read from settings, kept for a minute.
+let CHAL_ON = null;
+async function challengeOn() {
+  if (CHAL_ON && Date.now() - CHAL_ON.at < 60000) return CHAL_ON.on;
+  const on = (await store.getSettings()).challengeOn !== false;
+  CHAL_ON = { at: Date.now(), on };
+  return on;
+}
 const chalPaidKey = rank => 'chal:' + CHALLENGE.id + ':' + rank;
 const maskName = n => { const w = String(n || '').replace(/[^\p{L}\p{N}]/gu, ''); return (w.slice(0, 3) || 'Cus').replace(/^./, c => c.toUpperCase()) + '***'; };
 const lagosMonth = d => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos', year: 'numeric', month: '2-digit' }).format(new Date(d));
@@ -1964,9 +1973,9 @@ app.get('/api/top-traders', requireUser, async (req, res) => {
   try {
     const d = await topTraders(), me = req.session.userId;
     const out = list => list.map((r, i) => ({ rank: i + 1, name: r.name, total: r.total, trades: r.trades, me: r.id === me }));
-    const now = Date.now(), c = CHALLENGE;
+    const now = Date.now(), c = CHALLENGE, chalOn = await challengeOn();
     res.json({ month: out(d.month), all: out(d.all), totalTraded: d.totalTraded, trades: d.trades, customers: d.customers,
-      challenge: now < c.showUntil ? { title: c.title, start: c.start, end: c.end, prizes: c.prizes, now, board: now >= c.start ? out(d.chal) : [] } : null });
+      challenge: (chalOn && now < c.showUntil) ? { title: c.title, start: c.start, end: c.end, prizes: c.prizes, now, board: now >= c.start ? out(d.chal) : [] } : null });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load top traders.' }); }
 });
 
@@ -1974,7 +1983,7 @@ app.get('/api/top-traders', requireUser, async (req, res) => {
 app.get('/api/admin/challenge', requireAdmin, async (req, res) => {
   try {
     const d = await topTraders(true), c = CHALLENGE, now = Date.now();
-    res.json({ title: c.title, start: c.start, end: c.end, prizes: c.prizes, now, ended: now >= c.end,
+    res.json({ on: await challengeOn(), title: c.title, start: c.start, end: c.end, prizes: c.prizes, now, ended: now >= c.end,
       board: d.chalFull.map((r, i) => ({ rank: i + 1, userId: r.id, name: r.name, phone: r.phone, total: r.total, trades: r.trades, prize: c.prizes[i] || 0, paidAt: i < 3 ? csGet(chalPaidKey(i + 1)) || null : null })) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load the challenge.' }); }
 });
