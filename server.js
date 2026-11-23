@@ -1026,7 +1026,7 @@ app.delete('/api/chat/messages/:id', requireUser, async (req, res) => {
   try {
     const m = await store.findMessageById(req.params.id);
     if (!m || m.userId !== req.session.userId || m.sender !== 'user') return res.status(404).json({ error: 'You can only delete your own messages.' });
-    await store.deleteMessage(m.id); res.json({ ok: true });
+    await store.softDeleteMessage(m.id); res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the message.' }); }
 });
 
@@ -1068,7 +1068,7 @@ app.put('/api/staff/accounts/:id', requireStaff, requireApprovedStaff, async (re
     const changed = ['accountNumber', 'bankName', 'title'].some(k => b[k] !== undefined && String(b[k]).trim() !== String(account[k] || '').trim());
     if (changed && account.active) b.active = false;
     await store.updateAccount(req.params.id, b);
-    if (changed && account.active) alertTeam({ admin: true }, 'Account needs verifying again', `${req.staff.name} changed the details of ${account.title} (${account.bankName}). It is hidden from customers until you verify it.`, { admin: 'accounts' });
+    if (changed && account.active) { alertTeam({ admin: true }, 'Account needs verifying again', `${req.staff.name} changed the details of ${account.title} (${account.bankName}). It is hidden from customers until you verify it.`, { admin: 'accounts' }); alertAccountOff(account); }
     res.json({ ok: true, needsVerify: changed && account.active });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update account.' }); }
 });
@@ -1211,6 +1211,20 @@ app.get('/api/staff/route-accounts', requireStaff, requireApprovedStaff, require
     res.json({ accounts: accounts.filter(a => a.active).map(a => ({ id: a.id, title: a.title, bankName: a.bankName, accountNumber: a.accountNumber, staffName: (staffList.find(s => s.id === a.staffId) || {}).name || 'Admin' })) });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load accounts.' }); }
 });
+// Chat manager's live view of every trading account and whether it is ON or OFF for receipts.
+app.get('/api/staff/accounts-status', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
+  try {
+    const [accounts, staffList] = await Promise.all([store.listAllAccounts(), store.listStaff()]);
+    const rows = accounts.map(a => ({ id: a.id, title: a.title, bankName: a.bankName, accountNumber: a.accountNumber, active: !!a.active, staffName: (staffList.find(s => s.id === a.staffId) || {}).name || 'Admin' }))
+      .sort((x, y) => (Number(y.active) - Number(x.active)) || x.title.localeCompare(y.title));
+    res.json({ accounts: rows, offCount: rows.filter(a => !a.active).length });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load accounts.' }); }
+});
+// Simple list of active gift cards (id + name) for the forward-to-vendor picker.
+app.get('/api/staff/gift-cards', requireStaff, requireApprovedStaff, async (req, res) => {
+  try { res.json({ cards: (await giftCards()).filter(c => c.active).map(c => ({ id: c.id, name: c.name })) }); }
+  catch (err) { console.error(err); res.json({ cards: [] }); }
+});
 // Chat manager turns a receipt photo from the chat into a receipt on the account the customer paid into.
 app.post('/api/staff/chats/:userId/route', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try {
@@ -1240,11 +1254,23 @@ async function teamDeleteMessage(req, res) {
   try {
     const m = await store.findMessageById(req.params.id);
     if (!m || m.userId !== req.params.userId) return res.status(404).json({ error: 'Message not found.' });
-    await store.deleteMessage(m.id); res.json({ ok: true });
+    await store.softDeleteMessage(m.id); res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the message.' }); }
 }
 app.delete('/api/staff/chats/:userId/messages/:id', requireStaff, requireApprovedStaff, requireChatRole, teamDeleteMessage);
 app.delete('/api/admin/chats/:userId/messages/:id', requireAdmin, teamDeleteMessage);
+// Pin / unpin a message in a customer chat (staff or admin). Pinned messages show at the top of the chat.
+async function pinCustomerMessage(req, res) {
+  try {
+    const m = await store.findMessageById(req.params.id);
+    if (!m || m.userId !== req.params.userId) return res.status(404).json({ error: 'Message not found.' });
+    const r = await store.pinMessage(m.id, req.body && req.body.on !== false);
+    if (r.unsupported) return res.status(500).json({ error: 'Run the pin messages SQL from the README in Supabase first.' });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not pin the message.' }); }
+}
+app.post('/api/staff/chats/:userId/messages/:id/pin', requireStaff, requireApprovedStaff, requireChatRole, pinCustomerMessage);
+app.post('/api/admin/chats/:userId/messages/:id/pin', requireAdmin, pinCustomerMessage);
 app.post('/api/staff/chats/:userId/send', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try {
     const { text, imageData } = req.body || {};
@@ -1319,7 +1345,7 @@ app.put('/api/admin/staff/:id/role', requireAdmin, async (req, res) => {
 const teamSqlHint = err => (/team_messages/.test(String(err && err.message)) ? 'Run the team messages SQL from the README in Supabase first.' : null);
 // A staff chat has two sides; a side is a staff id, or null for the admin.
 const sameSide = (a, b) => (a || null) === (b || null);
-const teamOut = (m, me) => ({ id: m.id, sender: sameSide(m.fromStaffId, me) ? 'me' : 'them', text: m.text, imageData: m.imageData, createdAt: m.createdAt });
+const teamOut = (m, me) => ({ id: m.id, sender: sameSide(m.fromStaffId, me) ? 'me' : 'them', text: m.text, imageData: m.imageData, createdAt: m.createdAt, pinnedAt: m.pinnedAt || null, deleted: !!m.deletedAt });
 const between = (msgs, me, other) => msgs.filter(m => (sameSide(m.fromStaffId, me) && sameSide(m.toStaffId, other)) || (sameSide(m.fromStaffId, other) && sameSide(m.toStaffId, me)));
 const preview = m => (m ? (m.imageData ? (isVoice(m.imageData) ? 'Voice note' : 'Photo') : m.text) : '');
 const adminSqlHint = err => (/from_staff_id|to_staff_id|not-null|null value/.test(String(err && err.message)) ? 'Run the admin-to-staff messages SQL from the README in Supabase first.' : null);
@@ -1376,8 +1402,45 @@ app.delete('/api/staff/team/:id/messages/:mid', requireStaff, requireApprovedSta
   try {
     const m = await store.findTeamMessage(req.params.mid);
     if (!m || m.fromStaffId !== req.staff.id) return res.status(404).json({ error: 'You can only delete your own messages.' });
-    await store.deleteTeamMessage(m.id); res.json({ ok: true });
+    await store.softDeleteTeamMessage(m.id); res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the message.' }); }
+});
+// Pin / unpin a staff message. A staff member can pin any message in a chat they are part of.
+app.post('/api/staff/team/:id/messages/:mid/pin', requireStaff, requireApprovedStaff, async (req, res) => {
+  try {
+    const me = req.staff.id, m = await store.findTeamMessage(req.params.mid);
+    if (!m || (m.fromStaffId !== me && m.toStaffId !== me)) return res.status(404).json({ error: 'Message not found.' });
+    const r = await store.pinTeamMessage(m.id, req.body && req.body.on !== false);
+    if (r.unsupported) return res.status(500).json({ error: 'Run the pin messages SQL from the README in Supabase first.' });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not pin the message.' }); }
+});
+// ADMIN monitor: read-only view of every staff-to-staff conversation (vendor <-> chat manager, etc.).
+app.get('/api/admin/staff-chats', requireAdmin, async (req, res) => {
+  try {
+    const [staff, msgs] = await Promise.all([store.listStaff(), store.listStaffPairMessages()]);
+    const name = id => (staff.find(s => s.id === id) || {}).name || 'Staff';
+    const pairs = new Map();
+    for (const m of msgs) {
+      const lo = m.fromStaffId < m.toStaffId ? m.fromStaffId : m.toStaffId, hi = m.fromStaffId < m.toStaffId ? m.toStaffId : m.fromStaffId;
+      const cur = pairs.get(lo + '|' + hi);
+      if (!cur) pairs.set(lo + '|' + hi, { a: lo, b: hi, last: m, count: 1 });
+      else { cur.last = m; cur.count++; }
+    }
+    const chats = [...pairs.values()].map(p => ({ a: p.a, b: p.b, aName: name(p.a), bName: name(p.b),
+      lastMessage: p.last.deletedAt ? 'Deleted message' : preview(p.last), lastAt: p.last.createdAt, count: p.count }))
+      .sort((x, y) => String(y.lastAt || '').localeCompare(String(x.lastAt || '')));
+    res.json({ chats });
+  } catch (err) { if (!teamSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || 'Could not load staff chats.' }); }
+});
+app.get('/api/admin/staff-chats/:a/:b', requireAdmin, async (req, res) => {
+  try {
+    const staff = await store.listStaff();
+    const name = id => (staff.find(s => s.id === id) || {}).name || 'Staff';
+    const msgs = between(await store.listStaffPairMessages(), req.params.a, req.params.b);
+    res.json({ aName: name(req.params.a), bName: name(req.params.b),
+      messages: msgs.map(m => ({ id: m.id, fromStaffId: m.fromStaffId, fromName: name(m.fromStaffId), text: m.text, imageData: m.imageData, createdAt: m.createdAt, deleted: !!m.deletedAt })) });
+  } catch (err) { if (!teamSqlHint(err)) console.error(err); res.status(500).json({ error: teamSqlHint(err) || 'Could not load the conversation.' }); }
 });
 // Admin <-> every staff member
 app.get('/api/admin/team', requireAdmin, async (req, res) => {
@@ -1409,15 +1472,25 @@ app.delete('/api/admin/team/:id/messages/:mid', requireAdmin, async (req, res) =
   try {
     const m = await store.findTeamMessage(req.params.mid);
     if (!m || m.fromStaffId) return res.status(404).json({ error: 'You can only delete your own messages.' });
-    await store.deleteTeamMessage(m.id); res.json({ ok: true });
+    await store.softDeleteTeamMessage(m.id); res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete the message.' }); }
+});
+// Admin pins a message in an admin <-> staff chat (one side is the admin).
+app.post('/api/admin/team/:id/messages/:mid/pin', requireAdmin, async (req, res) => {
+  try {
+    const m = await store.findTeamMessage(req.params.mid);
+    if (!m || (m.fromStaffId && m.toStaffId)) return res.status(404).json({ error: 'Message not found.' });
+    const r = await store.pinTeamMessage(m.id, req.body && req.body.on !== false);
+    if (r.unsupported) return res.status(500).json({ error: 'Run the pin messages SQL from the README in Supabase first.' });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not pin the message.' }); }
 });
 
 // ---- Forward one chat message to one person (the admin or another staff member)
 const forwardSqlHint = err => (/forwards/.test(String(err && err.message)) ? 'Run the forwarded messages SQL from the README in Supabase first.' : null);
 app.post('/api/staff/chats/:userId/forward-message', requireStaff, requireApprovedStaff, requireChatRole, async (req, res) => {
   try {
-    const { messageId, to } = req.body || {};
+    const { messageId, to, cardName } = req.body || {};
     const msg = await store.findMessageById(messageId);
     if (!msg || msg.userId !== req.params.userId) return res.status(404).json({ error: 'That message is no longer in the chat.' });
     let toStaff = null;
@@ -1425,8 +1498,9 @@ app.post('/api/staff/chats/:userId/forward-message', requireStaff, requireApprov
       toStaff = await store.findStaffById(String(to || ''));
       if (!toStaff || toStaff.status !== 'approved' || toStaff.id === req.staff.id) return res.status(400).json({ error: 'Choose who to forward to.' });
     }
-    await store.createForward({ fromStaffId: req.staff.id, toStaffId: toStaff ? toStaff.id : null, userId: msg.userId, text: msg.text, imageData: msg.imageData, sender: msg.sender });
-    const what = msg.text ? String(msg.text).slice(0, 120) : isVoice(msg.imageData) ? 'A voice note' : 'A photo';
+    const tag = cardName ? `[Gift card: ${String(cardName).slice(0, 60)}] ` : '';
+    await store.createForward({ fromStaffId: req.staff.id, toStaffId: toStaff ? toStaff.id : null, userId: msg.userId, text: tag + (msg.text || ''), imageData: msg.imageData, sender: msg.sender });
+    const what = tag + (msg.text ? String(msg.text).slice(0, 120) : isVoice(msg.imageData) ? 'A voice note' : 'A photo');
     alertTeam(toStaff ? { toStaff: toStaff.id } : { admin: true }, `${req.staff.name} forwarded a message`, what, { admin: 'console', staff: 'inbox' });
     res.json({ ok: true, name: toStaff ? toStaff.name : 'Admin' });
   } catch (err) { console.error('Forward message error:', err); res.status(500).json({ error: forwardSqlHint(err) || 'Could not forward the message.' }); }
@@ -1559,7 +1633,7 @@ app.put('/api/admin/accounts/:id', requireAdmin, async (req, res) => {
       if (!owner || owner.status !== 'approved') return res.status(400).json({ error: 'Choose an approved staff member.' });
     }
     await store.updateAccount(req.params.id, b);
-    if (b.active === false) notifyAccountGone(before); // un-verified = hidden from customers
+    if (b.active === false) { if (before.active) alertAccountOff(before); notifyAccountGone(before); } // un-verified = hidden from customers
     if (b.active === true && !before.active && before.staffId) alertTeam({ staffId: before.staffId }, 'Account verified', `Your ${before.title} (${before.bankName}) account is now live for customers.`, { staff: 'acctAll' });
     if (b.staffId && b.staffId !== before.staffId) alertTeam({ staffId: b.staffId }, 'Account assigned to you', `The ${before.title} (${before.bankName}) account is now yours to manage.`, { staff: 'acctAll' });
     res.json({ ok: true });
@@ -1570,6 +1644,7 @@ app.delete('/api/admin/accounts/:id', requireAdmin, async (req, res) => {
   try {
     const account = await store.findAccountById(req.params.id);
     await store.deleteAccount(req.params.id);
+    if (account && account.active) alertAccountOff(account);
     notifyAccountGone(account);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not delete account.' }); }
@@ -1766,7 +1841,7 @@ app.get('/api/admin/chats', requireAdmin, async (req, res) => {
 app.get('/api/admin/chats/:userId', requireAdmin, async (req, res) => {
   try {
     const user = await store.findUserById(req.params.userId);
-    const messages = await store.messagesForUser(req.params.userId); supportSaw(req.params.userId, messages);
+    const messages = await store.messagesForUser(req.params.userId, { includeDeleted: true }); supportSaw(req.params.userId, messages);
     res.json({ user, messages });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not load conversation.' }); }
 });
@@ -1833,6 +1908,11 @@ function notifyAccountGone(account) {
   if (!account || !account.active) return;
   notify(null, 'alert', `Stop using ${account.title} (${account.bankName})`,
     `This ${account.title} account is no longer in use. Do not send money to it. Open AZAPLUG and check Get Account for the current one.`);
+}
+// Tell chat managers when a trading account is switched off, so they stop pointing customers to it.
+function alertAccountOff(account) {
+  if (!account) return;
+  alertTeam({ chat: true }, 'Trading account switched off', `${account.title} (${account.bankName}) is now OFF for receipts. Do not send customers to it.`, { staff: 'acctStatus' });
 }
 
 app.get('/api/push/key', requireUser, async (req, res) => {

@@ -1002,11 +1002,22 @@ chats:()=>{const wait=S.convos.filter(c=>c.unread),list=S.chatTab==='wait'?wait:
  return `<section class="scr">${hd('Chats','Staff and customers','dash',`<span class="badge b-failed xs">${wait.length} NEW</span>`)}
  <div class="bd" style="padding-left:0;padding-right:0"><div style="padding:0 20px">${search('Search customer name or keyword...')}
   <div class="chips">${[['all','All Queue',S.convos.length],['wait','Unread',wait.length]].map(c=>`<button class="${S.chatTab===c[0]?'on':''}" data-set="chatTab:${c[0]}">${c[1]} <i>${c[2]}</i></button>`).join('')}</div>
-  <button class="b dark" style="margin:4px 0 14px" data-go="console">Admin Console${S.escs.filter(e=>e.status==='open').length?` <span class="cnt">${S.escs.filter(e=>e.status==='open').length}</span>`:''}</button></div>
+  <button class="b dark" style="margin:4px 0 10px" data-go="console">Admin Console${S.escs.filter(e=>e.status==='open').length?` <span class="cnt">${S.escs.filter(e=>e.status==='open').length}</span>`:''}</button>
+  <button class="b navy" style="margin:0 0 14px" data-go="staffChats">${I('users','style="width:16px;height:16px"')}Monitor Staff ↔ Staff Chats</button></div>
   ${(S.team||[]).length?`<div class="pinh">${I('pin','style="width:13px;height:13px"')}STAFF</div>${S.team.map(p=>`<button class="cv" data-go="staffChat" data-sid="${esc(p.id)}" data-k="${esc((p.name+' '+(p.lastMessage||'')).toLowerCase())}">${av(p.name,p.unread?'red':'')}<span class="grow" style="min-width:0"><span class="between"><b>${esc(p.name)} <small class="muted" style="font-weight:500">· ${p.role==='chat'?'Chat Manager':p.role==='vendor'?'Vendor':'Staff'}</small></b><small class="muted">${p.lastAt?ago(p.lastAt):''}</small></span>
    <span class="between"><span class="lm">${p.lastMessage?(p.lastMine?'You: ':'')+esc(p.lastMessage):'Tap to message'}</span>${p.unread?`<span class="newb">${p.unread}</span>`:`<span class="pinic">${I('pin','style="width:13px;height:13px"')}</span>`}</span></span></button>`).join('')}<div class="pinh">CUSTOMERS</div>`:''}
   <div id="list">${list.length?list.map(c=>`<button class="cv" data-go="chat" data-id="${esc(c.userId)}" data-k="${esc((c.name+' '+c.lastMessage).toLowerCase())}">${av(c.name,c.unread?'red':'')}<span class="grow" style="min-width:0"><span class="between"><b>${esc(c.name)}</b><small class="muted">${ago(c.lastAt)}</small></span>
    <span class="lm">${esc(c.lastMessage)}</span>${c.unread?`<span class="badge b-checking xs" style="margin-top:4px">${I('clock','style="width:10px;height:10px;vertical-align:-1px"')} new</span>`:''}</span></button>`).join(''):'<p class="empty">No conversations yet</p>'}</div></div></section>`},
+
+staffChats:()=>{const list=S.staffChats;return `<section class="scr">${hd('Staff ↔ Staff Chats','Read-only monitor of vendor and chat-manager conversations','chats')}
+ <div class="bd"><p class="muted" style="font-size:12.5px;margin:0 0 12px">Every staff-to-staff conversation is shown here. This screen is view-only — you cannot send, pin or delete from it.</p>
+  ${search('Search by staff name...')}
+  <div id="list" style="margin-top:12px">${!list?'<p class="empty">Loading…</p>':list.length?list.map(c=>`<button class="cv" data-go="staffPair" data-a="${esc(c.a)}" data-b="${esc(c.b)}" data-k="${esc((c.aName+' '+c.bName).toLowerCase())}">${av(c.aName,'')}<span class="grow" style="min-width:0"><span class="between"><b>${esc(c.aName)} ↔ ${esc(c.bName)}</b><small class="muted">${c.lastAt?ago(c.lastAt):''}</small></span><span class="lm">${esc(c.lastMessage||'')}</span></span></button>`).join(''):'<p class="empty">No staff-to-staff chats yet</p>'}</div></div></section>`},
+
+staffPair:()=>{const p=S.staffPair;return `<section class="chat">
+  <header class="chat-top"><button data-go="staffChats" aria-label="Back">${I('cl','style="width:24px;height:24px"')}</button><span style="flex:1;min-width:0"><b class="h" style="font-size:16px;font-weight:600;display:block;line-height:1.2">${p?esc(p.aName+' ↔ '+p.bName):'Conversation'}</b><small class="muted">Monitoring · read-only</small></span></header>
+  <div class="msgs" id="msgs">${!p?'<p class="empty">Loading…</p>':!p.messages.length?'<p class="empty">No messages yet</p>':(()=>{let day='';return p.messages.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),voice=vnParse(m.imageData),mine=m.fromStaffId===p.a,head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
+    return `${head}<div class="msg ${mine?'out':'in'}"${m.deleted?' style="opacity:.6"':''}><small class="muted" style="display:block;font-size:10.5px;font-weight:600;margin-bottom:2px">${esc(m.fromName)}</small>${voice?'<p class="muted" style="font-size:12.5px;margin:0 0 4px">Voice note</p>':img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px">`:''}${msgText(m.text)}<time>${ft(m.createdAt)}${m.deleted?delTag:''}</time></div>`}).join('')})()}</div></section>`},
 
 staffChat:()=>{const u=S.staffPerson||(S.team||[]).find(p=>p.id===S.sid)||{name:'Staff'};return `<section class="chat">
   <header class="chat-top"><button data-go="chats" aria-label="Back">${I('cl','style="width:24px;height:24px"')}</button>${av(u.name)}
@@ -1023,11 +1034,15 @@ chat:()=>{const u=S.users.find(x=>x.id===S.id)||{name:'Customer',phone:''};retur
   <form class="composer" data-form="chat"><label class="rb" aria-label="Attach photo" style="cursor:pointer">${I('clip')}<input id="c-file" type="file" accept="image/*" hidden></label>
    <span class="inp"><input id="c-in" placeholder="Type a message..." aria-label="Message" autocomplete="off"></span><button type="button" class="rb mic" data-vn="recStart" aria-label="Record voice note">${I('mic')}</button><button class="rb send tx" aria-label="Send message">${I('send')}</button></form></section>`}
 };
-function msgsHtml(){if(!S.chat.length)return '<p class="empty">No messages yet</p>';let day='';
-  if(S.route==='staffChat')return S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender==='me';const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}"${mine?tkAttr(m):''}>${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}${mine?mdBtn(m):''}</time></div>`}).join('');
-  return S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender!=='user';const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
-    return `${head}<div class="msg ${mine?'out':'in'}"${mine?tkAttr(m):''}>${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}${mdBtn(m)}</time></div>`}).join('')}
+const isDel=m=>!!(m.deleted||m.deletedAt);
+const delTag='<span style="display:inline-block;margin-left:6px;font-size:10px;font-weight:700;color:#E5322D;vertical-align:1px">DELETED</span>';
+function pinStrip(){const pins=(S.chat||[]).filter(m=>m.pinnedAt&&!isDel(m));if(!pins.length)return '';
+  return `<div style="padding:8px 14px;border-bottom:1px solid var(--line);background:#F7F9FF;display:flex;flex-direction:column;gap:6px">${pins.map(m=>`<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink)">${I('pin','style="width:13px;height:13px;flex:none;color:var(--blue)"')}<span class="grow" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><b style="color:var(--blue);font-size:11px">Pinned</b> ${esc((m.text||(vnParse(m.imageData)?'Voice note':m.imageData?'Photo':'')).slice(0,80))}</span><button type="button" class="md" data-pin="${esc(m.id)}" data-on="0" aria-label="Unpin this message" style="flex:none">${I('cl','style="width:14px;height:14px"')}</button></div>`).join('')}</div>`}
+function msgsHtml(){if(!S.chat.length)return '<p class="empty">No messages yet</p>';let day='';const pin=pinStrip();
+  if(S.route==='staffChat')return pin+S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender==='me',del=isDel(m);const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
+    return `${head}<div class="msg ${mine?'out':'in'}"${mine?tkAttr(m):''}${del?' style="opacity:.6"':''}>${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}${del?delTag:pnBtn(m)+(mine?mdBtn(m):'')}</time></div>`}).join('');
+  return pin+S.chat.map(m=>{const ds=fd(m.createdAt),img=safeImg(m.imageData),mine=m.sender!=='user',del=isDel(m);const head=ds!==day?`<span class="day">${ds===fd(new Date())?'TODAY':ds.toUpperCase()}</span>`:'';day=ds;
+    return `${head}<div class="msg ${mine?'out':'in'}"${mine?tkAttr(m):''}${del?' style="opacity:.6"':''}>${img?`<img src="${img}" alt="Attached photo" style="max-width:100%;border-radius:12px;display:block;margin-bottom:6px"><button class="svp" data-act="savePic" data-kind="chat" data-id="${esc(m.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(m)}${msgText(m.text)}<time>${ft(m.createdAt)}${del?delTag:pnBtn(m)+mdBtn(m)}</time></div>`}).join('')}
 
 const peerQ=()=>S.route==='chat'&&S.id?'as=admin&chat=customer&id='+encodeURIComponent(S.id):S.route==='staffChat'&&S.sid?'as=admin&chat=team&id='+encodeURIComponent(S.sid):null;
 /* ---------- Chat status: online / last seen, typing, seen ticks ---------- */
@@ -1095,7 +1110,7 @@ function liveRefresh(){const r=S.route;if(!LIVE.includes(r)||typing())return;ref
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')liveRefresh()});
 if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{const d=e.data||{};if(!(S.route!=='login'&&S.route!=='loading'&&S.route!=='alertGate'))return;if(d.go&&V[d.go]&&LIVE.includes(d.go))return go(d.go);if(d.refresh)liveRefresh()});
 /* ---------- Back gesture: each screen is a history entry, so swiping back returns to the previous screen ---------- */
-const NAV={stack:[],keys:['id','uid','back','ratesTab','form','done','escTab','rcTab','wdTab','userTab','chatTab','sid'],roots:['loading','login','dash']};
+const NAV={stack:[],keys:['id','uid','back','ratesTab','form','done','escTab','rcTab','wdTab','userTab','chatTab','sid','pa','pb'],roots:['loading','login','dash']};
 function navPush(r){const snap={r,c:{}};NAV.keys.forEach(k=>snap.c[k]=S[k]);const st=NAV.stack;
   if(NAV.roots.includes(r)||!st.length){NAV.stack=[snap];try{history.replaceState({n:0},'')}catch(e){}}
   else if(st[st.length-1].r===r)st[st.length-1]=snap;
@@ -1194,14 +1209,20 @@ checkVersion();document.addEventListener('visibilitychange',()=>{if(document.vis
 /* ---------- Deleting a chat message ---------- */
 const MD_URL=id=>(S.route==='staffChat'?'/api/admin/team/'+encodeURIComponent(S.sid):'/api/admin/chats/'+encodeURIComponent(S.id))+'/messages/'+encodeURIComponent(id);
 const mdBtn=m=>`<button type="button" class="md" data-md="${esc(m.id)}" aria-label="Delete this message">${I('trash')}</button>`;
+const pnBtn=m=>`<button type="button" class="md" data-pin="${esc(m.id)}" data-on="${m.pinnedAt?'0':'1'}" aria-label="${m.pinnedAt?'Unpin':'Pin'} this message"${m.pinnedAt?' style="color:var(--blue)"':''}>${I('pin')}</button>`;
+const PIN_URL=id=>(S.route==='staffChat'?'/api/admin/team/'+encodeURIComponent(S.sid):'/api/admin/chats/'+encodeURIComponent(S.id))+'/messages/'+encodeURIComponent(id)+'/pin';
 function uiConfirm(title,text,ok){return new Promise(res=>{const d=document.createElement('div');d.className='cfm';
   d.innerHTML=`<div class="cfm-b" role="alertdialog" aria-modal="true" aria-label="${esc(title)}"><b>${esc(title)}</b><p>${esc(text)}</p><div><button type="button" data-k="0">Cancel</button><button type="button" data-k="1" class="dg">${esc(ok)}</button></div></div>`;
   d.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(!b&&e.target!==d)return;d.remove();res(!!b&&b.dataset.k==='1')});document.body.appendChild(d)})}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-md]');if(!b)return;const id=b.dataset.md;
-  if(!await uiConfirm('Delete this message?','It will be removed from the chat for everyone.','Delete'))return;
-  try{await api('DELETE',MD_URL(id));if(String(VN.id)===id)vnStop();S.chat=S.chat.filter(m=>String(m.id)!==id);
+  if(!await uiConfirm('Delete this message?','Staff and the customer will no longer see it. You will still see it here, marked as deleted.','Delete'))return;
+  try{await api('DELETE',MD_URL(id));if(String(VN.id)===id)vnStop();const m=S.chat.find(x=>String(x.id)===id);if(m){m.deleted=true;m.deletedAt=new Date().toISOString();m.pinnedAt=null}
     const box=$('#msgs');if(box&&inChat()){const y=box.scrollTop;box.innerHTML=msgsHtml();vnPaint();box.scrollTop=y}toast('Message deleted')}
   catch(err){toast(err.message||'Could not delete the message')}});
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-pin]');if(!b)return;const id=b.dataset.pin,on=b.dataset.on==='1';
+  try{await api('POST',PIN_URL(id),{on});const m=S.chat.find(x=>String(x.id)===id);if(m)m.pinnedAt=on?new Date().toISOString():null;
+    const box=$('#msgs');if(box&&inChat()){const y=box.scrollTop;box.innerHTML=msgsHtml();vnPaint();box.scrollTop=y}toast(on?'Message pinned':'Message unpinned')}
+  catch(err){toast(err.message||'Could not pin the message')}});
 let poll=null;
 const typing=()=>document.activeElement&&document.activeElement.matches('input,textarea');
 const inChat=()=>S.route==='chat'||S.route==='staffChat';
@@ -1216,6 +1237,8 @@ function go(r,o,pop){
   render();if(!inChat())window.scrollTo(0,0);
   clearInterval(poll);poll=null;
   if(r==='login'||r==='loading')return;
+  if(r==='staffChats'){S.staffChats=null;api('GET','/api/admin/staff-chats').then(d=>{S.staffChats=d.chats||[];if(S.route==='staffChats'&&!typing())render()}).catch(e=>{S.staffChats=[];toast(e.message);if(S.route==='staffChats')render()});return}
+  if(r==='staffPair'){S.staffPair=null;const a=S.pa,b=S.pb;api('GET','/api/admin/staff-chats/'+encodeURIComponent(a)+'/'+encodeURIComponent(b)).then(d=>{S.staffPair={a,b,aName:d.aName,bName:d.bName,messages:d.messages||[]};if(S.route==='staffPair')render()}).catch(e=>{toast(e.message);if(S.route==='staffPair')go('staffChats')});return}
   if(r==='staffChat'){if(!pop||!S.staffPerson||S.staffPerson.id!==S.sid){S.chat=[];S.staffPerson=null}
     const pull=()=>api('GET','/api/admin/team/'+encodeURIComponent(S.sid)).then(d=>{const first=!S.staffPerson,n=sig(d.messages)!==sig(S.chat);S.staffPerson=d.person;S.chat=d.messages||[];
       if(S.route!=='staffChat')return;if(first&&!typing())render();else if(n){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(e=>{if(S.route==='staffChat'&&!S.staffPerson){toast(e.message);go('chats')}});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000);return}
@@ -1331,6 +1354,7 @@ document.addEventListener('click',async e=>{
   const pk=e.target.closest('[data-pick]');if(pk){$('#sheet').innerHTML='';askResolve&&askResolve({id:pk.dataset.pick});askResolve=null;return}
   const g=e.target.closest('[data-go]');if(g){if(g.matches('.bk,[aria-label="Back"]')&&goBack(g.dataset.go))return;let r=g.dataset.go;const o={};
     if(g.dataset.id){if(r==='user')o.uid=g.dataset.id;else o.id=g.dataset.id}if(g.dataset.sid)o.sid=g.dataset.sid;
+    if(g.dataset.a)o.pa=g.dataset.a;if(g.dataset.b)o.pb=g.dataset.b;
     if(g.dataset.from)o.back=g.dataset.from;else if(r==='trade'||r==='chat')o.back='';
     if(r==='rates')o.ratesTab='rates';if(r==='rules'){r='rates';o.ratesTab='rules'}
     if(r==='accounts')o.form=null;if(r==='users')o.userTab=g.dataset.tab||'all';
