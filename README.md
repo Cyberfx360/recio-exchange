@@ -88,6 +88,20 @@
 > ```sql
 > alter table settings add column if not exists btc_rate numeric not null default 0, add column if not exists usdt_rate numeric not null default 0;
 > ```
+> For **auto-paying small withdrawals through Flutterwave** (Admin → Withdrawals → Auto-pay), run this one line:
+> ```sql
+> alter table settings add column if not exists autopay_on boolean not null default false, add column if not exists autopay_max numeric not null default 50000, add column if not exists autopay_daily_cap numeric not null default 500000; alter table withdrawals add column if not exists method text default 'manual', add column if not exists transfer_id text, add column if not exists transfer_ref text, add column if not exists transfer_status text, add column if not exists auto_note text, add column if not exists autopay_at timestamptz; create index if not exists withdrawals_transfer_ref on withdrawals(transfer_ref);
+> ```
+> Then, in **Render → Environment**, add two secrets (never put these in code or GitHub):
+> - `FLW_SECRET_KEY` — your Flutterwave **secret** key (`FLWSECK-...`).
+> - `FLW_WEBHOOK_HASH` — any long random string; paste the **same** value into Flutterwave → Settings → Webhooks as the "Secret hash".
+>
+> In the Flutterwave dashboard, set the **Webhook URL** to `https://recio-exchange.onrender.com/api/flw/webhook`. Keep a funded Flutterwave balance — transfers are debited from it. Auto-pay stays **off** until you switch it on under Admin → Withdrawals, and it only ever covers withdrawals up to your set limit (default ₦50,000) with a daily ceiling (default ₦500,000); anything above waits for you to pay by hand.
+> For **confirming the real account name before a withdrawal** (customer picks their bank, types the account number, the real name pops up, they confirm), run this one line:
+> ```sql
+> alter table users add column if not exists bank_code text, add column if not exists account_name text, add column if not exists payout_verified_at timestamptz;
+> ```
+> This uses the same `FLW_SECRET_KEY` as above. Once it's on, **new sign-ups confirm their account during registration** (bank + account number → real name → create), and existing customers confirm on their next withdrawal — so a withdrawal always goes to a real, checked name. (If Flutterwave isn't set up, sign-up and withdrawals keep working the old free-text way.)
 > For **deleting a message so staff and the customer no longer see it, but the admin still can** (and for **pinning a message to the top of a chat**), run this one line:
 > ```sql
 > alter table messages add column if not exists deleted_at timestamptz, add column if not exists pinned_at timestamptz; alter table team_messages add column if not exists deleted_at timestamptz, add column if not exists pinned_at timestamptz;

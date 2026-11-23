@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const path = require('path');
 const crypto = require('crypto');
 const store = require('./storage');
+const flw = require('./flutterwave');
 
 const app = express();
 app.disable('x-powered-by');
@@ -315,8 +316,10 @@ async function requireApprovedStaff(req, res, next) {
 // ============================================================
 app.post('/api/register', async (req, res) => {
   try {
-    const { name, phone, accountNumber, bankName, password } = req.body || {};
-    if (!name || !phone || !accountNumber || !bankName || !password) {
+    const { name, phone, accountNumber, bankName, bankCode, password } = req.body || {};
+    const acctNo = String(accountNumber || '').replace(/\D/g, '');
+    const verifyOn = flw.configured() && await payoutColsReady();   // verify the account name at sign-up once set up
+    if (!name || !phone || !acctNo || !password || (verifyOn ? !bankCode : !bankName)) {
       return res.status(400).json({ error: 'All fields are required.' });
     }
     if (badPin(password)) return res.status(400).json({ error: badPin(password) });
@@ -324,13 +327,25 @@ app.post('/api/register', async (req, res) => {
     if (await store.findUserByPhone(String(phone).trim())) {
       return res.status(409).json({ error: 'An account with this phone number already exists.' });
     }
+    // Confirm the bank account (real name) BEFORE the account is created.
+    let verified = null, canonicalBank = bankName;
+    if (verifyOn) {
+      const bankList = await flw.banks().catch(() => []);
+      const bank = bankList.find(b => String(b.code) === String(bankCode));
+      if (!bank) return res.status(400).json({ error: 'Pick your bank from the list.' });
+      let r; try { r = await flw.resolveAccount(acctNo, bankCode); } catch (e) { return res.status(400).json({ error: 'We could not verify that account. Check the number and the bank.' }); }
+      const nm = resolvedName(r);
+      if (!nm) return res.status(400).json({ error: 'We could not verify that account. Check the number and the bank.' });
+      verified = { bankCode: String(bankCode), accountName: nm }; canonicalBank = bank.name;
+    }
     const email = await signupEmail('user', req.body || {});
     if (email.error) return res.status(400).json({ error: email.error });
     const user = await store.createUser({
       name: String(name).trim(), phone: String(phone).trim(),
-      accountNumber: String(accountNumber).trim(), bankName: String(bankName).trim(),
+      accountNumber: acctNo, bankName: String(canonicalBank || '').trim(),
       passwordHash: bcrypt.hashSync(password, 10), email: email.value
     });
+    if (verified) { try { await store.setPayoutVerified(user.id, { accountNumber: acctNo, bankCode: verified.bankCode, bankName: String(canonicalBank).trim(), accountName: verified.accountName }); PAYOUT_COLS.ok = true; } catch (e) { console.error('Verify store at signup:', e.message); } }
     ipFail('signup', req, 5, 60);
     req.session.userId = user.id;
     res.json({ ok: true, status: user.status });
@@ -371,7 +386,8 @@ app.get('/api/me', async (req, res) => {
     if (!user) return res.json({ loggedIn: false });
     res.json({
       loggedIn: true, name: user.name, phone: user.phone, accountNumber: user.accountNumber,
-      bankName: user.bankName, status: user.status, balance: user.balance,
+      bankName: user.bankName, bankCode: user.bankCode, accountName: user.accountName, payoutVerifiedAt: user.payoutVerifiedAt,
+      status: user.status, balance: user.balance,
       email: user.email, needsPin: (await pinReady()) && user.email === null
     });
   } catch (err) {
@@ -399,6 +415,56 @@ app.put('/api/me', requireUser, async (req, res) => {
     console.error('Update me error:', err);
     res.status(500).json({ error: 'Could not update your details.' });
   }
+});
+
+// --- Verified payout accounts: look up the REAL account-holder name from the bank ---
+let PAYOUT_COLS = { at: 0, ok: false };
+async function payoutColsReady() {
+  if (Date.now() - PAYOUT_COLS.at < 300000) return PAYOUT_COLS.ok;
+  const ok = await store.payoutColsReady().catch(() => false);
+  PAYOUT_COLS = { at: Date.now(), ok };
+  return ok;
+}
+const resolvedName = r => (r && (r.account_name || r.accountName)) || '';
+app.get('/api/banks', async (req, res) => {   // needed during sign-up, before login
+  try {
+    if (!flw.configured()) return res.json({ configured: false, banks: [] });
+    const list = await flw.banks();
+    res.json({ configured: true, banks: list.map(b => ({ code: String(b.code), name: b.name })).sort((a, b) => a.name.localeCompare(b.name)) });
+  } catch (err) { console.error('Banks error:', err.message); res.status(502).json({ error: 'Could not load the bank list. Try again.' }); }
+});
+app.post('/api/account/resolve', async (req, res) => {   // name enquiry; usable during sign-up (throttled per device)
+  try {
+    if (!flw.configured()) return res.status(400).json({ error: 'Account checks are not available yet.' });
+    if (ipFail('resolve', req, 25, 1)) return res.status(429).json({ error: 'Too many account checks. Wait a minute and try again.' });
+    const accountNumber = String((req.body || {}).accountNumber || '').replace(/\D/g, '');
+    const bankCode = String((req.body || {}).bankCode || '').trim();
+    if (accountNumber.length < 10 || !bankCode) return res.status(400).json({ error: 'Enter a 10-digit account number and pick your bank.' });
+    let r; try { r = await flw.resolveAccount(accountNumber, bankCode); } catch (e) { return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' }); }
+    const name = resolvedName(r);
+    if (!name) return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' });
+    res.json({ accountName: name });
+  } catch (err) { console.error('Resolve error:', err.message); res.status(500).json({ error: 'Could not check that account.' }); }
+});
+app.post('/api/me/payout', requireUser, async (req, res) => {
+  try {
+    if (!flw.configured()) return res.status(400).json({ error: 'Account verification is not available yet.' });
+    const accountNumber = String((req.body || {}).accountNumber || '').replace(/\D/g, '');
+    const bankCode = String((req.body || {}).bankCode || '').trim();
+    if (accountNumber.length < 10 || !bankCode) return res.status(400).json({ error: 'Enter a 10-digit account number and pick your bank.' });
+    const bankList = await flw.banks().catch(() => []);
+    const bank = bankList.find(b => String(b.code) === bankCode);
+    if (!bank) return res.status(400).json({ error: 'Pick your bank from the list.' });
+    let r; try { r = await flw.resolveAccount(accountNumber, bankCode); } catch (e) { return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' }); }
+    const name = resolvedName(r);
+    if (!name) return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' });
+    const before = await store.findUserById(req.session.userId);
+    try { await store.setPayoutVerified(req.session.userId, { accountNumber, bankCode, bankName: bank.name, accountName: name }); }
+    catch (e) { if (e.code === 'PAYOUT_COLS') return res.status(500).json({ error: 'Run the verified-payout SQL from the README in Supabase first.' }); throw e; }
+    PAYOUT_COLS.ok = true;
+    if (before && before.accountNumber !== accountNumber) csSet('bank:' + req.session.userId, Date.now(), 0); // a real account change arms the auto-pay guard
+    res.json({ ok: true, accountName: name, bankName: bank.name, accountNumber });
+  } catch (err) { console.error('Payout save error:', err.message); res.status(500).json({ error: 'Could not save your account.' }); }
 });
 
 // ============================================================
@@ -931,6 +997,10 @@ app.post('/api/withdrawals', requireUser, requireApprovedUser, moneyLock(req => 
     const amount = Math.round(Number((req.body || {}).amount) * 100) / 100;
     if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Enter a valid amount.' });
     const user = await store.findUserById(req.user.id);
+    // Make sure we're paying a real, confirmed bank account (the name was looked up from the bank).
+    if (flw.configured() && await payoutColsReady() && !user.payoutVerifiedAt) {
+      return res.status(403).json({ needVerify: true, error: 'Confirm your withdrawal account first, so your money goes to the right name.' });
+    }
     // Hold the funds first; this refuses if the balance is not enough (even with many requests at once).
     const held = await store.addToBalance(user.id, -amount, { noNegative: true });
     if (!held.ok) return res.status(400).json({ error: 'You cannot withdraw more than your balance.' });
@@ -1756,6 +1826,7 @@ app.get('/api/admin/withdrawals', requireAdmin, async (req, res) => {
       ...w,
       userName: (users.find(u => u.id === w.userId) || {}).name || 'Unknown',
       userPhone: (users.find(u => u.id === w.userId) || {}).phone || '',
+      payoutName: (users.find(u => u.id === w.userId) || {}).accountName || null,   // real name confirmed from the bank
       bankChangedAt: csGet('bank:' + w.userId) || null   // the customer changed their payout account at this time
     }));
     res.json({ withdrawals: enriched });
@@ -1786,6 +1857,96 @@ app.post('/api/admin/withdrawals/:id/mark', requireAdmin, ADMIN_MONEY, async (re
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update withdrawal.' }); }
 });
 
+// ADMIN: one-tap auto-pay a small withdrawal through Flutterwave.
+// Guardrails: feature on, Flutterwave configured, status pending, amount <= max,
+// daily cap not exceeded, bank resolvable, account not changed in the last 24h.
+// The money was already held when the customer requested; this only sends it.
+const AUTOPAY_SQL = 'Run the auto-payout SQL from the README in Supabase first.';
+app.post('/api/admin/withdrawals/:id/autopay', requireAdmin, ADMIN_MONEY, async (req, res) => {
+  try {
+    const s = await store.getSettings();
+    if (!s.autopayOn) return res.status(400).json({ error: 'Auto-pay is turned off. Turn it on in Settings, or pay this one manually.' });
+    if (!flw.configured()) return res.status(400).json({ error: 'Flutterwave is not set up yet. Add FLW_SECRET_KEY in Render first.' });
+    const w = await store.findWithdrawalById(req.params.id);
+    if (!w) return res.status(404).json({ error: 'Withdrawal not found.' });
+    if (w.status !== 'pending') return res.status(400).json({ error: 'This withdrawal has already been handled.' });
+    const max = Number(s.autopayMax) || 50000;
+    if (w.amount > max) return res.status(400).json({ error: `Auto-pay only covers withdrawals up to ₦${plain(max)}. Pay this one manually.` });
+    let paidToday = 0;
+    try { paidToday = await store.sumAutoPayoutsToday(); } catch (e) { if (e.code === 'AUTOPAY_COLS') return res.status(500).json({ error: AUTOPAY_SQL }); throw e; }
+    const cap = Number(s.autopayDailyCap) || 500000;
+    if (paidToday + w.amount > cap) return res.status(400).json({ error: `Today's auto-pay limit of ₦${plain(cap)} would be passed (₦${plain(paidToday)} already paid). Pay this one manually, or raise the limit in Settings.` });
+    // Account-takeover guard: if the customer changed their payout account very recently, make the admin look.
+    const changedAt = csGet('bank:' + w.userId);
+    if (changedAt && Date.now() - changedAt < 24 * 3600 * 1000) return res.status(400).json({ error: 'This customer changed their payout account in the last 24 hours. Check it, then pay manually.' });
+    const user = await store.findUserById(w.userId);
+    const acctNo = (user && user.accountNumber) || w.payoutAccount;
+    if (!acctNo) return res.status(400).json({ error: 'This customer has no saved payout account. Pay manually.' });
+    let bank;
+    if (user && user.payoutVerifiedAt && user.bankCode) {
+      bank = { code: user.bankCode, name: user.bankName };   // already confirmed against the bank
+    } else {
+      const bankNm = (user && user.bankName) || w.payoutBank;
+      if (!bankNm) return res.status(400).json({ error: 'This customer has no saved payout account. Pay manually.' });
+      try { bank = await flw.bankCode(bankNm); } catch (e) { return res.status(502).json({ error: 'Could not reach Flutterwave to check the bank. Try again, or pay manually.' }); }
+      if (!bank) return res.status(400).json({ error: `Could not match the bank "${bankNm}" automatically. Pay this one manually.` });
+    }
+    try { await flw.resolveAccount(acctNo, bank.code); } catch (e) { return res.status(400).json({ error: 'Flutterwave could not verify that account number. Check it, or pay manually.' }); }
+    const ref = 'wd_' + String(w.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20) + '_' + Date.now().toString(36);
+    let t;
+    try { t = await flw.createTransfer({ accountNumber: acctNo, bankCode: bank.code, amount: w.amount, reference: ref, narration: 'AZAPLUG withdrawal' }); }
+    catch (e) { console.error('FLW transfer error:', e.message); return res.status(502).json({ error: 'Flutterwave did not accept the transfer: ' + (e.message || 'try again') + '. The money is still held — pay manually if you need to.' }); }
+    try {
+      await store.setWithdrawalTransfer(w.id, { status: 'processing', method: 'flutterwave', transferId: t.id, transferRef: ref, transferStatus: 'initiated', autopayAt: new Date().toISOString(), autoNote: `Sent to ${bank.name} ${acctNo} via Flutterwave`, payoutAccount: acctNo, payoutBank: bank.name });
+    } catch (e) { if (e.code === 'AUTOPAY_COLS') return res.status(500).json({ error: AUTOPAY_SQL }); throw e; }
+    notify(w.userId, 'tx', 'Withdrawal processing', `Your withdrawal of ₦${plain(w.amount)} is being paid to ${bank.name}. You'll get a note when it lands.`);
+    res.json({ ok: true, status: 'processing' });
+  } catch (err) { console.error('Autopay error:', err); res.status(500).json({ error: 'Could not start the auto-payment.' }); }
+});
+
+// ADMIN: reconcile a processing auto-payment if the webhook was missed.
+app.post('/api/admin/withdrawals/:id/autopay/check', requireAdmin, ADMIN_MONEY, async (req, res) => {
+  try {
+    const w = await store.findWithdrawalById(req.params.id);
+    if (!w || w.method !== 'flutterwave' || !w.transferId) return res.status(400).json({ error: 'Nothing to check on this one.' });
+    if (w.status !== 'processing') return res.json({ ok: true, status: w.status });
+    let t;
+    try { t = await flw.fetchTransfer(w.transferId); } catch (e) { return res.status(502).json({ error: 'Could not reach Flutterwave.' }); }
+    const st = String((t && t.status) || '').toUpperCase();
+    if (st === 'SUCCESSFUL') {
+      await store.setWithdrawalTransfer(w.id, { status: 'paid', transferStatus: 'success' });
+      notify(w.userId, 'tx', 'Withdrawal paid', `Your withdrawal of ₦${plain(w.amount)} has been paid to ${w.payoutBank}.`);
+      return res.json({ ok: true, status: 'paid' });
+    }
+    if (st === 'FAILED') {
+      await store.setWithdrawalTransfer(w.id, { status: 'pending', transferStatus: 'failed', autoNote: 'Flutterwave transfer failed — pay manually.' });
+      return res.json({ ok: true, status: 'pending' });
+    }
+    res.json({ ok: true, status: 'processing' });
+  } catch (err) { console.error('Autopay check error:', err); res.status(500).json({ error: 'Could not check the payment.' }); }
+});
+
+// Flutterwave webhook: finalizes a processing auto-payment. Public, but authenticated by the secret hash header.
+app.post('/api/flw/webhook', async (req, res) => {
+  try {
+    if (!flw.verifyWebhook(req)) return res.status(401).end();
+    const d = (req.body || {}).data || {};
+    const ref = d.reference || '';
+    const st = String(d.status || '').toUpperCase();
+    if (!ref) return res.json({ ok: true });
+    const w = await store.findWithdrawalByTransferRef(ref).catch(() => null);
+    if (!w || w.method !== 'flutterwave' || w.status !== 'processing') return res.json({ ok: true });
+    if (st === 'SUCCESSFUL') {
+      await store.setWithdrawalTransfer(w.id, { status: 'paid', transferStatus: 'success' });
+      notify(w.userId, 'tx', 'Withdrawal paid', `Your withdrawal of ₦${plain(w.amount)} has been paid to ${w.payoutBank}.`);
+    } else if (st === 'FAILED') {
+      await store.setWithdrawalTransfer(w.id, { status: 'pending', transferStatus: 'failed', autoNote: 'Flutterwave transfer failed — pay manually. ' + (d.complete_message || '') });
+      alertTeam({ admin: true }, 'Auto-pay failed', `A ₦${plain(w.amount)} auto-payment to ${w.payoutBank} failed. The money is still held — pay it manually.`, { admin: 'wds' });
+    }
+    res.json({ ok: true });
+  } catch (err) { console.error('FLW webhook error:', err); res.json({ ok: true }); }
+});
+
 // ============================================================
 // ADMIN: rules + settings
 // ============================================================
@@ -1805,11 +1966,18 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
     }
     if (b.giftOn !== undefined) patch.giftOn = b.giftOn === true;
     if (b.challengeOn !== undefined) patch.challengeOn = b.challengeOn === true;
+    if (b.autopayOn !== undefined) patch.autopayOn = b.autopayOn === true;
+    for (const k of ['autopayMax', 'autopayDailyCap']) {
+      if (b[k] === undefined) continue;
+      const n = Math.round(Number(b[k]));
+      if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'Enter the amount as a number, like 50000.' });
+      patch[k] = n;
+    }
     await store.updateSettings(patch); if (patch.giftOn !== undefined) GIFT_ON = null; if (patch.challengeOn !== undefined) CHAL_ON = null; res.json({ ok: true });
   } catch (err) {
     console.error(err);
     const msg = String(err && err.message), cryptoCols = /btc_rate|usdt_rate/.test(msg);
-    res.status(500).json({ error: cryptoCols ? 'Run the BTC/USDT rates SQL from the README in Supabase first.' : /gift_on/.test(msg) ? 'Run the gift card SQL from the README in Supabase first.' : /challenge_on/.test(msg) ? 'Run the tournament switch SQL from the README in Supabase first.' : 'Could not update settings.' });
+    res.status(500).json({ error: cryptoCols ? 'Run the BTC/USDT rates SQL from the README in Supabase first.' : /gift_on/.test(msg) ? 'Run the gift card SQL from the README in Supabase first.' : /challenge_on/.test(msg) ? 'Run the tournament switch SQL from the README in Supabase first.' : /autopay_on|autopay_max|autopay_daily/.test(msg) ? 'Run the auto-payout SQL from the README in Supabase first.' : 'Could not update settings.' });
   }
 });
 

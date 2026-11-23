@@ -31,6 +31,7 @@ function userRow(r) {
   return {
     id: r.id, name: r.name, phone: r.phone,
     accountNumber: r.account_number, bankName: r.bank_name,
+    bankCode: r.bank_code || null, accountName: r.account_name || null, payoutVerifiedAt: r.payout_verified_at || null,
     passwordHash: r.password_hash, status: r.status, email: r.email == null ? null : r.email,
     balance: Number(r.balance), createdAt: r.created_at
   };
@@ -71,6 +72,20 @@ async function updateUser(id, fields) {
   if (fields.accountNumber !== undefined) patch.account_number = fields.accountNumber;
   const { error } = await supabase.from('users').update(patch).eq('id', id);
   if (error) throw error;
+  // Changing the raw account details un-verifies the payout account (name must be looked up again).
+  if (fields.accountNumber !== undefined || fields.bankName !== undefined) {
+    await supabase.from('users').update({ account_name: null, payout_verified_at: null }).eq('id', id).then(() => {}, () => {});
+  }
+}
+// True once the verified-payout columns have been added (so the server only enforces verification after the SQL is run).
+async function payoutColsReady() { const { error } = await supabase.from('users').select('payout_verified_at').limit(1); return !error; }
+// Store a payout account whose real name was just confirmed via the bank.
+async function setPayoutVerified(id, f) {
+  const { error } = await supabase.from('users').update({
+    account_number: f.accountNumber, bank_name: f.bankName, bank_code: f.bankCode,
+    account_name: f.accountName, payout_verified_at: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { if (/bank_code|account_name|payout_verified_at/.test(String(error.message))) { const e = new Error('payout columns missing'); e.code = 'PAYOUT_COLS'; throw e; } throw error; }
 }
 // Clears rows in a table that may not exist on older setups (so a missing table never blocks a delete).
 async function clearOptional(table, column, id, setNull) {
@@ -497,7 +512,10 @@ async function getSettings() {
     settlementBank: data.settlement_bank, maxDeposit: Number(data.max_deposit),
     btcRate: Number(data.btc_rate) || 0, usdtRate: Number(data.usdt_rate) || 0,   // naira for 1 BTC / 1 USDT; 0 = not set
     giftOn: data.gift_on !== false,   // Gift Cards switched on for customers (on until the admin turns it off)
-    challengeOn: data.challenge_on !== false   // December tournament shown to customers (on until the admin turns it off)
+    challengeOn: data.challenge_on !== false,   // December tournament shown to customers (on until the admin turns it off)
+    autopayOn: data.autopay_on === true,        // Flutterwave auto-pay for small withdrawals (OFF until the admin turns it on)
+    autopayMax: Number(data.autopay_max) || 50000,       // biggest withdrawal that can be auto-paid (naira)
+    autopayDailyCap: Number(data.autopay_daily_cap) || 500000  // total auto-paid per day before it pauses to manual
   };
 }
 async function updateSettings(fields) {
@@ -510,6 +528,9 @@ async function updateSettings(fields) {
   if (fields.usdtRate !== undefined) patch.usdt_rate = fields.usdtRate;
   if (fields.giftOn !== undefined) patch.gift_on = !!fields.giftOn;
   if (fields.challengeOn !== undefined) patch.challenge_on = !!fields.challengeOn;
+  if (fields.autopayOn !== undefined) patch.autopay_on = !!fields.autopayOn;
+  if (fields.autopayMax !== undefined) patch.autopay_max = fields.autopayMax;
+  if (fields.autopayDailyCap !== undefined) patch.autopay_daily_cap = fields.autopayDailyCap;
   if (!Object.keys(patch).length) return;
   const { error } = await supabase.from('settings').update(patch).eq('id', 1);
   if (error) throw error;
@@ -625,7 +646,9 @@ function withdrawalRow(r) {
     id: r.id, userId: r.user_id, amount: Number(r.amount),
     payoutAccount: r.payout_account, payoutBank: r.payout_bank,
     status: r.status, reason: r.reason, reasonImage: pubMedia(r.reason_image),
-    createdAt: r.created_at, updatedAt: r.updated_at
+    createdAt: r.created_at, updatedAt: r.updated_at,
+    method: r.method || 'manual', transferId: r.transfer_id || null, transferRef: r.transfer_ref || null,
+    transferStatus: r.transfer_status || null, autoNote: r.auto_note || null, autopayAt: r.autopay_at || null
   };
 }
 async function createWithdrawal(w) {
@@ -642,6 +665,34 @@ async function findWithdrawalById(id) {
   const { data, error } = await supabase.from('withdrawals').select('*').eq('id', id).maybeSingle();
   if (error) throw error;
   return data ? withdrawalRow(data) : null;
+}
+async function findWithdrawalByTransferRef(ref) {
+  const { data, error } = await supabase.from('withdrawals').select('*').eq('transfer_ref', ref).maybeSingle();
+  if (error) throw error;
+  return data ? withdrawalRow(data) : null;
+}
+// Total naira auto-paid (initiated or already paid) via Flutterwave since midnight UTC — the daily cap check.
+async function sumAutoPayoutsToday() {
+  const start = new Date(); start.setUTCHours(0, 0, 0, 0);
+  const { data, error } = await supabase.from('withdrawals').select('amount, autopay_at, transfer_status')
+    .eq('method', 'flutterwave').gte('autopay_at', start.toISOString());
+  if (error) { if (/autopay_at|method|transfer_status/.test(String(error.message))) { const e = new Error('autopay columns missing'); e.code = 'AUTOPAY_COLS'; throw e; } throw error; }
+  return (data || []).filter(r => r.transfer_status !== 'failed').reduce((n, r) => n + Number(r.amount || 0), 0);
+}
+// Record a Flutterwave transfer against a withdrawal (status becomes 'processing' while the transfer is in flight).
+async function setWithdrawalTransfer(id, f) {
+  const patch = { updated_at: new Date().toISOString() };
+  if (f.status !== undefined) patch.status = f.status;
+  if (f.method !== undefined) patch.method = f.method;
+  if (f.transferId !== undefined) patch.transfer_id = f.transferId;
+  if (f.transferRef !== undefined) patch.transfer_ref = f.transferRef;
+  if (f.transferStatus !== undefined) patch.transfer_status = f.transferStatus;
+  if (f.autoNote !== undefined) patch.auto_note = f.autoNote;
+  if (f.autopayAt !== undefined) patch.autopay_at = f.autopayAt;
+  if (f.payoutAccount !== undefined) patch.payout_account = f.payoutAccount;
+  if (f.payoutBank !== undefined) patch.payout_bank = f.payoutBank;
+  const { error } = await supabase.from('withdrawals').update(patch).eq('id', id);
+  if (error) { if (/method|transfer_id|transfer_ref|transfer_status|auto_note|autopay_at/.test(String(error.message))) { const e = new Error('autopay columns missing'); e.code = 'AUTOPAY_COLS'; throw e; } throw error; }
 }
 async function listWithdrawalsForUser(userId) {
   const { data, error } = await supabase.from('withdrawals').select('*').eq('user_id', userId).order('created_at', { ascending: false });
@@ -1185,11 +1236,11 @@ module.exports = {
   getPushKeys, savePushKeys, savePushSubscription, deletePushSubscription, listPushSubscriptions,
   addNotification, listNotificationsForUser,
   createEscalation, findEscalationById, listEscalations, resolveEscalation,
-  createUser, findUserByPhone, findUserById, listUsers, setUserStatus, updateUser, deleteUser, addToBalance,
+  createUser, findUserByPhone, findUserById, listUsers, setUserStatus, updateUser, setPayoutVerified, payoutColsReady, deleteUser, addToBalance,
   createStaff, findStaffByPhone, findStaffById, listStaff, setStaffStatus, deleteStaff,
   listAccountsPublic, listAccountsForAmount, listAllAccounts, listAccountsByStaff, findAccountById, createAccount, updateAccount, deleteAccount,
   listApprovedTradeTotals, createTrade, findTradeById, findTradesByCardCode, listTradesForUser, listTradesForStaff, listAllTrades, updateTradeStatus, setSettlement,
   getSettings, updateSettings,
   addMessage, messagesForUser, listConversations, findMessageById, deleteMessage, softDeleteMessage, pinMessage,
-  createWithdrawal, findWithdrawalById, listWithdrawalsForUser, listAllWithdrawals, updateWithdrawalStatus
+  createWithdrawal, findWithdrawalById, findWithdrawalByTransferRef, listWithdrawalsForUser, listAllWithdrawals, updateWithdrawalStatus, setWithdrawalTransfer, sumAutoPayoutsToday
 };

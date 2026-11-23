@@ -614,7 +614,8 @@ function gfSync(){const f=S.gform;if(!f||!$('#gf-n'))return f;f.name=$('#gf-n').
     return{...r,country:$('#gr-c'+i).value,kind:$('#gr-k'+i).value,cur:$('#gr-u'+i).value,min:$('#gr-mn'+i).value,max:$('#gr-mx'+i).value,tiers}});
   if(f.prefixes&&f.prefixes.length)f.prefixes=f.prefixes.map((p,i)=>{const d=$('#gp-d'+i),c=$('#gp-c'+i);return{digits:d?d.value:p.digits,country:c?c.value:p.country}});return f}
 const tBadge=t=>t.status==='failed'?['FAILED','b-failed']:t.status==='approved'?(t.creditedAmount==null?['AWAITING CREDIT','b-checking']:['APPROVED','b-approved']):t.status==='confirmed'?['CONFIRMED','b-confirmed']:t.status==='seen'?['SEEN','b-confirmed']:['PENDING','b-checking'];
-const wBadge=w=>w.status==='paid'?['Approved','b-approved']:w.status==='rejected'?['Declined','b-failed']:['Pending','b-checking'];
+const wBadge=w=>w.status==='paid'?['Approved','b-approved']:w.status==='rejected'?['Declined','b-failed']:w.status==='processing'?['Processing','b-confirmed']:['Pending','b-checking'];
+const autoPayable=w=>w.status==='pending'&&S.settings&&S.settings.autopayOn&&Number(w.amount)<=(Number(S.settings.autopayMax)||50000);
 const sBadge=s=>s.status==='approved'?['ACTIVE','b-approved']:s.status==='rejected'?['SUSPENDED','b-failed']:['PENDING APPROVAL','b-checking'];
 const staffStats=s=>{const tr=S.trades.filter(t=>t.staffId===s.id),ok=tr.filter(t=>t.status==='approved').length,bad=tr.filter(t=>t.status==='failed').length;
   return{trades:tr.length,accounts:S.accounts.filter(a=>a.staffId===s.id).length,rate:ok+bad?(ok/(ok+bad)*100).toFixed(1)+'%':'--',failed:bad}};
@@ -815,7 +816,10 @@ wds:()=>{const pend=S.wds.filter(w=>w.status==='pending'),paidToday=S.wds.filter
  const all=S.wdTab==='pending'?pend:S.wdTab==='all'?S.wds:S.wds.filter(w=>w.status===S.wdTab),list=all.slice(0,S.wdPage*6),next={pending:'all',all:'paid',paid:'rejected',rejected:'pending'}[S.wdTab];
  const title={pending:`Pending Review (${pend.length})`,all:'All Requests',paid:'Approved',rejected:'Declined'}[S.wdTab];
  return `<section class="scr">${hd('Withdrawals','Executive Control','dash',`<button class="fbtn" data-set="wdTab:${next}">${I('filter','style="width:13px;height:13px"')}Filter</button>`,'dark')}
- <div class="bd"><div class="g3"><div class="stat sm"><small>Total Requests</small><b>${S.wds.length}</b><i>All time</i></div>
+ <div class="bd"><div class="card" style="padding:14px;margin-bottom:14px">
+  <div class="gsw" style="margin:0"><span class="grow" style="min-width:0"><b>Auto-pay with Flutterwave</b><small>${S.settings&&S.settings.autopayOn?`On: one-tap pay withdrawals up to ${naira(Number(S.settings.autopayMax)||50000)} (cap ${naira(Number(S.settings.autopayDailyCap)||500000)}/day).`:'Off: you pay every withdrawal by hand.'}</small></span><button class="tgl" role="switch" aria-checked="${!!(S.settings&&S.settings.autopayOn)}" aria-label="Auto-pay on or off" data-act="autoSwitch"></button></div>
+  ${S.settings&&S.settings.autopayOn?`<form data-form="autopayCfg" class="g2" style="margin-top:12px"><div><label class="cl" for="ap-max" style="margin-top:0">Max per withdrawal ₦</label><input class="in" id="ap-max" inputmode="numeric" value="${esc(Number(S.settings.autopayMax)||50000)}"></div><div><label class="cl" for="ap-cap" style="margin-top:0">Daily cap ₦</label><input class="in" id="ap-cap" inputmode="numeric" value="${esc(Number(S.settings.autopayDailyCap)||500000)}"></div><button class="b blue" style="grid-column:1/-1;height:42px">Save limits</button></form>`:''}</div>
+  <div class="g3"><div class="stat sm"><small>Total Requests</small><b>${S.wds.length}</b><i>All time</i></div>
   <div class="stat sm" style="border:1.5px solid var(--blue)"><small>Pending</small><b style="color:#D97706">${pend.length}</b><i>Needs action</i></div>
   <div class="stat sm"><small>Approved Today</small><b>${paidToday.length}</b><i>${naira(paidToday.reduce((s,w)=>s+w.amount,0))} paid</i></div></div>
   <button class="b green" style="margin-top:14px" data-go="loans">view loan request${S.loans.filter(l=>l.status==='pending').length?`<i class="glow">${S.loans.filter(l=>l.status==='pending').length}</i>`:''}</button>
@@ -831,8 +835,13 @@ wd:()=>{const w=S.wds.find(x=>x.id===S.id);if(!w)return V.wds();const b=wBadge(w
   <div class="card tp" style="margin-top:16px"><div class="cl" style="margin-top:0">Transaction details</div>
    <div><span class="row" style="gap:8px">${I('cardi','style="width:15px;height:15px"')}Bank Name</span><b>${esc(w.payoutBank)}</b></div>
    <div><span>Account Number</span><b class="row" style="gap:8px;font-size:15px">${esc(w.payoutAccount)}<button data-copy="${esc(w.payoutAccount)}" aria-label="Copy account number" style="color:var(--soft)">${I('copy','style="width:15px;height:15px"')}</button></b></div>
+   ${w.payoutName?`<div><span>Account Name</span><b style="font-size:14px">${esc(w.payoutName)} <span class="tagx g" style="margin-left:4px">Verified</span></b></div>`:`<div><span>Account Name</span><b style="color:#B45309;font-size:13px">Not verified</b></div>`}
    <div><span>Amount</span><b class="h" style="font-size:21px">${naira(w.amount)}</b></div>${w.reason?`<div><span>Reason</span><b style="color:var(--red)">${esc(w.reason)}</b></div>`:''}</div>
-  ${w.status==='pending'?`<label for="w-reason" style="display:block;font-weight:600;font-size:13px;margin:20px 0 8px">Reason for cancellation</label><textarea class="in" id="w-reason" rows="3" placeholder="Enter reason why request was cancelled..."></textarea>
+  ${w.status==='processing'?`<div class="card" style="margin-top:16px;padding:14px;background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF;font-size:13.5px;line-height:1.4"><b style="display:block;margin-bottom:4px">Paying through Flutterwave…</b>${esc(w.autoNote||'The transfer has been sent. It updates to Paid automatically when Flutterwave confirms.')}</div>
+   <button class="b blue" data-act="wdCheck" data-id="${esc(w.id)}">Check payment status</button>`:''}
+  ${w.status==='pending'&&w.transferStatus==='failed'?`<div class="card" style="margin-top:16px;padding:12px 14px;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;font-size:13.5px;line-height:1.4"><b>Auto-pay failed</b><br>${esc(w.autoNote||'The Flutterwave transfer did not go through. The money is still held — pay it manually below.')}</div>`:''}
+  ${w.status==='pending'?`${autoPayable(w)?`<button class="b green" style="margin-top:18px" data-act="wdAuto" data-id="${esc(w.id)}">${I('cardi','style="width:16px;height:16px"')}AUTO-PAY ${naira(w.amount)} VIA FLUTTERWAVE</button><p class="muted" style="font-size:12px;text-align:center;margin:8px 0 2px">or handle it by hand</p>`:S.settings&&S.settings.autopayOn&&Number(w.amount)>(Number(S.settings.autopayMax)||50000)?`<p class="muted" style="font-size:12.5px;margin:18px 0 4px">Above the ${naira(Number(S.settings.autopayMax)||50000)} auto-pay limit — pay this one manually.</p>`:''}
+   <label for="w-reason" style="display:block;font-weight:600;font-size:13px;margin:16px 0 8px">Reason for cancellation</label><textarea class="in" id="w-reason" rows="3" placeholder="Enter reason why request was cancelled..."></textarea>
    <button class="b green" data-act="wdPaid" data-id="${esc(w.id)}">${I('check','style="width:16px;height:16px"')}MARK AS PAID</button><button class="b red2" data-act="wdCancel" data-id="${esc(w.id)}">${I('xc','style="width:16px;height:16px"')}CANCEL REQUEST</button>`:''}</div></section>`},
 
 wdDone:()=>{const w=S.done;return `<section class="scr">${hd('Payment Confirmation','Transaction Receipt','wds','','dark')}
@@ -1340,6 +1349,12 @@ const ACT={
     await api('POST',`/api/admin/escalations/${id}/resolve`,{feedback:fb});toast('Escalation resolved');await reload()},
   async wdPaid(el,id){const w=S.wds.find(x=>x.id===id);if(!await ask('Mark as paid?',`Confirm you have sent ${naira(w.amount)} to ${w.userName} (${w.payoutBank}, ${w.payoutAccount}). This cannot be undone.`,'Mark as paid'))return;
     await api('POST',`/api/admin/withdrawals/${id}/mark`,{status:'paid'});await refresh();go('wdDone',{done:S.wds.find(x=>x.id===id)||w})},
+  async wdAuto(el,id){const w=S.wds.find(x=>x.id===id);if(!await ask('Auto-pay with Flutterwave?',`${naira(w.amount)} will be sent to ${w.userName} (${w.payoutBank}, ${w.payoutAccount}) through Flutterwave now. Make sure your Flutterwave balance can cover it.`,'Send '+naira(w.amount)))return;
+    const r=await api('POST',`/api/admin/withdrawals/${id}/autopay`);toast(r.status==='processing'?'Payment sent — waiting for Flutterwave to confirm':'Done');await refresh();go('wd',{id})},
+  async wdCheck(el,id){const r=await api('POST',`/api/admin/withdrawals/${id}/autopay/check`);toast(r.status==='paid'?'Paid ✓':r.status==='pending'?'Transfer failed — pay manually':'Still processing');await refresh();go('wd',{id})},
+  async autoSwitch(el){const on=!(S.settings&&S.settings.autopayOn);
+    if(!await ask(on?'Turn on auto-pay?':'Turn off auto-pay?',on?`You'll be able to one-tap pay withdrawals up to ${naira(Number((S.settings||{}).autopayMax)||50000)} through Flutterwave. Flutterwave must be set up and funded.`:'Auto-pay buttons disappear. You pay every withdrawal by hand. Anything already sent is unaffected.',on?'Turn on':'Turn off',!on))return;
+    await api('PUT','/api/admin/settings',{autopayOn:on});toast(on?'Auto-pay is on':'Auto-pay is off');await refresh();render()},
   async wdCancel(el,id){const r=$('#w-reason').value.trim(),w=S.wds.find(x=>x.id===id);if(!r){toast('Enter the reason for cancellation');$('#w-reason').focus();return}
     if(!await ask('Cancel this request?',`${naira(w.amount)} will be returned to ${w.userName}'s balance.`,'Cancel request',1))return;
     await api('POST',`/api/admin/withdrawals/${id}/mark`,{status:'rejected',reason:r});toast('Request cancelled and refunded');await reload('wds')}
@@ -1403,6 +1418,8 @@ const FORMS={
     await api('PUT','/api/admin/users/'+S.id,b);toast('User saved');await reload(S.back)},
   async cryptoRates(){await api('PUT','/api/admin/settings',{btcRate:num(val('cr-btc'))||0,usdtRate:num(val('cr-usdt'))||0});toast('Crypto rates saved');await refresh()},
   async rules(){await api('PUT','/api/admin/settings',{rulesText:$('#r-text').value,maxDeposit:num(val('r-max'))});toast('Rules saved');await refresh()},
+  async autopayCfg(){const max=num(val('ap-max')),cap=num(val('ap-cap'));if(!max||max<=0)return toast('Enter the max per withdrawal');if(!cap||cap<max)return toast('Daily cap must be at least the max per withdrawal');
+    await api('PUT','/api/admin/settings',{autopayMax:max,autopayDailyCap:cap});toast('Limits saved');await refresh();render()},
   async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';const d=await api('POST',(S.route==='staffChat'?'/api/admin/team/'+encodeURIComponent(S.sid)+'/send':'/api/admin/chats/'+encodeURIComponent(S.id)+'/send'),{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();chatBottom();i.focus()}
 };
 document.addEventListener('submit',async e=>{

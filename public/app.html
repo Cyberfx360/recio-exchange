@@ -530,7 +530,7 @@ async function api(method,url,body){
   const r=await fetch(url,{method,credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
   let d={};try{d=await r.json()}catch(e){}
   if(r.status===401&&S.me){S.me=null;go('login')}
-  if(!r.ok)throw new Error(d.error||'Something went wrong. Try again.');
+  if(!r.ok){const e=new Error(d.error||'Something went wrong. Try again.');Object.assign(e,d);throw e}
   return d;
 }
 async function loadMe(){const d=await api('GET','/api/me');S.me=d.loggedIn?d:null;return S.me}
@@ -584,8 +584,12 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState!==
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.route==='allow'&&!pbusy)pushState().then(()=>{if(S.route!=='allow')return;mustAllow()?render():go(S.after||'home')}).catch(()=>{})});
 
 const csGet=()=>{const c=CRYPTO[S.coin],u=num(S.cusd||'');return !c.rate?'The admin will confirm the naira amount.':u?`You get about ${naira(u*c.rate)} at $1 = ${naira(c.rate)}`:`Today's rate: $1 = ${naira(c.rate)}`};
-document.addEventListener('input',e=>{if(e.target.id==='cs-a'){S.cusd=e.target.value;const p=$('#cs-get');if(p)p.textContent=csGet()}});
-document.addEventListener('change',async e=>{const t=e.target;if(t.id==='cs-file'&&t.files[0]){try{S.cimg=await compress(t.files[0]);render()}catch(err){toast('Could not read that photo')}}});
+document.addEventListener('input',e=>{if(e.target.id==='cs-a'){S.cusd=e.target.value;const p=$('#cs-get');if(p)p.textContent=csGet()}
+  if(e.target.id==='v-a'&&S.vacct){S.vacct.accountNumber=e.target.value.replace(/\D/g,'').slice(0,10);vResolve()}
+  if(e.target.id==='su-a'&&banksReady()&&S.suacct){S.suacct.accountNumber=e.target.value.replace(/\D/g,'').slice(0,10);suResolve()}});
+document.addEventListener('change',async e=>{const t=e.target;if(t.id==='cs-file'&&t.files[0]){try{S.cimg=await compress(t.files[0]);render()}catch(err){toast('Could not read that photo')}}
+  if(t.id==='v-b'&&S.vacct){S.vacct.bankCode=t.value;vResolve()}
+  if(t.id==='su-b'&&banksReady()&&S.suacct){S.suacct.bankCode=t.value;suResolve()}});
 async function loadGiveaway(){try{const d=await api('GET','/api/giveaway');const was=JSON.stringify(S.ga||null);S.ga=d.giveaway?d:null;if(S.route==='home'&&JSON.stringify(S.ga)!==was&&!document.activeElement.matches('input,select'))render()}catch(e){}}
 const gaWhen=t=>{const d=new Date(t),today=new Date().toDateString()===d.toDateString();return (today?'Today':d.toLocaleDateString('en-NG',{weekday:'short',day:'numeric',month:'short'}))+' at '+d.toLocaleTimeString('en-NG',{hour:'numeric',minute:'2-digit'})};
 function gaCard(){const d=S.ga;if(!d)return '';const g=d.giveaway,m=d.mine;
@@ -700,8 +704,10 @@ signup:()=>`<section class="screen white auth">
   <form data-form="signup" novalidate>
   <label class="lb" for="su-n">Full Name</label><div class="field"><input id="su-n" placeholder="Daniel Benson" autocomplete="name"></div>
   <label class="lb" for="su-p">Phone Number</label><div class="field"><input id="su-p" type="tel" placeholder="0801 234 5678" autocomplete="username"></div>
-  <label class="lb" for="su-b">Bank Name</label><div class="field"><input id="su-b" placeholder="e.g. Opay"></div>
-  <label class="lb" for="su-a">Account Number</label><div class="field"><input id="su-a" inputmode="numeric" placeholder="This is where we pay you"></div>
+  ${banksReady()?`<label class="lb" for="su-b">Bank</label><div class="field"><select id="su-b"><option value="">Select your bank…</option>${S.banks.map(bk=>`<option value="${esc(bk.code)}" ${S.suacct&&S.suacct.bankCode===bk.code?'selected':''}>${esc(bk.name)}</option>`).join('')}</select>${I('cd')}</div>
+  <label class="lb" for="su-a">Account Number</label><div class="field"><input id="su-a" inputmode="numeric" maxlength="10" placeholder="This is where we pay you" value="${esc((S.suacct&&S.suacct.accountNumber)||'')}"></div>
+  <div id="su-name">${suNameHtml()}</div>`:`<label class="lb" for="su-b">Bank Name</label><div class="field"><input id="su-b" placeholder="e.g. Opay"></div>
+  <label class="lb" for="su-a">Account Number</label><div class="field"><input id="su-a" inputmode="numeric" placeholder="This is where we pay you"></div>`}
   ${AX.cfg.pin?`<label class="lb" for="su-e">Email Address <span style="font-weight:400;color:var(--muted)">(optional)</span></label><div class="field"><input id="su-e" type="email" inputmode="email" placeholder="you@example.com" autocomplete="email"></div>`:''}
   <label class="lb" for="su-pw">Create a 6-digit PIN</label><div class="field"><input class="pin" id="su-pw" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="new-password"></div>
   <label class="lb" for="su-pw2">Type the PIN again</label><div class="field"><input class="pin" id="su-pw2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="new-password"></div>
@@ -941,13 +947,23 @@ withdraw:()=>{const u=S.me;return `<section class="screen">
   <div class="card"><label class="cap" for="w-a">Enter amount</label>
    <div class="row" style="border-bottom:1px solid var(--line);padding:14px 0 16px;margin-bottom:4px"><span class="h" style="font-size:34px;font-weight:700;color:var(--blue);margin-right:6px">₦</span>
    <input id="w-a" inputmode="decimal" placeholder="0.00" style="border:0;outline:0;width:100%;font-family:var(--head);font-weight:700;font-size:34px;background:transparent"></div></div>
-  <div class="card" style="margin-top:22px"><div class="between"><span class="cap">Withdraw to</span><button type="button" class="link" data-go="edit">Change</button></div>
+  <div class="card" style="margin-top:22px"><div class="between"><span class="cap">Withdraw to</span><button type="button" class="link" data-act="goVerify">Change</button></div>
    <div class="row" style="gap:14px;margin-top:14px"><span style="width:44px;height:44px;border-radius:12px;background:#EEF2FB;color:var(--blue);display:grid;place-items:center">${I('bank')}</span>
-   <span style="min-width:0"><b class="h" style="font-weight:600;font-size:16.5px;display:block">${esc(u.bankName)}</b><span class="muted" style="font-size:14px">${esc(u.accountNumber)}</span><br><small style="color:var(--soft);text-transform:uppercase">${esc(u.name)}</small></span></div></div>
+   <span style="min-width:0"><b class="h" style="font-weight:600;font-size:16.5px;display:block">${esc(u.bankName)}</b><span class="muted" style="font-size:14px">${esc(u.accountNumber)}</span><br><small style="color:var(--soft);text-transform:uppercase">${esc(u.accountName||u.name)}</small>${u.accountName?` <small style="color:#059669;font-weight:700;text-transform:none">✓ confirmed</small>`:''}</span></div></div>
   <div class="card sum plain" style="margin-top:22px"><div class="cap" style="display:block;padding:0 0 6px">Transaction summary</div>
    <div><span>Withdrawal Amount</span><b id="w-amt">${naira(0)}</b></div><div class="hr"></div>
    <div><b style="font-weight:600;font-size:16px">Total to Deduct</b><b id="w-tot" style="font-family:var(--head);font-weight:700;font-size:19px;color:var(--blue)">${naira(0)}</b></div></div>
   <button class="btn sq" style="margin-top:22px;font-family:var(--body)">Confirm Withdrawal</button></form></section>`},
+
+verifyAcct:()=>{const v=S.vacct||(S.vacct={bankCode:(S.me&&S.me.bankCode)||'',accountNumber:(S.me&&S.me.accountNumber)||'',accountName:'',resolving:false,error:''}),banks=S.banks;return `<section class="screen">
+  <div class="top"><button class="icon-btn" data-go="${S.vfrom||'withdraw'}" aria-label="Back">${I('cl')}</button><span class="title">Withdrawal account</span><span></span></div>
+  <div class="pad">${banks===undefined?'<p class="muted" style="margin-top:20px">Loading…</p>':banks.length?`
+   <p class="muted" style="margin:4px 0 18px">Pick your bank and type your account number. We'll show the real name on the account — check it's yours, then confirm.</p>
+   <label class="lb" style="margin-top:0" for="v-b">Bank</label><div class="field"><select id="v-b"><option value="">Select your bank…</option>${banks.map(b=>`<option value="${esc(b.code)}" ${v.bankCode===b.code?'selected':''}>${esc(b.name)}</option>`).join('')}</select>${I('cd')}</div>
+   <label class="lb" for="v-a">Account Number</label><div class="field"><input id="v-a" inputmode="numeric" maxlength="10" placeholder="10 digits" value="${esc(v.accountNumber||'')}"></div>
+   <div id="v-name">${vNameHtml()}</div>
+   <button class="btn sq" style="margin-top:22px" data-act="vConfirm" ${v.accountName?'':'disabled'}>Confirm this account</button>`
+  :`<p class="muted" style="margin-top:20px">Account checking isn't available right now. You can set your details under <button class="link" data-go="edit">Profile</button>.</p>`}</div></section>`},
 
 withdrawn:()=>{const d=S.wd,m=WS[d.status]||WS.pending;return `<section class="screen">
   <div class="top"><button class="icon-btn" data-go="home" aria-label="Back">${I('cl')}</button><span class="title">Pay for Withdraw</span><span></span></div>
@@ -1223,12 +1239,32 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-md]'
   catch(err){toast(err.message||'Could not delete the message')}});
 let poll=null;
 function render(){$('#app').innerHTML=V[S.route]();if(S.route==='chat')chatBottom();if(S.route==='receive')drawQR()}
+const banksReady=()=>Array.isArray(S.banks)&&S.banks.length;
+function acctNameHtml(st){st=st||{};return st.resolving?'<p class="muted" style="margin-top:14px">Checking the name…</p>':st.accountName?`<div class="card" style="margin-top:14px;padding:14px;background:#ECFDF5;border:1px solid #A7F3D0"><small class="muted">Account name</small><b class="h" style="display:block;font-size:17px;color:#065F46;margin-top:2px">${esc(st.accountName)}</b></div>`:st.error?`<p style="color:var(--red);margin-top:14px;font-size:14px">${esc(st.error)}</p>`:''}
+function vNameHtml(){return acctNameHtml(S.vacct)}
+function suNameHtml(){return acctNameHtml(S.suacct)}
+function vPaint(){const el=$('#v-name');if(el)el.innerHTML=acctNameHtml(S.vacct);const btn=$('[data-act="vConfirm"]');if(btn)btn.disabled=!(S.vacct&&S.vacct.accountName)}
+function suPaint(){const el=$('#su-name');if(el)el.innerHTML=acctNameHtml(S.suacct)}
+function resolveName(st,paint){if(!st)return;
+  if(!st.bankCode||(st.accountNumber||'').length<10){st.accountName='';st.error='';st.resolving=false;paint();return}
+  st.resolving=true;st.accountName='';st.error='';paint();
+  const want=st.bankCode+'|'+st.accountNumber;clearTimeout(st._t);
+  st._t=setTimeout(async()=>{
+    try{const d=await api('POST','/api/account/resolve',{accountNumber:st.accountNumber,bankCode:st.bankCode});
+      if(st.bankCode+'|'+st.accountNumber!==want)return; // a newer edit is pending
+      st.accountName=d.accountName||'';st.error=st.accountName?'':'We could not find that account.';}
+    catch(e){if(st.bankCode+'|'+st.accountNumber!==want)return;st.accountName='';st.error=e.message||'We could not find that account.';}
+    st.resolving=false;paint();
+  },450)}
+function vResolve(){resolveName(S.vacct,vPaint)}
+function suResolve(){resolveName(S.suacct,suPaint)}
 function go(r,o,pop){
   if(r==='chat'&&S.route!=='chat'&&!pop)S.prev=S.route;
   if(S.route!==r)$('#toast').classList.remove('show');
   if(r!=='chat'){recEnd(true);vnStop()}
   S.route=r;if(!pop)navPush(r);render();if(r!=='chat')window.scrollTo(0,0);
   clearInterval(poll);poll=null;
+  if(r==='signup'){S.suacct=S.suacct||{bankCode:'',accountNumber:'',accountName:'',resolving:false,error:''};if(S.banks===undefined)api('GET','/api/banks').then(d=>{S.banks=d.banks||[];if(S.route===r)render()}).catch(()=>{S.banks=[];if(S.route===r)render()})}
   if(!S.me)return;
   if(r==='notifications'){S.seenSnap=seenAt();ls.set('az_seen',Date.now());render()}
   if(r==='home'||r==='notifications')loadNotes();
@@ -1244,6 +1280,7 @@ function go(r,o,pop){
   if(r==='gift'&&S.giftTab==='friend')loadGiftMine();
   if(r==='crypto'||r==='cryptoSend'||r==='rates')api('GET','/api/crypto-rates').then(d=>{CRYPTO.BTC.rate=d.btc||null;CRYPTO.USDT.rate=d.usdt||null;if(S.route===r&&!(document.activeElement&&document.activeElement.matches('input')))render();else{const p=$('#cs-get');if(p)p.textContent=csGet()}}).catch(()=>{});
   if(r==='rules')api('GET','/api/rules').then(d=>{S.rules=d.rulesText||'';if(S.route===r)render()}).catch(e=>toast(e.message));
+  if(r==='verifyAcct'&&S.banks===undefined)api('GET','/api/banks').then(d=>{S.banks=d.banks||[];if(S.route===r)render()}).catch(()=>{S.banks=[];if(S.route===r)render()});
   if(r==='chat'){const pull=()=>api('GET','/api/chat/messages').then(d=>{const n=sig(d.messages)!==sig(S.chat);S.chat=d.messages||[];
       if(n&&S.route==='chat'){$('#msgs').innerHTML=msgsHtml();chatBottom()}}).catch(()=>{});pull();PULLNOW=pull;setTimeout(peerPull,300);poll=setInterval(pull,5000)}
 }
@@ -1287,7 +1324,9 @@ document.addEventListener('click',e=>{
       try{await navigator.clipboard.writeText(text+' '+url);toast('Link copied. Paste it to share')}catch(e){prompt('Copy this link',url)}},
     async gateCheck(){await pushState();if(S.push==='off'&&allowed())await pushRetry();if(!mustAllow())return go(S.after||'home');if(S.push==='denied')toast('Still blocked. Allow notifications for AZAPLUG in Settings.');render()},
     async logout(){try{await pushDetach()}catch(e){}try{await api('POST','/api/logout')}catch(e){}S.notes=[];S.me=null;S.trades=[];S.withdrawals=[];S.chat=[];go(lsGet(BIO.key)?'lock':'splash')},
-    share(){const w=CRYPTO[S.coin].address;navigator.share?navigator.share({text:w}).catch(()=>{}):navigator.clipboard?.writeText(w).then(()=>toast('Address copied'))}
+    share(){const w=CRYPTO[S.coin].address;navigator.share?navigator.share({text:w}).catch(()=>{}):navigator.clipboard?.writeText(w).then(()=>toast('Address copied'))},
+    goVerify(){S.vacct={bankCode:(S.me&&S.me.bankCode)||'',accountNumber:(S.me&&S.me.accountNumber)||'',accountName:'',resolving:false,error:''};S.vfrom=S.route;go('verifyAcct')},
+    async vConfirm(){const v=S.vacct;if(!v||!v.accountName)return;try{await api('POST','/api/me/payout',{accountNumber:v.accountNumber,bankCode:v.bankCode});await loadMe();toast('Account confirmed');go(S.vfrom==='profile'?'profile':'withdraw')}catch(e){toast(e.message||'Could not save your account')}}
   })[a.dataset.act]?.();
 });
 document.addEventListener('change',async e=>{const t=e.target;
@@ -1311,7 +1350,12 @@ const val=id=>$('#'+id).value.trim();
 const FORMS={
   async login(){const phone=val('lg-id'),password=$('#lg-pw').value;if(!phone||!password)throw new Error(S.oldpw?'Enter your phone number and password':'Enter your phone number and PIN');
     await api('POST','/api/login',{phone,password});S.oldpw=false;await enter();bioOffer()},
-  async signup(){await axSignup({name:val('su-n'),phone:val('su-p'),bankName:val('su-b'),accountNumber:val('su-a'),email:AX.cfg.pin?val('su-e').toLowerCase():'',password:$('#su-pw').value},$('#su-pw2').value)},
+  async signup(){const b={name:val('su-n'),phone:val('su-p'),accountNumber:val('su-a'),email:AX.cfg.pin?val('su-e').toLowerCase():'',password:$('#su-pw').value};
+    if(banksReady()){const code=(S.suacct&&S.suacct.bankCode)||'';if(!code)throw new Error('Pick your bank');
+      if(!(S.suacct&&S.suacct.accountName))throw new Error('Enter your account number so we can check the name on it');
+      b.bankCode=code;b.bankName=((S.banks.find(x=>x.code===code)||{}).name)||'';}
+    else b.bankName=val('su-b');
+    await axSignup(b,$('#su-pw2').value)},
   async cryptoSend(){const usdAmount=num(S.cusd||'');if(!usdAmount)throw new Error('Enter the amount you sent in dollars');if(!S.cimg)throw new Error('Add a screenshot of your transfer');
     await api('POST','/api/crypto/trades',{coin:S.coin,usdAmount,receiptImage:S.cimg,address:CRYPTO[S.coin].address});S.cusd='';S.cimg=null;await loadAll();toast('Receipt sent to the admin');go('history')},
   async send(){const intendedAmount=num(S.send.amount);
@@ -1333,7 +1377,8 @@ const FORMS={
     if(!await uiChoice(`Make a ${naira0(amount)} gift code?`,`${naira0(amount)} leaves your balance now. Anyone who has the code can redeem it, so only send it to your friend.`,'Make gift code','Not now'))return;
     const d=await api('POST','/api/gift/send',{amount,message});S.me.balance=d.balance;S.gnew={code:d.code,amount:d.amount,message};await loadGiftMine();render();window.scrollTo(0,0)},
   async withdraw(){const amount=num(val('w-a'));if(!amount)throw new Error('Enter an amount');
-    const d=await api('POST','/api/withdrawals',{amount});S.wd=d.withdrawal;go('withdrawn')},
+    try{const d=await api('POST','/api/withdrawals',{amount});S.wd=d.withdrawal;go('withdrawn')}
+    catch(e){if(e.needVerify){S.vacct={bankCode:(S.me&&S.me.bankCode)||'',accountNumber:(S.me&&S.me.accountNumber)||'',accountName:'',resolving:false,error:''};S.vfrom='withdraw';toast('Confirm your withdrawal account first');return go('verifyAcct')}throw e}},
   async loan(){const amount=num(val('l-a'));if(!amount)throw new Error('Enter a loan amount');if(S.loan&&amount>S.loan.limit)throw new Error('The most you can borrow is '+naira(S.loan.limit));
     await api('POST','/api/loans',{amount});toast('Loan request sent for review');await loadLoan();render()},
   async chpin(){const o=val('cp-o'),n=val('cp-n'),c=val('cp-c');if(!/^\d{6}$/.test(o))throw new Error('Enter your current 6-digit PIN');if(!/^\d{6}$/.test(n))throw new Error('Your new PIN must be 6 digits');if(n!==c)throw new Error('The two new PINs are not the same');
@@ -1501,6 +1546,7 @@ const bioEnter=()=>enter();
 /* ---------- 6-digit PIN, email code, forgot PIN ---------- */
 const AX={role:'user',cfg:{pin:true,email:true}};
 api('GET','/api/auth/config').then(c=>{AX.cfg=c;if(S.route==='signup'&&!(document.activeElement&&document.activeElement.matches('input,select')))render()}).catch(()=>{});
+api('GET','/api/banks').then(d=>{S.banks=d.banks||[];if(S.route==='signup'&&!(document.activeElement&&document.activeElement.matches('input,select')))render()}).catch(()=>{});
 const pinOk=(a,b)=>{if(!/^\d{6}$/.test(a))throw new Error('Your PIN must be exactly 6 digits');if(/^(\d)\1{5}$/.test(a)||'0123456789012345'.includes(a)||'9876543210987654'.includes(a))throw new Error('That PIN is too easy to guess. Choose another one');if(b!==undefined&&a!==b)throw new Error('The two PINs do not match')};
 const axIn=(id,label,attrs)=>`<label for="${id}">${label}</label><input class="axi" id="${id}" ${attrs}>`;
 const axPin=(id,label,ac)=>`<label for="${id}">${label}</label><input class="axi pin" id="${id}" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="${ac}">`;
