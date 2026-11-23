@@ -57,6 +57,13 @@ label.lb{display:block;font-weight:600;font-size:15px;margin:22px 0 10px}
 .field:focus-within{border-color:var(--blue)}
 .field input,.field select{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:16px;height:100%}
 .field input::placeholder{color:#9CA3AF}
+.bankwrap{position:relative}
+.bankdd{position:absolute;left:0;right:0;top:calc(100% + 6px);z-index:40;max-height:300px;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 34px -10px rgba(16,24,40,.28)}
+.bankdd:empty{display:none}
+.bankrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px 14px;border:0;border-bottom:1px solid #F1F3F7;background:#fff;font-size:15.5px;font-weight:500;color:var(--slate);cursor:pointer}
+.bankrow:last-child{border-bottom:0}
+.bankrow:active{background:#EFF4FF}
+.bankrow i{width:34px;height:34px;border-radius:10px;background:#EEF2FB;color:var(--blue);display:grid;place-items:center;flex:none;font-weight:700;font-size:12.5px;font-style:normal}
 .field select{appearance:none;-webkit-appearance:none;font-weight:600}
 .field .eye{color:#4B5563}
 .field.sm{height:52px}
@@ -585,8 +592,8 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 
 const csGet=()=>{const c=CRYPTO[S.coin],u=num(S.cusd||'');return !c.rate?'The admin will confirm the naira amount.':u?`You get about ${naira(u*c.rate)} at $1 = ${naira(c.rate)}`:`Today's rate: $1 = ${naira(c.rate)}`};
 document.addEventListener('input',e=>{if(e.target.id==='cs-a'){S.cusd=e.target.value;const p=$('#cs-get');if(p)p.textContent=csGet()}
-  if(e.target.id==='v-a'&&S.vacct){S.vacct.accountNumber=e.target.value.replace(/\D/g,'').slice(0,10);vResolve()}
-  if(e.target.id==='su-a'&&banksReady()&&S.suacct){S.suacct.accountNumber=e.target.value.replace(/\D/g,'').slice(0,10);suResolve()}
+  if(e.target.id==='v-a'&&S.vacct){const bd=$('#v-banks');if(bd)bd.innerHTML='';S.vacct.accountNumber=e.target.value.replace(/\D/g,'').slice(0,10);vResolve()}
+  if(e.target.id==='su-a'&&banksReady()&&S.suacct){const bd=$('#su-banks');if(bd)bd.innerHTML='';S.suacct.accountNumber=e.target.value.replace(/\D/g,'').slice(0,10);suResolve()}
   if(e.target.id==='v-b'&&S.vacct){S.vacct.bankCode='';S.vacct.bankName=e.target.value;S.vacct.accountName='';vPaint();const el=$('#v-banks');if(el)el.innerHTML=bankListHtml(e.target.value)}
   if(e.target.id==='su-b'&&banksReady()&&S.suacct){S.suacct.bankCode='';S.suacct.bankName=e.target.value;S.suacct.accountName='';suPaint();const el=$('#su-banks');if(el)el.innerHTML=bankListHtml(e.target.value)}});
 document.addEventListener('change',async e=>{const t=e.target;if(t.id==='cs-file'&&t.files[0]){try{S.cimg=await compress(t.files[0]);render()}catch(err){toast('Could not read that photo')}}});
@@ -707,8 +714,8 @@ signup:()=>`<section class="screen white auth">
   <form data-form="signup" novalidate>
   <label class="lb" for="su-n">Full Name</label><div class="field"><input id="su-n" placeholder="Daniel Benson" autocomplete="name"></div>
   <label class="lb" for="su-p">Phone Number</label><div class="field"><input id="su-p" type="tel" placeholder="0801 234 5678" autocomplete="username"></div>
-  ${banksReady()?`<label class="lb" for="su-b">Bank</label><div class="field"><input id="su-b" placeholder="Type your bank, e.g. Opay" value="${esc((S.suacct&&S.suacct.bankName)||'')}" autocomplete="off"></div>
-  <div id="su-banks" style="border-radius:12px;overflow:hidden;${S.suacct&&S.suacct.bankName?'':'box-shadow:0 2px 10px rgba(0,0,0,.06)'}"></div>
+  ${banksReady()?`<label class="lb" for="su-b">Bank</label>
+  <div class="bankwrap"><div class="field">${I('search','style="width:18px;height:18px;color:#9CA3AF;flex:none"')}<input id="su-b" placeholder="Type your bank, e.g. Opay" value="${esc((S.suacct&&S.suacct.bankName)||'')}" autocomplete="off">${S.suacct&&S.suacct.bankCode?I('check','style="width:19px;height:19px;color:#059669;flex:none"'):''}</div><div id="su-banks" class="bankdd"></div></div>
   <label class="lb" for="su-a">Account Number</label><div class="field"><input id="su-a" inputmode="numeric" maxlength="10" placeholder="This is where we pay you" value="${esc((S.suacct&&S.suacct.accountNumber)||'')}"></div>
   <div id="su-name">${suNameHtml()}</div>`:`<label class="lb" for="su-b">Bank Name</label><div class="field"><input id="su-b" placeholder="e.g. Opay"></div>
   <label class="lb" for="su-a">Account Number</label><div class="field"><input id="su-a" inputmode="numeric" placeholder="This is where we pay you"></div>`}
@@ -963,8 +970,8 @@ verifyAcct:()=>{const v=S.vacct||(S.vacct=vInit()),banks=S.banks;return `<sectio
   <div class="top"><button class="icon-btn" data-go="${S.vfrom||'withdraw'}" aria-label="Back">${I('cl')}</button><span class="title">Withdrawal account</span><span></span></div>
   <div class="pad">${banks===undefined?'<p class="muted" style="margin-top:20px">Loading…</p>':banks.length?`
    <p class="muted" style="margin:4px 0 18px">Pick your bank and type your account number. We'll show the real name on the account — check it's yours, then confirm.</p>
-   <label class="lb" style="margin-top:0" for="v-b">Bank</label><div class="field"><input id="v-b" placeholder="Type your bank, e.g. Opay" value="${esc(v.bankName||'')}" autocomplete="off"></div>
-   <div id="v-banks" style="border-radius:12px;overflow:hidden;${v.bankName?'':'box-shadow:0 2px 10px rgba(0,0,0,.06)'}"></div>
+   <label class="lb" style="margin-top:0" for="v-b">Bank</label>
+   <div class="bankwrap"><div class="field">${I('search','style="width:18px;height:18px;color:#9CA3AF;flex:none"')}<input id="v-b" placeholder="Type your bank, e.g. Opay" value="${esc(v.bankName||'')}" autocomplete="off">${v.bankCode?I('check','style="width:19px;height:19px;color:#059669;flex:none"'):''}</div><div id="v-banks" class="bankdd"></div></div>
    <label class="lb" for="v-a">Account Number</label><div class="field"><input id="v-a" inputmode="numeric" maxlength="10" placeholder="10 digits" value="${esc(v.accountNumber||'')}"></div>
    <div id="v-name">${vNameHtml()}</div>
    <button class="btn sq" style="margin-top:22px" data-act="vConfirm" ${v.accountName?'':'disabled'}>Confirm this account</button>`
@@ -1246,10 +1253,13 @@ let poll=null;
 function render(){$('#app').innerHTML=V[S.route]();if(S.route==='chat')chatBottom();if(S.route==='receive')drawQR()}
 const banksReady=()=>Array.isArray(S.banks)&&S.banks.length;
 function vInit(){return{bankCode:(S.me&&S.me.bankCode)||'',bankName:(S.me&&S.me.bankName)||'',accountNumber:(S.me&&S.me.accountNumber)||'',accountName:'',resolving:false,error:''}}
-function bankListHtml(q){const query=String(q||'').trim().toLowerCase();if(!query)return '';
-  const m=(S.banks||[]).filter(b=>b.name.toLowerCase().includes(query)).slice(0,8);
-  if(!m.length)return `<div class="muted" style="padding:11px 13px;font-size:14px">No bank matches "${esc(query)}"</div>`;
-  return m.map(b=>`<button type="button" data-bankcode="${esc(b.code)}" data-bankname="${esc(b.name)}" style="display:block;width:100%;text-align:left;padding:12px 13px;border:0;border-bottom:1px solid var(--line);background:#fff;font-size:15px;font-weight:500">${esc(b.name)}</button>`).join('')}
+function bankIni(n){const w=String(n||'').replace(/[^a-zA-Z ]/g,' ').split(/\s+/).filter(Boolean);return ((w[0]||'')[0]||'')+((w[1]||'')[0]||'')||'?'}
+function bankListHtml(q){const query=String(q||'').trim().toLowerCase();if(query.length<2)return '';
+  const all=(S.banks||[]),starts=[],has=[];
+  for(const b of all){const n=b.name.toLowerCase();if(n.startsWith(query))starts.push(b);else if(n.includes(query))has.push(b)}
+  const m=starts.concat(has).slice(0,10);
+  if(!m.length)return `<div class="bankrow" style="color:var(--muted);font-weight:400;cursor:default">No bank matches “${esc(query)}”. Check the spelling.</div>`;
+  return m.map(b=>`<button type="button" class="bankrow" data-bankcode="${esc(b.code)}" data-bankname="${esc(b.name)}"><i>${esc(bankIni(b.name).toUpperCase())}</i><span style="min-width:0;flex:1">${esc(b.name)}</span></button>`).join('')}
 function pickBank(st,code,name,inputId,listId,resolveFn){st.bankCode=code;st.bankName=name;st.accountName='';st.error='';const inp=$('#'+inputId);if(inp)inp.value=name;const el=$('#'+listId);if(el)el.innerHTML='';resolveFn()}
 function acctNameHtml(st){st=st||{};return st.resolving?'<p class="muted" style="margin-top:14px">Checking the name…</p>':st.accountName?`<div class="card" style="margin-top:14px;padding:14px;background:#ECFDF5;border:1px solid #A7F3D0"><small class="muted">Account name</small><b class="h" style="display:block;font-size:17px;color:#065F46;margin-top:2px">${esc(st.accountName)}</b></div>`:st.error?`<p style="color:var(--red);margin-top:14px;font-size:14px">${esc(st.error)}</p>`:''}
 function vNameHtml(){return acctNameHtml(S.vacct)}
