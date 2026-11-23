@@ -606,11 +606,13 @@ const gTiers=r=>(r.tiers&&r.tiers.length)?r.tiers.map(t=>({from:+t.from||0,rate:
 const gLiveTiers=r=>gTiers(r).filter(t=>t.rate>0);
 const gHasRate=r=>gTiers(r).some(t=>t.rate>0);
 const gRateLabel=r=>{const ts=gLiveTiers(r);if(!ts.length)return '';const lo=Math.min(...ts.map(t=>t.rate)),hi=Math.max(...ts.map(t=>t.rate));return lo===hi?naira(hi):naira(lo)+'–'+naira(hi)};
+const flag=cc=>((cc||'').toUpperCase().replace(/[^A-Z]/g,'').slice(0,2).replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt(0))))||'🏳️';
 async function loadGift(){try{S.gift=await api('GET','/api/admin/gift');S.giftErr=''}catch(e){S.gift=null;S.giftErr=e.message}if(['gift','giftCard'].includes(S.route)&&!typing())render()}
 // Reads the card form inputs back into S.gform (before adding/removing a type, and before saving).
 function gfSync(){const f=S.gform;if(!f||!$('#gf-n'))return f;f.name=$('#gf-n').value;f.note=$('#gf-note').value;f.active=$('#gf-a').checked;
   f.rows=f.rows.map((r,i)=>{const tiers=(r.tiers&&r.tiers.length?r.tiers:[{from:'',rate:''}]).map((t,j)=>{const tf=$('#gr-tf'+i+'-'+j),tr=$('#gr-tr'+i+'-'+j);return{from:tf?tf.value:t.from,rate:tr?tr.value:t.rate}});
-    return{...r,country:$('#gr-c'+i).value,kind:$('#gr-k'+i).value,cur:$('#gr-u'+i).value,min:$('#gr-mn'+i).value,max:$('#gr-mx'+i).value,tiers}});return f}
+    return{...r,country:$('#gr-c'+i).value,kind:$('#gr-k'+i).value,cur:$('#gr-u'+i).value,min:$('#gr-mn'+i).value,max:$('#gr-mx'+i).value,tiers}});
+  if(f.prefixes&&f.prefixes.length)f.prefixes=f.prefixes.map((p,i)=>{const d=$('#gp-d'+i),c=$('#gp-c'+i);return{digits:d?d.value:p.digits,country:c?c.value:p.country}});return f}
 const tBadge=t=>t.status==='failed'?['FAILED','b-failed']:t.status==='approved'?(t.creditedAmount==null?['AWAITING CREDIT','b-checking']:['APPROVED','b-approved']):t.status==='confirmed'?['CONFIRMED','b-confirmed']:t.status==='seen'?['SEEN','b-confirmed']:['PENDING','b-checking'];
 const wBadge=w=>w.status==='paid'?['Approved','b-approved']:w.status==='rejected'?['Declined','b-failed']:['Pending','b-checking'];
 const sBadge=s=>s.status==='approved'?['ACTIVE','b-approved']:s.status==='rejected'?['SUSPENDED','b-failed']:['PENDING APPROVAL','b-checking'];
@@ -795,7 +797,7 @@ trade:()=>{const t=S.trades.find(x=>x.id===S.id);if(!t)return V.receipts();const
   <div class="card tp" style="margin-top:14px"><b style="font-size:14px">Trade Parameters</b>
    ${row('Seen by staff',(t.seenBy||[]).length?t.seenBy.map(x=>`${esc(x.name)} · ${fd(x.at)} ${ft(x.at)}`).join('<br>'):`<span style="color:#D97706">Not opened yet</span>`)}
    ${t.card?row('Card',esc(t.card.name))+row('Type',esc(glabel(t.card)))+row('Card value',esc(t.card.cur)+n0(t.card.value))+row('Rate when sent',`${naira(t.card.rate)} per ${esc(t.card.cur)}1`)+row('Customer gets',`<b style="color:#0E9F6E">${naira(t.card.est)}</b>`)
-     +(t.card.code?row('Card code',`<span style="font-family:var(--mono,monospace);word-break:break-all">${esc(t.card.code)}</span> <button class="link" style="font-size:12px" data-copy="${esc(t.card.code)}">Copy</button>`):'')
+     +(t.card.code?row('Card code',`<span style="font-family:var(--mono,monospace);word-break:break-all">${esc(t.card.code)}</span> <button class="link" style="font-size:12px" data-copy="${esc(t.card.code)}">Copy</button>`):'')+(t.card.prefix?row('Card prefix',`${flag(t.card.prefix.country)} ${esc(t.card.prefix.digits)}***`):'')
     :row('Amount',n0(t.intendedAmount))+row('Country',esc(t.accountTitleUsed||'—'))+row('Account Paid To',`<span style="white-space:pre-wrap">${esc(t.accountNumberUsed||'—')}</span>`)}
    ${row('User account',esc([t.userPayoutBank,t.userPayoutAccount].filter(Boolean).join(' • ')||'—'))}${row('Staff Handled','Staff: '+esc(t.staffName))}${row('Date &amp; Time',fdt(t.createdAt))}
    ${!t.accountId&&/bitcoin|usdt/i.test(t.accountTitleUsed||'')?(r=>row('Crypto receipt',`$${n0(t.intendedAmount)} sent`+(r?`<br>At $1 = ${naira(r)}: <b>${naira(t.intendedAmount*r)}</b>`:'<br>Set the rate under Edit Rates')))(/bitcoin/i.test(t.accountTitleUsed)?S.settings.btcRate:S.settings.usdtRate):''}
@@ -921,6 +923,12 @@ giftCard:()=>{const f=S.gform;if(!f)return V.gift();const img=f.image?safeImg(f.
      ${(r.tiers&&r.tiers.length>1)?`<button type="button" class="sb s-red" style="flex:none;padding:0 12px" data-act="gBandDel" data-id="${i}-${j}" aria-label="Remove band">${I('trash','style="width:13px;height:13px"')}</button>`:''}</div>`).join('')}
    ${(r.tiers||[]).length<8?`<button type="button" class="link" style="font-size:12.5px;margin-top:8px" data-act="gBandAdd" data-id="${i}">+ Add a higher band</button>`:''}</div>`).join('')}
   ${f.rows.length<12?`<button type="button" class="b soft" style="height:40px" data-act="gRowAdd">${I('plus','style="width:14px;height:14px"')}Add another type</button>`:''}
+  <div class="cl" style="margin-top:18px">Card prefixes <span style="text-transform:none;font-weight:400">— optional; the numbers a card can start with (Visa/Mastercard/Vanilla). The customer picks theirs.</span></div>
+  ${(f.prefixes||[]).map((p,i)=>`<div class="row" style="gap:8px;align-items:flex-end;margin-top:6px">
+    <div style="flex:2"><label class="cl" for="gp-d${i}">Starts with</label><input class="in" id="gp-d${i}" inputmode="numeric" placeholder="e.g. 4034" value="${esc(p.digits||'')}"></div>
+    <div style="flex:1"><label class="cl" for="gp-c${i}">Country</label><input class="in" id="gp-c${i}" maxlength="2" placeholder="US" value="${esc(p.country||'US')}" style="text-transform:uppercase"></div>
+    <button type="button" class="sb s-red" style="flex:none;padding:0 12px" data-act="gPfxDel" data-id="${i}" aria-label="Remove prefix">${I('trash','style="width:13px;height:13px"')}</button></div>`).join('')}
+  ${(f.prefixes||[]).length<10?`<button type="button" class="link" style="font-size:12.5px;margin-top:8px" data-act="gPfxAdd">+ Add a card prefix</button>`:''}
   <label class="cl" for="gf-note">Note for customers <span style="text-transform:none;font-weight:400">(optional)</span></label><input class="in" id="gf-note" maxlength="200" placeholder="e.g. No cards starting with 4" value="${esc(f.note||'')}">
   <button class="b blue" style="margin-top:16px">Save Card</button></form>
   ${f.id?`<button class="b o-red" data-act="gCardDel" data-id="${esc(f.id)}">Delete this card</button>`:''}</div></section>`},
@@ -1257,11 +1265,13 @@ const ACT={
     if(!await ask(on?'Turn Gift Cards on?':'Turn Gift Cards off?',on?'Customers will see Gift Cards again and can sell cards and redeem codes.':'Customers will not see Gift Cards and cannot sell cards or use codes. Cards already sent stay in Receipts for you to finish.',on?'Turn on':'Turn off',!on))return;
     await api('PUT','/api/admin/settings',{giftOn:on});toast(on?'Gift Cards are on':'Gift Cards are off');await loadGift()},
   gEdit(el,id){const c=id&&S.gift.cards.find(x=>x.id===id);
-    S.gform=c?{...c,rows:c.rows.map(r=>({...r,tiers:gTiers(r)}))}:{id:'',name:'',active:true,note:'',image:null,rows:[gBlankRow()]};go('giftCard')},
+    S.gform=c?{...c,rows:c.rows.map(r=>({...r,tiers:gTiers(r)})),prefixes:(c.prefixes||[]).map(p=>({...p}))}:{id:'',name:'',active:true,note:'',image:null,rows:[gBlankRow()],prefixes:[]};go('giftCard')},
   gRowAdd(){gfSync();const last=S.gform.rows[S.gform.rows.length-1]||gBlankRow();S.gform.rows.push({...gBlankRow(),country:last.country,cur:last.cur});render()},
   gRowDel(el,i){gfSync();S.gform.rows.splice(Number(i),1);render()},
   gBandAdd(el){gfSync();const i=Number(el.dataset.id),r=S.gform.rows[i];r.tiers=r.tiers&&r.tiers.length?r.tiers:[{from:'',rate:''}];if(r.tiers.length<8)r.tiers.push({from:'',rate:''});render()},
   gBandDel(el){gfSync();const a=el.dataset.id.split('-').map(Number),r=S.gform.rows[a[0]];r.tiers.splice(a[1],1);if(!r.tiers.length)r.tiers.push({from:'',rate:''});render()},
+  gPfxAdd(){gfSync();S.gform.prefixes=S.gform.prefixes||[];if(S.gform.prefixes.length<10)S.gform.prefixes.push({digits:'',country:'US'});render()},
+  gPfxDel(el){gfSync();S.gform.prefixes.splice(Number(el.dataset.id),1);render()},
   gImgDel(){gfSync();S.gform.image=null;render()},
   async gCardDel(el,id){if(!await ask('Delete this card?',`${S.gform.name} will be removed. Cards customers already sent stay in Receipts.`,'Delete card',1))return;
     await api('DELETE','/api/admin/gift/cards/'+encodeURIComponent(id));toast('Card deleted');S.gform=null;await loadGift();go('gift')},
@@ -1343,7 +1353,8 @@ const FORMS={
     await api('POST','/api/admin/giveaways',{title:val('ga-t'),amount:num(val('ga-a')),winners:num(val('ga-w')),keyword:val('ga-k'),startsAt:startsAt.toISOString(),announce:$('#ga-n').checked});toast('Giveaway created');await loadGas()},
   async gCard(){const f=gfSync();if(!f.name.trim())throw new Error('Type the card name');
     const rows=f.rows.map(r=>{let tiers=(r.tiers||[]).map(t=>({from:num(t.from),rate:num(t.rate)})).filter((t,i,a)=>a.length===1||t.rate>0||t.from>0);if(!tiers.length)tiers=[{from:0,rate:0}];return{id:r.id,country:r.country.trim(),kind:r.kind,cur:r.cur,min:num(r.min),max:num(r.max),tiers}});
-    const body={id:f.id||undefined,name:f.name.trim(),active:f.active,note:f.note,sort:f.sort,rows};
+    const prefixes=(f.prefixes||[]).map(p=>({digits:String(p.digits||'').replace(/[^0-9]/g,''),country:(String(p.country||'US').toUpperCase().replace(/[^A-Z]/g,'').slice(0,2))||'US'})).filter(p=>p.digits.length>=2);
+    const body={id:f.id||undefined,name:f.name.trim(),active:f.active,note:f.note,sort:f.sort,rows,prefixes};
     const orig=f.id&&S.gift.cards.find(x=>x.id===f.id);if(!orig||f.image!==orig.image)body.image=f.image||null;
     const anyRate=rows.some(r=>r.tiers.some(t=>t.rate>0)),name=f.name.trim();
     const d=await api('POST','/api/admin/gift/cards',body);toast(anyRate&&f.active?'Card saved. Customers can see it.':'Card saved');S.gform=null;await loadGift();go('gift');

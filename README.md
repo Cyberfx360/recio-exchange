@@ -50,6 +50,12 @@
 > alter table gift_codes add column if not exists created_by uuid references users(id) on delete set null;
 > ```
 >
+> For **card prefixes** on gift cards (Visa/Mastercard/Vanilla BINs the customer picks from), run this one line:
+> ```sql
+> alter table gift_cards add column if not exists prefixes jsonb not null default '[]';
+> ```
+> Until it is run, cards still save and sell normally — the prefix picker just does not appear.
+>
 > For the **December tournament on/off switch** (Admin → December Challenge), run this one line:
 > ```sql
 > alter table settings add column if not exists challenge_on boolean not null default true;
