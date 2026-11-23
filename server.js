@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const path = require('path');
 const crypto = require('crypto');
 const store = require('./storage');
+const flw = require('./flutterwave');
 
 const app = express();
 app.disable('x-powered-by');
@@ -1786,6 +1787,91 @@ app.post('/api/admin/withdrawals/:id/mark', requireAdmin, ADMIN_MONEY, async (re
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update withdrawal.' }); }
 });
 
+// ADMIN: one-tap auto-pay a small withdrawal through Flutterwave.
+// Guardrails: feature on, Flutterwave configured, status pending, amount <= max,
+// daily cap not exceeded, bank resolvable, account not changed in the last 24h.
+// The money was already held when the customer requested; this only sends it.
+const AUTOPAY_SQL = 'Run the auto-payout SQL from the README in Supabase first.';
+app.post('/api/admin/withdrawals/:id/autopay', requireAdmin, ADMIN_MONEY, async (req, res) => {
+  try {
+    const s = await store.getSettings();
+    if (!s.autopayOn) return res.status(400).json({ error: 'Auto-pay is turned off. Turn it on in Settings, or pay this one manually.' });
+    if (!flw.configured()) return res.status(400).json({ error: 'Flutterwave is not set up yet. Add FLW_SECRET_KEY in Render first.' });
+    const w = await store.findWithdrawalById(req.params.id);
+    if (!w) return res.status(404).json({ error: 'Withdrawal not found.' });
+    if (w.status !== 'pending') return res.status(400).json({ error: 'This withdrawal has already been handled.' });
+    const max = Number(s.autopayMax) || 50000;
+    if (w.amount > max) return res.status(400).json({ error: `Auto-pay only covers withdrawals up to ₦${plain(max)}. Pay this one manually.` });
+    let paidToday = 0;
+    try { paidToday = await store.sumAutoPayoutsToday(); } catch (e) { if (e.code === 'AUTOPAY_COLS') return res.status(500).json({ error: AUTOPAY_SQL }); throw e; }
+    const cap = Number(s.autopayDailyCap) || 500000;
+    if (paidToday + w.amount > cap) return res.status(400).json({ error: `Today's auto-pay limit of ₦${plain(cap)} would be passed (₦${plain(paidToday)} already paid). Pay this one manually, or raise the limit in Settings.` });
+    // Account-takeover guard: if the customer changed their payout account very recently, make the admin look.
+    const changedAt = csGet('bank:' + w.userId);
+    if (changedAt && Date.now() - changedAt < 24 * 3600 * 1000) return res.status(400).json({ error: 'This customer changed their payout account in the last 24 hours. Check it, then pay manually.' });
+    const user = await store.findUserById(w.userId);
+    const acctNo = (user && user.accountNumber) || w.payoutAccount;
+    const bankNm = (user && user.bankName) || w.payoutBank;
+    if (!acctNo || !bankNm) return res.status(400).json({ error: 'This customer has no saved payout account. Pay manually.' });
+    let bank;
+    try { bank = await flw.bankCode(bankNm); } catch (e) { return res.status(502).json({ error: 'Could not reach Flutterwave to check the bank. Try again, or pay manually.' }); }
+    if (!bank) return res.status(400).json({ error: `Could not match the bank "${bankNm}" automatically. Pay this one manually.` });
+    try { await flw.resolveAccount(acctNo, bank.code); } catch (e) { return res.status(400).json({ error: 'Flutterwave could not verify that account number. Check it, or pay manually.' }); }
+    const ref = 'wd_' + String(w.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20) + '_' + Date.now().toString(36);
+    let t;
+    try { t = await flw.createTransfer({ accountNumber: acctNo, bankCode: bank.code, amount: w.amount, reference: ref, narration: 'AZAPLUG withdrawal' }); }
+    catch (e) { console.error('FLW transfer error:', e.message); return res.status(502).json({ error: 'Flutterwave did not accept the transfer: ' + (e.message || 'try again') + '. The money is still held — pay manually if you need to.' }); }
+    try {
+      await store.setWithdrawalTransfer(w.id, { status: 'processing', method: 'flutterwave', transferId: t.id, transferRef: ref, transferStatus: 'initiated', autopayAt: new Date().toISOString(), autoNote: `Sent to ${bank.name} ${acctNo} via Flutterwave`, payoutAccount: acctNo, payoutBank: bank.name });
+    } catch (e) { if (e.code === 'AUTOPAY_COLS') return res.status(500).json({ error: AUTOPAY_SQL }); throw e; }
+    notify(w.userId, 'tx', 'Withdrawal processing', `Your withdrawal of ₦${plain(w.amount)} is being paid to ${bank.name}. You'll get a note when it lands.`);
+    res.json({ ok: true, status: 'processing' });
+  } catch (err) { console.error('Autopay error:', err); res.status(500).json({ error: 'Could not start the auto-payment.' }); }
+});
+
+// ADMIN: reconcile a processing auto-payment if the webhook was missed.
+app.post('/api/admin/withdrawals/:id/autopay/check', requireAdmin, ADMIN_MONEY, async (req, res) => {
+  try {
+    const w = await store.findWithdrawalById(req.params.id);
+    if (!w || w.method !== 'flutterwave' || !w.transferId) return res.status(400).json({ error: 'Nothing to check on this one.' });
+    if (w.status !== 'processing') return res.json({ ok: true, status: w.status });
+    let t;
+    try { t = await flw.fetchTransfer(w.transferId); } catch (e) { return res.status(502).json({ error: 'Could not reach Flutterwave.' }); }
+    const st = String((t && t.status) || '').toUpperCase();
+    if (st === 'SUCCESSFUL') {
+      await store.setWithdrawalTransfer(w.id, { status: 'paid', transferStatus: 'success' });
+      notify(w.userId, 'tx', 'Withdrawal paid', `Your withdrawal of ₦${plain(w.amount)} has been paid to ${w.payoutBank}.`);
+      return res.json({ ok: true, status: 'paid' });
+    }
+    if (st === 'FAILED') {
+      await store.setWithdrawalTransfer(w.id, { status: 'pending', transferStatus: 'failed', autoNote: 'Flutterwave transfer failed — pay manually.' });
+      return res.json({ ok: true, status: 'pending' });
+    }
+    res.json({ ok: true, status: 'processing' });
+  } catch (err) { console.error('Autopay check error:', err); res.status(500).json({ error: 'Could not check the payment.' }); }
+});
+
+// Flutterwave webhook: finalizes a processing auto-payment. Public, but authenticated by the secret hash header.
+app.post('/api/flw/webhook', async (req, res) => {
+  try {
+    if (!flw.verifyWebhook(req)) return res.status(401).end();
+    const d = (req.body || {}).data || {};
+    const ref = d.reference || '';
+    const st = String(d.status || '').toUpperCase();
+    if (!ref) return res.json({ ok: true });
+    const w = await store.findWithdrawalByTransferRef(ref).catch(() => null);
+    if (!w || w.method !== 'flutterwave' || w.status !== 'processing') return res.json({ ok: true });
+    if (st === 'SUCCESSFUL') {
+      await store.setWithdrawalTransfer(w.id, { status: 'paid', transferStatus: 'success' });
+      notify(w.userId, 'tx', 'Withdrawal paid', `Your withdrawal of ₦${plain(w.amount)} has been paid to ${w.payoutBank}.`);
+    } else if (st === 'FAILED') {
+      await store.setWithdrawalTransfer(w.id, { status: 'pending', transferStatus: 'failed', autoNote: 'Flutterwave transfer failed — pay manually. ' + (d.complete_message || '') });
+      alertTeam({ admin: true }, 'Auto-pay failed', `A ₦${plain(w.amount)} auto-payment to ${w.payoutBank} failed. The money is still held — pay it manually.`, { admin: 'wds' });
+    }
+    res.json({ ok: true });
+  } catch (err) { console.error('FLW webhook error:', err); res.json({ ok: true }); }
+});
+
 // ============================================================
 // ADMIN: rules + settings
 // ============================================================
@@ -1805,11 +1891,18 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
     }
     if (b.giftOn !== undefined) patch.giftOn = b.giftOn === true;
     if (b.challengeOn !== undefined) patch.challengeOn = b.challengeOn === true;
+    if (b.autopayOn !== undefined) patch.autopayOn = b.autopayOn === true;
+    for (const k of ['autopayMax', 'autopayDailyCap']) {
+      if (b[k] === undefined) continue;
+      const n = Math.round(Number(b[k]));
+      if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'Enter the amount as a number, like 50000.' });
+      patch[k] = n;
+    }
     await store.updateSettings(patch); if (patch.giftOn !== undefined) GIFT_ON = null; if (patch.challengeOn !== undefined) CHAL_ON = null; res.json({ ok: true });
   } catch (err) {
     console.error(err);
     const msg = String(err && err.message), cryptoCols = /btc_rate|usdt_rate/.test(msg);
-    res.status(500).json({ error: cryptoCols ? 'Run the BTC/USDT rates SQL from the README in Supabase first.' : /gift_on/.test(msg) ? 'Run the gift card SQL from the README in Supabase first.' : /challenge_on/.test(msg) ? 'Run the tournament switch SQL from the README in Supabase first.' : 'Could not update settings.' });
+    res.status(500).json({ error: cryptoCols ? 'Run the BTC/USDT rates SQL from the README in Supabase first.' : /gift_on/.test(msg) ? 'Run the gift card SQL from the README in Supabase first.' : /challenge_on/.test(msg) ? 'Run the tournament switch SQL from the README in Supabase first.' : /autopay_on|autopay_max|autopay_daily/.test(msg) ? 'Run the auto-payout SQL from the README in Supabase first.' : 'Could not update settings.' });
   }
 });
 
