@@ -1135,6 +1135,7 @@ app.post('/api/staff/trades/:id/mark', requireStaff, requireApprovedStaff, ADMIN
     const { status, reason, reasonImage, staffCreditedAmount } = req.body || {};
     if (!['seen', 'confirmed', 'approved', 'failed'].includes(status)) return res.status(400).json({ error: 'Invalid status.' });
     if (status === 'failed' && !reason) return res.status(400).json({ error: 'A reason is required when marking a payment as failed.' });
+    if (reasonImage && (typeof reasonImage !== 'string' || !/^data:image\//i.test(reasonImage) || badAttachment(reasonImage) || reasonImage.length > 3500000)) return res.status(400).json({ error: 'The proof photo must be a JPG or PNG picture.' });
     if (status === 'failed' && trade.creditedAmount !== null) {
       return res.status(403).json({ error: 'This trade has already been verified and credited by an admin — only an admin can reverse it now.' });
     }
@@ -1608,6 +1609,7 @@ app.post('/api/admin/trades/:id/mark', requireAdmin, ADMIN_MONEY, async (req, re
     const { status, reason, reasonImage } = req.body || {};
     if (!['seen', 'confirmed', 'approved', 'failed'].includes(status)) return res.status(400).json({ error: 'Invalid status.' });
     if (status === 'failed' && !reason) return res.status(400).json({ error: 'A reason is required when marking a payment as failed.' });
+    if (reasonImage && (typeof reasonImage !== 'string' || !/^data:image\//i.test(reasonImage) || badAttachment(reasonImage) || reasonImage.length > 3500000)) return res.status(400).json({ error: 'The proof photo must be a JPG or PNG picture.' });
 
     const wasCredited = trade.creditedAmount !== null;
     await store.updateTradeStatus(trade.id, {
