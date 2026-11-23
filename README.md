@@ -88,6 +88,11 @@
 > ```sql
 > alter table settings add column if not exists btc_rate numeric not null default 0, add column if not exists usdt_rate numeric not null default 0;
 > ```
+> For **deleting a message so staff and the customer no longer see it, but the admin still can** (and for **pinning a message to the top of a chat**), run this one line:
+> ```sql
+> alter table messages add column if not exists deleted_at timestamptz, add column if not exists pinned_at timestamptz; alter table team_messages add column if not exists deleted_at timestamptz, add column if not exists pinned_at timestamptz;
+> ```
+> (Until you run it, deletes still work — they just remove the message for everyone, the old way — and pinning shows a reminder to run the SQL.)
 > That's it — no other schema changes, nothing else to touch in Supabase.
 
 > **Escalated chats (Admin Console)** need one more table. Run this once in the Supabase SQL Editor:

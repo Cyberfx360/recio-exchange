@@ -527,7 +527,7 @@ const CHAT_TTL = 60000;            // safety refresh even with no change (e.g. a
 function msgChanged(userId) { CONVS = null; if (userId) THREADS.delete(String(userId)); else THREADS.clear(); }
 const copyMsgs = list => list.map(m => ({ ...m }));
 function msgRow(r) {
-  return { id: r.id, userId: r.user_id, sender: r.sender, text: r.text, imageData: pubMedia(r.image_data), createdAt: r.created_at };
+  return { id: r.id, userId: r.user_id, sender: r.sender, text: r.text, imageData: pubMedia(r.image_data), createdAt: r.created_at, deletedAt: r.deleted_at || null, pinnedAt: r.pinned_at || null };
 }
 async function addMessage(m) {
   const id = uid();
@@ -540,15 +540,16 @@ async function addMessage(m) {
   const { data } = await supabase.from('messages').select('*').eq('id', id).single();
   return msgRow(data);
 }
-async function messagesForUser(userId) {
+async function messagesForUser(userId, opts = {}) {
   const key = String(userId), c = THREADS.get(key);
-  if (c && Date.now() - c.at < CHAT_TTL) return copyMsgs(c.data);
+  const take = list => { const out = copyMsgs(list); return opts.includeDeleted ? out : out.filter(m => !m.deletedAt); };
+  if (c && Date.now() - c.at < CHAT_TTL) return take(c.data);
   const { data, error } = await supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true });
   if (error) throw error;
   const list = data.map(msgRow);
   THREADS.set(key, { at: Date.now(), data: list });
   if (THREADS.size > 400) THREADS.delete(THREADS.keys().next().value);  // keep memory small
-  return copyMsgs(list);
+  return take(list);
 }
 async function findMessageById(id) {
   const { data, error } = await supabase.from('messages').select('*').eq('id', id).maybeSingle();
@@ -561,6 +562,29 @@ async function deleteMessage(id) {
   if (error) throw error;
   msgChanged(row && row.user_id);
   if (row && parseRef(row.image_data)) dropMedia(row.image_data);
+}
+// Soft delete: hide from staff + customer, but the row stays so admin can still see it.
+// Falls back to a hard delete if the deleted_at column has not been added yet.
+async function softDeleteMessage(id) {
+  const { data: row } = await supabase.from('messages').select('user_id').eq('id', id).maybeSingle();
+  const { error } = await supabase.from('messages').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  if (error) {
+    if (/deleted_at/.test(String(error.message))) { await deleteMessage(id); return { hard: true }; }
+    throw error;
+  }
+  msgChanged(row && row.user_id);
+  return { hard: false };
+}
+// Pin / unpin a customer message. Returns { unsupported:true } if the column is missing.
+async function pinMessage(id, on) {
+  const { data: row } = await supabase.from('messages').select('user_id').eq('id', id).maybeSingle();
+  const { error } = await supabase.from('messages').update({ pinned_at: on ? new Date().toISOString() : null }).eq('id', id);
+  if (error) {
+    if (/pinned_at/.test(String(error.message))) return { unsupported: true };
+    throw error;
+  }
+  msgChanged(row && row.user_id);
+  return { ok: true };
 }
 async function listConversations() {
   if (CONVS && Date.now() - CONVS.at < CHAT_TTL) return CONVS.data.map(c => ({ ...c }));
@@ -874,7 +898,7 @@ async function setForwardStatus(id, status) {
 
 // Staff-to-staff messages (chat manager <-> vendors).
 function teamMsgRow(r) {
-  return { id: r.id, fromStaffId: r.from_staff_id, toStaffId: r.to_staff_id, text: r.message_text, imageData: pubMedia(r.image_data), readAt: r.read_at, createdAt: r.created_at };
+  return { id: r.id, fromStaffId: r.from_staff_id, toStaffId: r.to_staff_id, text: r.message_text, imageData: pubMedia(r.image_data), readAt: r.read_at, createdAt: r.created_at, deletedAt: r.deleted_at || null, pinnedAt: r.pinned_at || null };
 }
 async function addTeamMessage(m) {
   const id = uid();
@@ -884,14 +908,21 @@ async function addTeamMessage(m) {
   const { data } = await supabase.from('team_messages').select('*').eq('id', id).maybeSingle();
   return data ? teamMsgRow(data) : { id, ...m, createdAt: new Date().toISOString() };
 }
-async function listTeamMessagesFor(staffId) {
+async function listTeamMessagesFor(staffId, opts = {}) {
   const { data, error } = await supabase.from('team_messages').select('*').or(`from_staff_id.eq.${staffId},to_staff_id.eq.${staffId}`).order('created_at', { ascending: true }).limit(2000);
+  if (error) throw error;
+  const list = data.map(teamMsgRow);
+  return opts.includeDeleted ? list : list.filter(m => !m.deletedAt);
+}
+// Admin's side of staff chats: rows where one side is empty (null = the admin). Admin sees deleted ones too.
+async function listAdminTeamMessages() {
+  const { data, error } = await supabase.from('team_messages').select('*').or('from_staff_id.is.null,to_staff_id.is.null').order('created_at', { ascending: true }).limit(4000);
   if (error) throw error;
   return data.map(teamMsgRow);
 }
-// Admin's side of staff chats: rows where one side is empty (null = the admin).
-async function listAdminTeamMessages() {
-  const { data, error } = await supabase.from('team_messages').select('*').or('from_staff_id.is.null,to_staff_id.is.null').order('created_at', { ascending: true }).limit(4000);
+// Every staff-to-staff message (both sides are a real staff id) — for the admin monitor. Includes deleted.
+async function listStaffPairMessages() {
+  const { data, error } = await supabase.from('team_messages').select('*').not('from_staff_id', 'is', null).not('to_staff_id', 'is', null).order('created_at', { ascending: true }).limit(5000);
   if (error) throw error;
   return data.map(teamMsgRow);
 }
@@ -912,6 +943,23 @@ async function deleteTeamMessage(id) {
   const { error } = await supabase.from('team_messages').delete().eq('id', id);
   if (error) throw error;
   if (row && parseRef(row.image_data)) dropMedia(row.image_data);
+}
+// Soft delete a staff message: hidden from staff, kept so admin can still see it.
+async function softDeleteTeamMessage(id) {
+  const { error } = await supabase.from('team_messages').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  if (error) {
+    if (/deleted_at/.test(String(error.message))) { await deleteTeamMessage(id); return { hard: true }; }
+    throw error;
+  }
+  return { hard: false };
+}
+async function pinTeamMessage(id, on) {
+  const { error } = await supabase.from('team_messages').update({ pinned_at: on ? new Date().toISOString() : null }).eq('id', id);
+  if (error) {
+    if (/pinned_at/.test(String(error.message))) return { unsupported: true };
+    throw error;
+  }
+  return { ok: true };
 }
 
 // Staff department: 'vendor' or 'chat' (chat manager). True once the role column exists.
@@ -1129,7 +1177,7 @@ module.exports = {
   createGiveaway, listGiveaways, setGiveawayStatus, listEntries, addEntry, updateEntry,
   mediaReady, getMediaFile, migrateMediaBatch, mediaLeftInDatabase, cleanOldChatMedia,
   hasStaffRole, setStaffRole,
-  addTeamMessage, listTeamMessagesFor, listAdminTeamMessages, markTeamRead, findTeamMessage, deleteTeamMessage,
+  addTeamMessage, listTeamMessagesFor, listAdminTeamMessages, listStaffPairMessages, markTeamRead, findTeamMessage, deleteTeamMessage, softDeleteTeamMessage, pinTeamMessage,
   createForward, listForwardsTo, findForwardById, setForwardStatus,
   hasEmailColumns, findByEmail, setLogin, sessionGet, sessionSet, sessionDelete, savePasskey, findPasskey, updatePasskeyCounter, deletePasskey,
   saveTeamPush, deleteTeamPush, listTeamPush,
@@ -1142,6 +1190,6 @@ module.exports = {
   listAccountsPublic, listAccountsForAmount, listAllAccounts, listAccountsByStaff, findAccountById, createAccount, updateAccount, deleteAccount,
   listApprovedTradeTotals, createTrade, findTradeById, findTradesByCardCode, listTradesForUser, listTradesForStaff, listAllTrades, updateTradeStatus, setSettlement,
   getSettings, updateSettings,
-  addMessage, messagesForUser, listConversations, findMessageById, deleteMessage,
+  addMessage, messagesForUser, listConversations, findMessageById, deleteMessage, softDeleteMessage, pinMessage,
   createWithdrawal, findWithdrawalById, listWithdrawalsForUser, listAllWithdrawals, updateWithdrawalStatus
 };
