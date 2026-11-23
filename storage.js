@@ -970,7 +970,7 @@ async function updateEntry(id, patch) {
 // ============================================================
 function giftCardRow(r) {
   return { id: r.id, name: r.name, rows: Array.isArray(r.rows) ? r.rows : [], image: pubMedia(r.image) || null, note: r.note || '',
-    active: !!r.active, sort: Number(r.sort) || 0, createdAt: r.created_at };
+    prefixes: Array.isArray(r.prefixes) ? r.prefixes : [], active: !!r.active, sort: Number(r.sort) || 0, createdAt: r.created_at };
 }
 async function listGiftCards() {
   const { data, error } = await supabase.from('gift_cards').select('*').order('sort', { ascending: true }).order('created_at', { ascending: true });
@@ -986,17 +986,25 @@ async function findGiftCard(id) {
 async function saveGiftCard(c) {
   const row = { name: c.name, rows: c.rows, note: c.note || '', active: !!c.active, sort: Number(c.sort) || 0 };
   if (c.image !== undefined) row.image = c.image ? await toRef(c.image, 'pub/gift') : null;
-  if (c.id) {
-    const old = c.image !== undefined ? await supabase.from('gift_cards').select('image').eq('id', c.id).maybeSingle() : { data: null };
-    const { error } = await supabase.from('gift_cards').update(row).eq('id', c.id);
+  if (c.prefixes !== undefined) row.prefixes = c.prefixes;   // card number prefixes (Visa/Mastercard/Vanilla BINs)
+  const write = async data => {
+    if (c.id) {
+      const old = c.image !== undefined ? await supabase.from('gift_cards').select('image').eq('id', c.id).maybeSingle() : { data: null };
+      const { error } = await supabase.from('gift_cards').update(data).eq('id', c.id);
+      if (error) throw error;
+      if (old.data && old.data.image && old.data.image !== data.image && parseRef(old.data.image)) dropMedia(old.data.image);
+      return c.id;
+    }
+    const id = uid();
+    const { error } = await supabase.from('gift_cards').insert({ id, ...data });
     if (error) throw error;
-    if (old.data && old.data.image && old.data.image !== row.image && parseRef(old.data.image)) dropMedia(old.data.image);
-    return c.id;
+    return id;
+  };
+  try { return await write(row); }
+  catch (e) {   // survive a database that has not added the "prefixes" column yet
+    if (/prefixes/i.test(String(e && e.message)) && row.prefixes !== undefined) { const { prefixes, ...rest } = row; return await write(rest); }
+    throw e;
   }
-  const id = uid();
-  const { error } = await supabase.from('gift_cards').insert({ id, ...row });
-  if (error) throw error;
-  return id;
 }
 async function deleteGiftCard(id) {
   const { data: row } = await supabase.from('gift_cards').select('image').eq('id', id).maybeSingle();

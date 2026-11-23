@@ -514,7 +514,7 @@ const CRYPTO = {
 
 /* ---------- State + helpers ---------- */
 const S={route:'loading',loan:null,notes:[],noteTab:'all',push:'off',seenSnap:0,homeTab:'trades',histTab:'All',coin:'BTC',me:null,accounts:[],trades:[],withdrawals:[],rules:null,chat:[],
-  slip:null,wd:null,send:{title:'',accountId:'',amount:'',image:null},gcards:null,giftTab:'sell',gs:{cardId:'',rowId:'',value:'',code:'',imgs:[]}};
+  slip:null,wd:null,send:{title:'',accountId:'',amount:'',image:null},gcards:null,giftTab:'sell',gs:{cardId:'',rowId:'',value:'',code:'',imgs:[],prefix:''}};
 const $=s=>document.querySelector(s);
 const amt=n=>Number(n||0).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2});
 const n0=n=>Number(n||0).toLocaleString('en-NG');
@@ -641,6 +641,7 @@ const rateFor=(r,v)=>{const ts=gTiers(r);let x=ts[0].rate;for(const t of ts)if(v
 const rateHi=r=>Math.max(...gTiers(r).map(t=>t.rate));
 const gLive=r=>gTiers(r).filter(t=>t.rate>0);
 const tieredRow=r=>gLive(r).length>1;
+const flag=cc=>((cc||'').toUpperCase().replace(/[^A-Z]/g,'').slice(0,2).replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt(0))))||'🏳️';
 const rateLabelC=r=>{const ts=gLive(r);if(!ts.length)return naira0(0);const lo=Math.min(...ts.map(t=>t.rate)),hi=Math.max(...ts.map(t=>t.rate));return lo===hi?naira0(hi):naira0(lo)+'–'+naira0(hi)};
 // Out-of-range check for a card value: returns {bad, msg}. bad = too small / too big, so we refuse the card.
 const gLimMsg=(r,v,hasVal)=>{if(hasVal&&r.min&&v<r.min)return{bad:true,msg:`Too small — the smallest card we take is ${r.cur}${n0(r.min)}`};if(hasVal&&r.max&&v>r.max)return{bad:true,msg:`Too big — the biggest card we take is ${r.cur}${n0(r.max)}. Chat with us for bigger cards.`};const lim=r.min&&r.max?`From ${r.cur}${n0(r.min)} to ${r.cur}${n0(r.max)}`:r.min?`From ${r.cur}${n0(r.min)}`:r.max?`Up to ${r.cur}${n0(r.max)}`:'';return{bad:false,msg:lim}};
@@ -794,7 +795,7 @@ slip:()=>{const d=S.slip,m=TS[d.status]||TS.checking,c=d.card;if(c)return `<sect
   <h2 style="text-align:center;font-size:25px;font-weight:700">Card Sent Successfully</h2>
   <p class="muted" style="text-align:center;margin:12px 0 28px">Our team is checking your card. We will notify you once it is approved.</p>
   <div class="card sum"><div><b style="font-family:var(--body);font-size:15.5px;font-weight:600;color:#374151">Card Details</b><span class="badge ${m[1]}">${m[0]}</span></div><div class="hr"></div>
-   <div><span>Card</span><b style="font-size:15px;text-align:right">${esc(c.name)}</b></div><div><span>Type</span><b style="font-size:15px">${esc(glabel(c))}</b></div>
+   <div><span>Card</span><b style="font-size:15px;text-align:right">${esc(c.name)}</b></div><div><span>Type</span><b style="font-size:15px">${esc(glabel(c))}</b></div>${c.prefix?`<div><span>Prefix</span><b style="font-size:15px">${flag(c.prefix.country)} ${esc(c.prefix.digits)}***</b></div>`:''}
    <div><span>Card value</span><b>${esc(c.cur)}${amt(c.value)}</b></div><div><span>You get about</span><b style="color:#0E9F6E">${naira(c.est)}</b></div>
    <div><span>Reference ID</span><b style="font-size:15px">${esc(String(d.id).slice(0,8).toUpperCase())} <button data-copy="${esc(d.id)}" aria-label="Copy reference" style="color:var(--soft);vertical-align:-3px">${I('copy','style="width:16px;height:16px"')}</button></b></div></div>
   <div class="grow" style="min-height:40px"></div>
@@ -818,7 +819,7 @@ trade:()=>{const t=S.trades.find(x=>x.id===S.tradeId);if(!t)return V.history();c
    ${t.status==='failed'?`<p style="margin-top:16px;background:#FDE8E8;color:#B91C1C;border-radius:12px;padding:12px 14px;font-size:14px"><b>This trade failed.</b>${t.failReason?'<br>'+esc(t.failReason):''}</p>`
    :`<div class="steps">${['Checking','Seen','Confirmed','Approved'].map((n,i)=>`<div class="${i<=at?'on':''}"><i></i>${n}</div>`).join('')}</div>`}</div>
   ${fi?`<img src="${fi}" alt="Proof attached by AZAPLUG" style="width:100%;border-radius:14px;margin-top:14px">`:''}
-  <div class="card sum" style="margin-top:16px">${t.card?`<div><span>Card</span><b style="font-size:15px;text-align:right">${esc(t.card.name)}</b></div><div><span>Type</span><b style="font-size:15px">${esc(glabel(t.card))}</b></div>
+  <div class="card sum" style="margin-top:16px">${t.card?`<div><span>Card</span><b style="font-size:15px;text-align:right">${esc(t.card.name)}</b></div><div><span>Type</span><b style="font-size:15px">${esc(glabel(t.card))}</b></div>${t.card.prefix?`<div><span>Prefix</span><b style="font-size:15px">${flag(t.card.prefix.country)} ${esc(t.card.prefix.digits)}***</b></div>`:''}
    ${t.card.code?`<div><span>Code</span><b style="font-family:var(--mono);font-size:13.5px;word-break:break-all;text-align:right;max-width:62%">${esc(t.card.code)}</b></div>`:''}<div><span>Rate</span><b style="font-size:15px">${naira0(t.card.rate)} per ${esc(t.card.cur)}1</b></div>`
    :`<div><span>Account</span><b>${esc(t.accountTitleUsed||'Account')}</b></div>`}<div><span>Date</span><b style="font-size:15px">${fd(d)} · ${ft(d)}</b></div>
    <div><span>${t.card?'You get':'Recipient gets'}</span>${t.creditedAmount!=null?`<b style="color:#0E9F6E">${naira(t.creditedAmount)}</b>`:t.card&&t.status!=='failed'?`<b style="color:#0E9F6E">About ${naira(t.card.est)}</b>`:'<b style="font-family:var(--body);font-size:14px;font-weight:500;color:var(--muted)">Set after review</b>'}</div>
@@ -874,6 +875,8 @@ giftSell:()=>{const g=S.gs,c=(S.gcards||[]).find(x=>x.id===g.cardId);if(!c)retur
   <form data-form="giftSell" novalidate>
   <label class="lb" style="margin-top:18px;font-size:14px">Card type</label>
   <div class="gtp" role="radiogroup" aria-label="Card type">${c.rows.map(x=>`<button type="button" role="radio" aria-checked="${x.id===r.id}" class="${x.id===r.id?'on':''}" data-act="gRow" data-id="${esc(x.id)}">${esc(glabel(x))}</button>`).join('')}</div>
+  ${(c.prefixes&&c.prefixes.length)?`<label class="lb" style="margin-top:16px;font-size:14px">Card prefix <span style="font-weight:400;color:var(--muted)">— the numbers your card starts with</span></label>
+  <div class="gtp" role="radiogroup" aria-label="Card prefix">${c.prefixes.map(p=>`<button type="button" role="radio" aria-checked="${g.prefix===p.digits}" class="${g.prefix===p.digits?'on':''}" data-act="gPrefix" data-id="${esc(p.digits)}" style="font-family:var(--mono)">${flag(p.country)} ${esc(p.digits)}***</button>`).join('')}</div>`:''}
   <label class="lb" style="margin-top:16px;font-size:14px" for="g-v">Value on the card</label>
   <div class="field sm"><b style="color:var(--blue)">${esc(r.cur)}</b><input id="g-v" inputmode="decimal" placeholder="e.g. 100" value="${esc(g.value)}"></div>
   ${(()=>{const w=gLimMsg(r,v,g.value!=='');return `<small id="g-lim" style="display:${w.msg?'block':'none'};margin-top:6px;font-size:12.5px;font-weight:${w.bad?'600':'400'};color:${w.bad?'#B91C1C':'var(--muted)'}">${esc(w.msg)}</small>`})()}
@@ -1259,8 +1262,9 @@ document.addEventListener('click',e=>{
   ({eye(){const i=a.parentElement.querySelector('input'),sh=i.type==='password';i.type=sh?'text':'password';a.innerHTML=I(sh?'eye':'eyeoff');a.setAttribute('aria-label',sh?'Hide password':'Show password')},
     soon(){toast('Coming soon')},
     push(){togglePush()},
-    gCard(){const id=a.dataset.id;if(S.gs.cardId!==id)S.gs={cardId:id,rowId:'',value:'',code:'',imgs:[]};go('giftSell')},
+    gCard(){const id=a.dataset.id;if(S.gs.cardId!==id)S.gs={cardId:id,rowId:'',value:'',code:'',imgs:[],prefix:''};go('giftSell')},
     gRow(){S.gs.rowId=a.dataset.id;render()},
+    gPrefix(){S.gs.prefix=a.dataset.id;render()},
     gTab(){S.giftTab=a.dataset.id;S.gchk=null;if(S.giftTab==='friend')loadGiftMine();else S.gnew=null;render()},
     async gCheck(){const code=($('#g-rc')||{}).value||'';S.grc=code;if(code.replace(/[^a-z0-9]/gi,'').length<4)return toast('Type your gift code');
       try{S.gchk=await api('POST','/api/gift/check',{code});render()}catch(e){S.gchk=null;render();toast(e.message)}},
@@ -1319,8 +1323,9 @@ const FORMS={
     if(r.min&&value<r.min)throw new Error(`The smallest card we take is ${r.cur}${n0(r.min)}`);if(r.max&&value>r.max)throw new Error(`The biggest card we take is ${r.cur}${n0(r.max)}`);
     if(r.kind==='ecode'&&g.code.replace(/[^a-z0-9]/gi,'').length<4)throw new Error('Type the e-code of the card');
     if(r.kind!=='ecode'&&!g.imgs.length)throw new Error('Add a clear photo of the card');
-    const d=await api('POST','/api/gift/trades',{cardId:c.id,rowId:r.id,value,code:g.code.trim(),images:g.imgs});
-    S.slip=d.trade;S.gs={cardId:'',rowId:'',value:'',code:'',imgs:[]};S.trades.unshift(d.trade);go('slip')},
+    if(c.prefixes&&c.prefixes.length&&!c.prefixes.some(p=>p.digits===g.prefix))throw new Error('Pick which number your card starts with');
+    const d=await api('POST','/api/gift/trades',{cardId:c.id,rowId:r.id,value,code:g.code.trim(),images:g.imgs,prefix:g.prefix});
+    S.slip=d.trade;S.gs={cardId:'',rowId:'',value:'',code:'',imgs:[],prefix:''};S.trades.unshift(d.trade);go('slip')},
   async redeem(){const code=val('g-rc');if(code.replace(/[^a-z0-9]/gi,'').length<4)throw new Error('Type your gift code');
     const d=await api('POST','/api/gift/redeem',{code});S.redeemed={amount:d.amount,code:code.toUpperCase(),from:d.from,message:d.message};S.grc='';S.gchk=null;if(d.balance!=null)S.me.balance=d.balance;loadNotes();go('giftDone')},
   async gSend(){const amount=num(val('gf-a')),message=val('gf-m');if(!amount)throw new Error('Enter how much to gift');if(amount<100)throw new Error('A gift must be at least ₦100');

@@ -2347,6 +2347,17 @@ const rowHasRate = row => rowTiers(row).some(t => t.rate > 0);
 const rowTopRate = row => Math.max(...rowTiers(row).map(t => t.rate));
 // A short signature of a card's rate bands, to tell whether the admin's save actually changed any rate.
 const rateSig = card => (card && card.rows ? card.rows.map(r => `${r.id}:${rowTiers(r).map(t => t.from + '@' + t.rate).join(',')}`).join('|') : '');
+// Card number prefixes a customer picks from (Visa/Mastercard/Vanilla BINs): { digits, country }.
+function giftPrefixes(list) {
+  if (!Array.isArray(list)) return [];
+  const out = [];
+  for (const p of list.slice(0, 10)) {
+    const digits = String((p && p.digits) || '').replace(/[^0-9]/g, '').slice(0, 10);
+    const country = (String((p && p.country) || 'US').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2)) || 'US';
+    if (digits.length >= 2 && !out.some(x => x.digits === digits)) out.push({ digits, country });
+  }
+  return out;
+}
 // Cards are read on every customer visit, so they are kept in memory and refreshed when the admin changes one.
 let GIFT_CACHE = null;
 async function giftCards() {
@@ -2373,7 +2384,7 @@ async function giftSeed() {
   }
   csSet('gift:seeded', Date.now(), 0); GIFT_CACHE = null;
 }
-const giftPublic = c => ({ id: c.id, name: c.name, image: c.image, note: c.note,
+const giftPublic = c => ({ id: c.id, name: c.name, image: c.image, note: c.note, prefixes: Array.isArray(c.prefixes) ? c.prefixes : [],
   rows: c.rows.filter(rowHasRate).map(r => ({ id: r.id, country: r.country, kind: r.kind, cur: r.cur, min: Number(r.min) || 0, max: Number(r.max) || 0, tiers: rowTiers(r), rate: rowTopRate(r) })) });
 const codeKey = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
@@ -2406,12 +2417,18 @@ app.post('/api/gift/trades', requireUser, requireApprovedUser, moneyLock(req => 
     if (mine.filter(t => t.card && ['checking', 'seen', 'confirmed'].includes(t.status)).length >= 10) return res.status(429).json({ error: 'You already have 10 cards waiting. Please wait for them to be checked first.' });
     // The same code can only be sold once (unless the first one failed).
     if (key.length >= 4 && (await store.findTradesByCardCode(key)).some(t => t.status !== 'failed')) return res.status(409).json({ error: 'This card code has already been sent to AZAPLUG. Chat with us if you think this is a mistake.' });
+    let prefix = null;
+    if (card.prefixes && card.prefixes.length) {
+      const chosen = String(b.prefix || '').replace(/[^0-9]/g, '');
+      prefix = card.prefixes.find(p => p.digits === chosen) || null;
+      if (!prefix) return res.status(400).json({ error: 'Choose which number your card starts with (card prefix).' });
+    }
     const rate = rateFor(row, value), est = Math.round(value * rate * 100) / 100;
     const trade = await store.createTrade({
       userId: req.user.id, accountId: null, staffId: null, intendedAmount: value, receiptImage: images[0] || '',
       accountNumberUsed: label, accountTitleUsed: card.name + ' gift card',
       userPayoutAccount: req.user.accountNumber, userPayoutBank: req.user.bankName,
-      card: { cardId: card.id, name: card.name, rowId: row.id, country: row.country, kind: row.kind, cur: row.cur, rate, value, est, code, codeKey: key || null, images: images.slice(1) }
+      card: { cardId: card.id, name: card.name, rowId: row.id, country: row.country, kind: row.kind, cur: row.cur, rate, value, est, code, codeKey: key || null, images: images.slice(1), prefix }
     });
     alertTeam({ admin: true }, 'New gift card', `${req.user.name} sent a ${card.name} gift card (${label}) worth ${row.cur}${plain(value)}, about ₦${plain(est)}.`, { admin: 'receipts' });
     res.json({ ok: true, trade });
@@ -2548,12 +2565,13 @@ app.post('/api/admin/gift/cards', requireAdmin, async (req, res) => {
     const b = req.body || {}, name = String(b.name || '').trim().slice(0, 40);
     if (!name) return res.status(400).json({ error: 'Type the card name (for example Apple / iTunes).' });
     const r = giftRows(b.rows); if (r.error) return res.status(400).json({ error: r.error });
+    const prefixes = giftPrefixes(b.prefixes);
     if (b.image && (typeof b.image !== 'string' || (!/^data:image\//i.test(b.image) && !/^\/api\/media\/pub\//.test(b.image)) || badAttachment(/^data:/.test(b.image) ? b.image : ''))) return res.status(400).json({ error: 'The picture must be JPG or PNG.' });
     const old = b.id ? await store.findGiftCard(b.id) : null;
     if (b.id && !old) return res.status(404).json({ error: 'That card was deleted.' });
     const all = b.id ? [] : await store.listGiftCards();
     const id = await store.saveGiftCard({ id: b.id || null, name, rows: r.rows, note: String(b.note || '').trim().slice(0, 200), active: b.active !== false,
-      sort: b.id ? Number(b.sort) || 0 : all.length, image: b.image === undefined ? undefined : (b.image || null) });
+      sort: b.id ? Number(b.sort) || 0 : all.length, image: b.image === undefined ? undefined : (b.image || null), prefixes });
     GIFT_CACHE = null;
     // Did an existing, visible card's rates actually change? (so the admin can offer to tell customers)
     const rateChanged = !!(old && b.active !== false && r.rows.some(rowHasRate) && rateSig({ rows: r.rows }) !== rateSig(old));
