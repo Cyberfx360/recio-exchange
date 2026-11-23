@@ -636,6 +636,14 @@ const GCOL=['#0D4DC7','#111827','#0E9F6E','#D97706','#7C3AED','#DB2777','#0891B2
 const gcol=n=>GCOL[[...String(n)].reduce((h,c)=>(h*31+c.charCodeAt(0))>>>0,7)%GCOL.length];
 const glogo=(c,sm)=>{const img=safeImg(c.image);return `<span class="gl" style="background:${img?'#EEF2F8':gcol(c.name)}${sm?';width:34px;height:34px;border-radius:10px;font-size:15px':''}">${img?`<img src="${img}" alt="">`:esc(String(c.name).trim().charAt(0).toUpperCase())}</span>`};
 const gbest=c=>c.rows.reduce((a,r)=>r.rate>a.rate?r:a,c.rows[0]);
+const gTiers=r=>(r.tiers&&r.tiers.length)?r.tiers.map(t=>({from:+t.from||0,rate:+t.rate||0})):[{from:0,rate:+r.rate||0}];
+const rateFor=(r,v)=>{const ts=gTiers(r);let x=ts[0].rate;for(const t of ts)if(v>=t.from)x=t.rate;return x};
+const rateHi=r=>Math.max(...gTiers(r).map(t=>t.rate));
+const gLive=r=>gTiers(r).filter(t=>t.rate>0);
+const tieredRow=r=>gLive(r).length>1;
+const rateLabelC=r=>{const ts=gLive(r);if(!ts.length)return naira0(0);const lo=Math.min(...ts.map(t=>t.rate)),hi=Math.max(...ts.map(t=>t.rate));return lo===hi?naira0(hi):naira0(lo)+'–'+naira0(hi)};
+// Out-of-range check for a card value: returns {bad, msg}. bad = too small / too big, so we refuse the card.
+const gLimMsg=(r,v,hasVal)=>{if(hasVal&&r.min&&v<r.min)return{bad:true,msg:`Too small — the smallest card we take is ${r.cur}${n0(r.min)}`};if(hasVal&&r.max&&v>r.max)return{bad:true,msg:`Too big — the biggest card we take is ${r.cur}${n0(r.max)}. Chat with us for bigger cards.`};const lim=r.min&&r.max?`From ${r.cur}${n0(r.min)} to ${r.cur}${n0(r.max)}`:r.min?`From ${r.cur}${n0(r.min)}`:r.max?`Up to ${r.cur}${n0(r.max)}`:'';return{bad:false,msg:lim}};
 const tamt=t=>t.card?esc(t.card.cur)+amt(t.card.value):amt(t.intendedAmount);
 async function loadGiftMine(){try{S.gmine=await api('GET','/api/gift/mine')}catch(e){S.gmine={codes:[],err:e.message}}if(S.route==='gift'&&S.giftTab==='friend'&&!document.activeElement.matches('input,textarea'))render()}
 const GST={ready:['Ready to use',0],used:['Already used',1],mine:['You already used this code',1],expired:['This code has expired',1],off:['This code is turned off',1],own:['This is your own gift',1]};
@@ -741,7 +749,7 @@ rates:()=>{const rows=rateRows(),c=['BTC','USDT'].filter(k=>CRYPTO[k]&&CRYPTO[k]
    ${S.accLoaded?rows.length?rows.map(r=>`<div class="rtr"><span class="rtn"><b>${esc(r.title)}</b>${r.bank?`<small>${esc(r.bank)}</small>`:''}</span>${rateCell(r.a.lowestRate,r.a.lowestAmount)}${rateCell(r.a.higherRate,r.a.higherAmount)}</div>`).join(''):'<p class="empty">No rates right now. Please check back soon.</p>':'<p class="empty">Loading…</p>'}</div>
   ${rows.some(r=>r.bank)?'<p class="muted" style="font-size:12.5px;margin:10px 4px 0">A bank shown under a country has its own rate.</p>':''}
   ${c.length?`<div class="rtb" style="margin-top:18px"><div class="rth c2"><span>Crypto</span><span>Rate per $1</span></div>${c.map(k=>`<div class="rtr c2"><span class="rtn"><b>${k}</b></span><span class="rtc"><b>${naira0(CRYPTO[k].rate)}</b></span></div>`).join('')}</div>`:''}
-  ${S.gcards&&S.gcards.length?`<div class="rtb" style="margin-top:18px"><div class="rth c2"><span>Gift card</span><span>Rate</span></div>${S.gcards.map(c=>c.rows.map((r,i)=>`<div class="rtr c2"><span class="rtn">${i?'':`<b>${esc(c.name)}</b>`}<small>${esc(glabel(r))}</small></span><span class="rtc"><b>${naira0(r.rate)}</b><small>per ${esc(r.cur)}1</small></span></div>`).join('')).join('')}</div>`:''}
+  ${S.gcards&&S.gcards.length?`<div class="rtb" style="margin-top:18px"><div class="rth c2"><span>Gift card</span><span>Rate</span></div>${S.gcards.map(c=>c.rows.map((r,i)=>`<div class="rtr c2"><span class="rtn">${i?'':`<b>${esc(c.name)}</b>`}<small>${esc(glabel(r))}</small></span><span class="rtc"><b>${rateLabelC(r)}</b><small>per ${esc(r.cur)}1</small></span></div>`).join('')).join('')}</div>`:''}
   <button class="btn sq" style="margin:20px 0 ${S.gcards&&S.gcards.length?'10px':'28px'};font-family:var(--body);font-weight:600" data-go="accounts">Get Account</button>
   ${S.gcards&&S.gcards.length?`<button class="btn sq" style="margin:0 0 28px;background:#fff;color:var(--blue);border:1.5px solid var(--blue);box-shadow:none;font-family:var(--body);font-weight:600" data-go="gift">${I('gift','style="width:18px;height:18px"')} Sell Gift Card</button>`:''}</section>`},
 
@@ -830,7 +838,7 @@ gift:()=>{const tab=['redeem','friend'].includes(S.giftTab)?S.giftTab:'sell',cs=
   <div class="top left">${back('home',1)}<span class="title">Gift Cards</span></div>
   <div class="seg gseg" role="tablist">${[['sell','Sell Card'],['redeem','Redeem'],['friend','Gift a Friend']].map(t=>`<button role="tab" aria-selected="${tab===t[0]}" class="${tab===t[0]?'on':''}" data-act="gTab" data-id="${t[0]}">${t[1]}</button>`).join('')}</div>
   ${S.giftOn===false?'<p class="empty">Gift cards are turned off right now. Please check back later.</p>':tab==='sell'?(!cs?'<p class="empty">Loading…</p>':cs.length?`<p class="muted" style="font-size:13.5px;margin-top:16px">Pick the card you want to sell. Once we check it, the money goes into your AZAPLUG balance.</p>
-   <div class="gfg">${cs.map(c=>{const b=gbest(c);return `<button class="gft" data-act="gCard" data-id="${esc(c.id)}">${glogo(c)}<b>${esc(c.name)}</b><small>${c.rows.length>1?'Up to ':''}${naira0(b.rate)}/${esc(b.cur)}</small></button>`}).join('')}</div>`
+   <div class="gfg">${cs.map(c=>{const b=gbest(c);return `<button class="gft" data-act="gCard" data-id="${esc(c.id)}">${glogo(c)}<b>${esc(c.name)}</b><small>${c.rows.length>1||c.rows.some(tieredRow)?'Up to ':''}${naira0(rateHi(b))}/${esc(b.cur)}</small></button>`}).join('')}</div>`
    :'<p class="empty">No gift cards are open right now. Please check back soon or chat with us.</p>')
   :tab==='redeem'?`<form data-form="redeem" class="card" style="margin-top:16px" novalidate><b class="h" style="font-size:17px;font-weight:600">Have an AZAPLUG gift code?</b>
    <p class="muted" style="font-size:13.5px;margin:6px 0 14px">Check what it is worth, then redeem it. The money goes straight into your balance.</p>
@@ -861,14 +869,14 @@ giftSell:()=>{const g=S.gs,c=(S.gcards||[]).find(x=>x.id===g.cardId);if(!c)retur
   <div class="card sum" style="margin:0 calc(var(--m) * -1);border-radius:20px;padding:16px 18px">
    <div><b style="font-family:var(--body);font-size:15px;font-weight:600">Card summary</b>${glogo(c,1)}</div>
    <div><span>Card value</span><b id="g-val">${esc(r.cur)}${amt(v)}</b></div>
-   <div><span>You get about</span><b id="g-get" style="color:#0E9F6E">${naira(v*r.rate)}</b></div>
-   <div><span>Rate</span><b style="font-size:15px">${naira0(r.rate)} per ${esc(r.cur)}1</b></div></div>
+   <div><span>You get about</span><b id="g-get" style="color:#0E9F6E">${naira(v*rateFor(r,v))}</b></div>
+   <div><span>Rate</span><b id="g-rate" style="font-size:15px">${naira0(rateFor(r,v))} per ${esc(r.cur)}1</b></div></div>
   <form data-form="giftSell" novalidate>
   <label class="lb" style="margin-top:18px;font-size:14px">Card type</label>
   <div class="gtp" role="radiogroup" aria-label="Card type">${c.rows.map(x=>`<button type="button" role="radio" aria-checked="${x.id===r.id}" class="${x.id===r.id?'on':''}" data-act="gRow" data-id="${esc(x.id)}">${esc(glabel(x))}</button>`).join('')}</div>
   <label class="lb" style="margin-top:16px;font-size:14px" for="g-v">Value on the card</label>
   <div class="field sm"><b style="color:var(--blue)">${esc(r.cur)}</b><input id="g-v" inputmode="decimal" placeholder="e.g. 100" value="${esc(g.value)}"></div>
-  ${lim?`<small class="muted" style="display:block;margin-top:6px;font-size:12.5px">${lim}</small>`:''}
+  ${(()=>{const w=gLimMsg(r,v,g.value!=='');return `<small id="g-lim" style="display:${w.msg?'block':'none'};margin-top:6px;font-size:12.5px;font-weight:${w.bad?'600':'400'};color:${w.bad?'#B91C1C':'var(--muted)'}">${esc(w.msg)}</small>`})()}
   <label class="lb" style="margin-top:16px;font-size:14px" for="g-code">${ec?'E-code':'Card code <span style="font-weight:400;color:var(--muted)">(optional)</span>'}</label>
   <div class="field sm"><input id="g-code" class="gcode" placeholder="${ec?'Type the code exactly as it is':'The code on the back of the card'}" value="${esc(g.code)}" autocomplete="off" spellcheck="false" maxlength="300"></div>
   <label class="lb" style="margin-top:16px;font-size:14px">${ec?'Screenshot <span style="font-weight:400;color:var(--muted)">(optional)</span>':'Photos of the card'}</label>
@@ -877,7 +885,7 @@ giftSell:()=>{const g=S.gs,c=(S.gcards||[]).find(x=>x.id===g.cardId);if(!c)retur
   ${ec?'':'<small class="muted" style="display:block;margin-top:6px;font-size:12.5px">Scratch the back so the code can be read clearly. Up to 4 photos.</small>'}
   <p class="gwarn">Send each card only once, and only to AZAPLUG. A card that was already used or sent to someone else will fail.</p>
   ${c.note?`<p class="muted" style="font-size:13px;margin:-4px 0 14px">${esc(c.note)}</p>`:''}
-  <button class="btn sq">Sell Card</button></form></section>`},
+  <button class="btn sq" id="g-submit"${gLimMsg(r,v,g.value!=='').bad?' disabled style="opacity:.5"':''}>Sell Card</button></form></section>`},
 
 giftDone:()=>{const d=S.redeemed||{};return `<section class="screen">
   <div class="top left">${back('home',1)}<span class="title" style="font-size:21px">Gift Code</span></div>
@@ -1290,7 +1298,8 @@ document.addEventListener('input',e=>{const t=e.target;
   if(t.id==='s-a'){S.send.amount=t.value;$('#s-send').textContent=amt(num(t.value))}
   if(t.id==='g-rc'){S.grc=t.value;if(S.gchk){S.gchk=null;const k=$('.gchk');if(k)k.remove()}}
   if(t.id==='g-v'||t.id==='g-code'){const g=S.gs;if(t.id==='g-code'){g.code=t.value;return}g.value=t.value;const c=(S.gcards||[]).find(x=>x.id===g.cardId),r=c&&c.rows.find(x=>x.id===g.rowId);
-    if(r){$('#g-val').textContent=r.cur+amt(num(t.value));$('#g-get').textContent=naira(num(t.value)*r.rate)}}
+    if(r){const vv=num(t.value);$('#g-val').textContent=r.cur+amt(vv);$('#g-get').textContent=naira(vv*rateFor(r,vv));const gr=$('#g-rate');if(gr)gr.textContent=naira0(rateFor(r,vv))+' per '+r.cur+'1';
+      const w=gLimMsg(r,vv,t.value!==''),el=$('#g-lim'),sb=$('#g-submit');if(el){el.textContent=w.msg;el.style.display=w.msg?'block':'none';el.style.color=w.bad?'#B91C1C':'var(--muted)';el.style.fontWeight=w.bad?'600':'400'}if(sb){sb.disabled=w.bad;sb.style.opacity=w.bad?'.5':''}}}
   if(t.id==='w-a'){const v=num(t.value);$('#w-amt').textContent=naira(v);$('#w-tot').textContent=naira(v)}
   if(t.id==='acct-q'){const q=t.value.toLowerCase();document.querySelectorAll('#acct-list .acct').forEach(el=>el.style.display=el.dataset.k.includes(q)?'':'none')}
 });

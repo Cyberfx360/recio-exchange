@@ -2322,14 +2322,31 @@ function giftRows(list) {
   for (const r of list) {
     const country = String((r && r.country) || '').trim().slice(0, 30), kind = r && r.kind === 'ecode' ? 'ecode' : 'physical';
     const cur = GIFT_CURS.includes(r && r.cur) ? r.cur : '$';
-    const rate = Number(r && r.rate) || 0, min = Number(r && r.min) || 0, max = Number(r && r.max) || 0;
+    const min = Number(r && r.min) || 0, max = Number(r && r.max) || 0;
     if (!country) return { error: 'Every card type needs a country (for example USA).' };
-    if (![rate, min, max].every(n => Number.isFinite(n) && n >= 0 && n < 1e7)) return { error: 'Rates and limits must be numbers, like 1250.' };
+    // Rate bands: each { from: lowest card value for this rate, rate: naira per 1 unit }. A single rate = one band from 0.
+    const src = Array.isArray(r && r.tiers) && r.tiers.length ? r.tiers : [{ from: 0, rate: (r && r.rate) || 0 }];
+    if (src.length > 8) return { error: `For ${country} · ${giftKind(kind)}, use at most 8 rate bands.` };
+    const tiers = [];
+    for (const t of src) {
+      const from = Number(t && t.from) || 0, rate = Number(t && t.rate) || 0;
+      if (![from, rate].every(n => Number.isFinite(n) && n >= 0 && n < 1e7)) return { error: 'Rates and card values must be numbers, like 1250.' };
+      tiers.push({ from, rate });
+    }
+    tiers.sort((a, b) => a.from - b.from);
+    if (![min, max].every(n => Number.isFinite(n) && n >= 0 && n < 1e7)) return { error: 'Limits must be numbers, like 50.' };
     if (max && max < min) return { error: `For ${country} · ${giftKind(kind)}, the biggest card is smaller than the smallest card.` };
-    rows.push({ id: /^[a-f0-9]{8}$/.test(r && r.id) ? r.id : rowId(), country, kind, cur, rate, min, max });
+    rows.push({ id: /^[a-f0-9]{8}$/.test(r && r.id) ? r.id : rowId(), country, kind, cur, min, max, tiers });
   }
   return { rows };
 }
+// A card value gets the rate of the band with the largest "from" that is <= the value. A plain rate = one band from 0.
+const rowTiers = row => (row.tiers && row.tiers.length) ? row.tiers.map(t => ({ from: Number(t.from) || 0, rate: Number(t.rate) || 0 })) : [{ from: 0, rate: Number(row.rate) || 0 }];
+const rateFor = (row, value) => { const ts = rowTiers(row); let r = ts[0].rate; for (const t of ts) if (value >= t.from) r = t.rate; return r; };
+const rowHasRate = row => rowTiers(row).some(t => t.rate > 0);
+const rowTopRate = row => Math.max(...rowTiers(row).map(t => t.rate));
+// A short signature of a card's rate bands, to tell whether the admin's save actually changed any rate.
+const rateSig = card => (card && card.rows ? card.rows.map(r => `${r.id}:${rowTiers(r).map(t => t.from + '@' + t.rate).join(',')}`).join('|') : '');
 // Cards are read on every customer visit, so they are kept in memory and refreshed when the admin changes one.
 let GIFT_CACHE = null;
 async function giftCards() {
@@ -2357,7 +2374,7 @@ async function giftSeed() {
   csSet('gift:seeded', Date.now(), 0); GIFT_CACHE = null;
 }
 const giftPublic = c => ({ id: c.id, name: c.name, image: c.image, note: c.note,
-  rows: c.rows.filter(r => Number(r.rate) > 0).map(r => ({ id: r.id, country: r.country, kind: r.kind, cur: r.cur, rate: Number(r.rate), min: Number(r.min) || 0, max: Number(r.max) || 0 })) });
+  rows: c.rows.filter(rowHasRate).map(r => ({ id: r.id, country: r.country, kind: r.kind, cur: r.cur, min: Number(r.min) || 0, max: Number(r.max) || 0, tiers: rowTiers(r), rate: rowTopRate(r) })) });
 const codeKey = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 app.get('/api/gift/cards', async (req, res) => {
@@ -2373,7 +2390,7 @@ app.post('/api/gift/trades', requireUser, requireApprovedUser, moneyLock(req => 
     const b = req.body || {};
     const card = (await giftCards()).find(c => c.id === b.cardId && c.active);
     if (!card) return res.status(404).json({ error: 'That gift card is not available right now.' });
-    const row = card.rows.find(r => r.id === b.rowId && Number(r.rate) > 0);
+    const row = card.rows.find(r => r.id === b.rowId && rowHasRate(r));
     if (!row) return res.status(400).json({ error: 'Choose the card type.' });
     const value = Math.round(Number(b.value) * 100) / 100, label = giftLabel(row);
     if (!Number.isFinite(value) || value <= 0 || value > 1e6) return res.status(400).json({ error: 'Enter the value written on the card.' });
@@ -2389,7 +2406,7 @@ app.post('/api/gift/trades', requireUser, requireApprovedUser, moneyLock(req => 
     if (mine.filter(t => t.card && ['checking', 'seen', 'confirmed'].includes(t.status)).length >= 10) return res.status(429).json({ error: 'You already have 10 cards waiting. Please wait for them to be checked first.' });
     // The same code can only be sold once (unless the first one failed).
     if (key.length >= 4 && (await store.findTradesByCardCode(key)).some(t => t.status !== 'failed')) return res.status(409).json({ error: 'This card code has already been sent to AZAPLUG. Chat with us if you think this is a mistake.' });
-    const rate = Number(row.rate), est = Math.round(value * rate * 100) / 100;
+    const rate = rateFor(row, value), est = Math.round(value * rate * 100) / 100;
     const trade = await store.createTrade({
       userId: req.user.id, accountId: null, staffId: null, intendedAmount: value, receiptImage: images[0] || '',
       accountNumberUsed: label, accountTitleUsed: card.name + ' gift card',
@@ -2532,13 +2549,26 @@ app.post('/api/admin/gift/cards', requireAdmin, async (req, res) => {
     if (!name) return res.status(400).json({ error: 'Type the card name (for example Apple / iTunes).' });
     const r = giftRows(b.rows); if (r.error) return res.status(400).json({ error: r.error });
     if (b.image && (typeof b.image !== 'string' || (!/^data:image\//i.test(b.image) && !/^\/api\/media\/pub\//.test(b.image)) || badAttachment(/^data:/.test(b.image) ? b.image : ''))) return res.status(400).json({ error: 'The picture must be JPG or PNG.' });
-    if (b.id && !(await store.findGiftCard(b.id))) return res.status(404).json({ error: 'That card was deleted.' });
+    const old = b.id ? await store.findGiftCard(b.id) : null;
+    if (b.id && !old) return res.status(404).json({ error: 'That card was deleted.' });
     const all = b.id ? [] : await store.listGiftCards();
     const id = await store.saveGiftCard({ id: b.id || null, name, rows: r.rows, note: String(b.note || '').trim().slice(0, 200), active: b.active !== false,
       sort: b.id ? Number(b.sort) || 0 : all.length, image: b.image === undefined ? undefined : (b.image || null) });
     GIFT_CACHE = null;
-    res.json({ ok: true, id });
+    // Did an existing, visible card's rates actually change? (so the admin can offer to tell customers)
+    const rateChanged = !!(old && b.active !== false && r.rows.some(rowHasRate) && rateSig({ rows: r.rows }) !== rateSig(old));
+    res.json({ ok: true, id, rateChanged });
   } catch (err) { const hint = giftSqlHint(err); if (!hint) console.error(err); res.status(500).json({ error: hint || 'Could not save the card.' }); }
+});
+app.post('/api/admin/gift/notify-rates', requireAdmin, async (req, res) => {
+  try {
+    const name = String((req.body || {}).name || '').trim().slice(0, 40);
+    const title = 'Gift card rates updated';
+    const body = (name ? `${name} rates have changed. ` : 'Some gift card rates have changed. ') + 'Open Gift Cards to see the new rates.';
+    await store.addNotification({ userId: null, kind: 'info', title, body });
+    notify(null, 'info', title, body, { feed: false, go: 'gift' });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not notify customers.' }); }
 });
 app.delete('/api/admin/gift/cards/:id', requireAdmin, async (req, res) => {
   try { await store.deleteGiftCard(req.params.id); GIFT_CACHE = null; res.json({ ok: true }); }

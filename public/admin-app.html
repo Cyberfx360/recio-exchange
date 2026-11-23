@@ -600,11 +600,17 @@ const GCOL=['#0D4DC7','#111827','#0E9F6E','#D97706','#7C3AED','#DB2777','#0891B2
 const gcol=n=>GCOL[[...String(n)].reduce((h,c)=>(h*31+c.charCodeAt(0))>>>0,7)%GCOL.length];
 const glogo=c=>{const img=safeImg(c.image);return `<span class="gcl" style="background:${img?'#EEF2F8':gcol(c.name)}">${img?`<img src="${img}" alt="">`:esc(String(c.name).trim().charAt(0).toUpperCase())}</span>`};
 const tamt=t=>t.card?esc(t.card.cur)+n0(t.card.value):n0(t.intendedAmount);
-const gBlankRow=()=>({id:'',country:'USA',kind:'physical',cur:'$',rate:'',min:'',max:''});
+const gBlankRow=()=>({id:'',country:'USA',kind:'physical',cur:'$',min:'',max:'',tiers:[{from:'',rate:''}]});
+// Rate bands: a card value earns the band with the largest "from" that is <= it. A plain rate = one band from 0.
+const gTiers=r=>(r.tiers&&r.tiers.length)?r.tiers.map(t=>({from:+t.from||0,rate:+t.rate||0})):[{from:0,rate:+r.rate||0}];
+const gLiveTiers=r=>gTiers(r).filter(t=>t.rate>0);
+const gHasRate=r=>gTiers(r).some(t=>t.rate>0);
+const gRateLabel=r=>{const ts=gLiveTiers(r);if(!ts.length)return '';const lo=Math.min(...ts.map(t=>t.rate)),hi=Math.max(...ts.map(t=>t.rate));return lo===hi?naira(hi):naira(lo)+'–'+naira(hi)};
 async function loadGift(){try{S.gift=await api('GET','/api/admin/gift');S.giftErr=''}catch(e){S.gift=null;S.giftErr=e.message}if(['gift','giftCard'].includes(S.route)&&!typing())render()}
 // Reads the card form inputs back into S.gform (before adding/removing a type, and before saving).
 function gfSync(){const f=S.gform;if(!f||!$('#gf-n'))return f;f.name=$('#gf-n').value;f.note=$('#gf-note').value;f.active=$('#gf-a').checked;
-  f.rows=f.rows.map((r,i)=>({...r,country:$('#gr-c'+i).value,kind:$('#gr-k'+i).value,cur:$('#gr-u'+i).value,rate:$('#gr-r'+i).value,min:$('#gr-mn'+i).value,max:$('#gr-mx'+i).value}));return f}
+  f.rows=f.rows.map((r,i)=>{const tiers=(r.tiers&&r.tiers.length?r.tiers:[{from:'',rate:''}]).map((t,j)=>{const tf=$('#gr-tf'+i+'-'+j),tr=$('#gr-tr'+i+'-'+j);return{from:tf?tf.value:t.from,rate:tr?tr.value:t.rate}});
+    return{...r,country:$('#gr-c'+i).value,kind:$('#gr-k'+i).value,cur:$('#gr-u'+i).value,min:$('#gr-mn'+i).value,max:$('#gr-mx'+i).value,tiers}});return f}
 const tBadge=t=>t.status==='failed'?['FAILED','b-failed']:t.status==='approved'?(t.creditedAmount==null?['AWAITING CREDIT','b-checking']:['APPROVED','b-approved']):t.status==='confirmed'?['CONFIRMED','b-confirmed']:t.status==='seen'?['SEEN','b-confirmed']:['PENDING','b-checking'];
 const wBadge=w=>w.status==='paid'?['Approved','b-approved']:w.status==='rejected'?['Declined','b-failed']:['Pending','b-checking'];
 const sBadge=s=>s.status==='approved'?['ACTIVE','b-approved']:s.status==='rejected'?['SUSPENDED','b-failed']:['PENDING APPROVAL','b-checking'];
@@ -876,9 +882,9 @@ gift:()=>{const g=S.gift,tab=S.gTab==='codes'?'codes':'cards';
   <div class="gsw"><span class="grow" style="min-width:0"><b>Gift Cards for customers</b><small>${g.on?'On: customers can sell cards and redeem codes.':'Off: customers cannot see Gift Cards or use codes.'}</small></span><button class="tgl" role="switch" aria-checked="${g.on}" aria-label="Gift Cards on or off" data-act="giftSwitch"></button></div>
   <div style="display:flex;gap:10px;margin-bottom:14px">${[['cards','Cards & Rates'],['codes','Gift Codes']].map(x=>`<button class="tabb ${tab===x[0]?'on':''}" data-set="gTab:${x[0]}">${x[1]}</button>`).join('')}</div>
   ${tab==='cards'?`<p class="muted" style="font-size:12.5px;margin-bottom:12px">Customers only see a card once one of its types has a rate. Rates are naira for 1 unit of the card (e.g. ₦1,250 for every $1).</p>
-   ${g.cards.map(c=>{const live=c.active&&c.rows.some(r=>+r.rate>0);return `<article class="card" style="padding:14px;border-radius:14px;margin-bottom:12px">
+   ${g.cards.map(c=>{const live=c.active&&c.rows.some(gHasRate);return `<article class="card" style="padding:14px;border-radius:14px;margin-bottom:12px">
     <div class="row" style="gap:12px">${glogo(c)}<span class="grow" style="min-width:0"><b class="h" style="font-size:15px;display:block">${esc(c.name)}</b><small class="muted">${c.rows.length} type${c.rows.length===1?'':'s'}</small></span><span class="badge ${live?'b-approved':c.active?'b-checking':'b-failed'} xs">${live?'SHOWING':c.active?'NO RATE':'HIDDEN'}</span></div>
-    <div style="margin-top:10px">${c.rows.map(r=>`<div class="grt"><span>${esc(glabel(r))}</span>${+r.rate?`<b>${naira(r.rate)}/${esc(r.cur)}</b>`:'<span class="z">Set rate</span>'}<small class="muted" style="text-align:right">${+r.min||+r.max?`${esc(r.cur)}${n0(r.min||0)}–${+r.max?esc(r.cur)+n0(r.max):'any'}`:'Any value'}</small></div>`).join('')}</div>
+    <div style="margin-top:10px">${c.rows.map(r=>{const ts=gLiveTiers(r);return `<div class="grt"><span>${esc(glabel(r))}</span>${ts.length?`<b>${gRateLabel(r)}/${esc(r.cur)}</b>`:'<span class="z">Set rate</span>'}<small class="muted" style="text-align:right">${+r.min||+r.max?`${esc(r.cur)}${n0(r.min||0)}–${+r.max?esc(r.cur)+n0(r.max):'any'}`:'Any value'}</small></div>${ts.length>1?`<div style="font-size:11.5px;color:var(--muted);margin:-2px 0 6px">${ts.map(t=>`${esc(r.cur)}${n0(t.from)}+ → ${naira(t.rate)}`).join(' · ')}</div>`:''}`}).join('')}</div>
     <button class="b soft" style="margin-top:10px;height:40px" data-act="gEdit" data-id="${esc(c.id)}">${I('pen','style="width:14px;height:14px"')}Edit rates</button></article>`}).join('')||'<p class="empty">No cards yet</p>'}
    <button class="b blue" data-act="gEdit" data-id="">${I('plus','style="width:16px;height:16px"')}Add a Gift Card</button>`
   :`<form data-form="gCode" class="card" style="padding:16px;border-radius:14px;margin-bottom:14px" novalidate><b class="h" style="font-size:16px">New gift code</b>
@@ -906,9 +912,14 @@ giftCard:()=>{const f=S.gform;if(!f)return V.gift();const img=f.image?safeImg(f.
    <div class="g3x"><div><label class="cl" for="gr-c${i}">Country</label><input class="in" id="gr-c${i}" maxlength="30" value="${esc(r.country)}" placeholder="USA"></div>
     <div><label class="cl" for="gr-k${i}">Kind</label><select class="in" id="gr-k${i}"><option value="physical" ${r.kind!=='ecode'?'selected':''}>Physical</option><option value="ecode" ${r.kind==='ecode'?'selected':''}>E-code</option></select></div>
     <div><label class="cl" for="gr-u${i}">Currency</label><select class="in" id="gr-u${i}">${['$','£','€','C$','A$'].map(u=>`<option ${r.cur===u?'selected':''}>${u}</option>`).join('')}</select></div></div>
-   <div class="g3x"><div><label class="cl" for="gr-r${i}">Rate ₦ per 1</label><input class="in" id="gr-r${i}" inputmode="decimal" placeholder="0 = hidden" value="${+r.rate?esc(r.rate):''}"></div>
-    <div><label class="cl" for="gr-mn${i}">Smallest</label><input class="in" id="gr-mn${i}" inputmode="decimal" placeholder="Any" value="${+r.min?esc(r.min):''}"></div>
-    <div><label class="cl" for="gr-mx${i}">Biggest</label><input class="in" id="gr-mx${i}" inputmode="decimal" placeholder="Any" value="${+r.max?esc(r.max):''}"></div></div></div>`).join('')}
+   <div class="g2"><div><label class="cl" for="gr-mn${i}">Smallest card</label><input class="in" id="gr-mn${i}" inputmode="decimal" placeholder="Any" value="${+r.min?esc(r.min):''}"></div>
+    <div><label class="cl" for="gr-mx${i}">Biggest card</label><input class="in" id="gr-mx${i}" inputmode="decimal" placeholder="Any" value="${+r.max?esc(r.max):''}"></div></div>
+   <div class="cl" style="margin-top:12px">Rate bands <span style="text-transform:none;font-weight:400">— bigger cards can earn more</span></div>
+   ${(r.tiers&&r.tiers.length?r.tiers:[{from:'',rate:''}]).map((t,j)=>`<div class="row" style="gap:8px;align-items:flex-end;margin-top:6px">
+     <div style="flex:1"><label class="cl" for="gr-tf${i}-${j}">From ${esc(r.cur||'$')}</label><input class="in" id="gr-tf${i}-${j}" inputmode="decimal" placeholder="${j?'e.g. 100':'0'}" value="${t.from!==''&&t.from!=null?esc(t.from):(j?'':'0')}"></div>
+     <div style="flex:1"><label class="cl" for="gr-tr${i}-${j}">Rate ₦ per 1</label><input class="in" id="gr-tr${i}-${j}" inputmode="decimal" placeholder="0 = hidden" value="${+t.rate?esc(t.rate):''}"></div>
+     ${(r.tiers&&r.tiers.length>1)?`<button type="button" class="sb s-red" style="flex:none;padding:0 12px" data-act="gBandDel" data-id="${i}-${j}" aria-label="Remove band">${I('trash','style="width:13px;height:13px"')}</button>`:''}</div>`).join('')}
+   ${(r.tiers||[]).length<8?`<button type="button" class="link" style="font-size:12.5px;margin-top:8px" data-act="gBandAdd" data-id="${i}">+ Add a higher band</button>`:''}</div>`).join('')}
   ${f.rows.length<12?`<button type="button" class="b soft" style="height:40px" data-act="gRowAdd">${I('plus','style="width:14px;height:14px"')}Add another type</button>`:''}
   <label class="cl" for="gf-note">Note for customers <span style="text-transform:none;font-weight:400">(optional)</span></label><input class="in" id="gf-note" maxlength="200" placeholder="e.g. No cards starting with 4" value="${esc(f.note||'')}">
   <button class="b blue" style="margin-top:16px">Save Card</button></form>
@@ -1245,9 +1256,12 @@ const ACT={
   async giftSwitch(){const on=!S.gift.on;
     if(!await ask(on?'Turn Gift Cards on?':'Turn Gift Cards off?',on?'Customers will see Gift Cards again and can sell cards and redeem codes.':'Customers will not see Gift Cards and cannot sell cards or use codes. Cards already sent stay in Receipts for you to finish.',on?'Turn on':'Turn off',!on))return;
     await api('PUT','/api/admin/settings',{giftOn:on});toast(on?'Gift Cards are on':'Gift Cards are off');await loadGift()},
-  gEdit(el,id){const c=id&&S.gift.cards.find(x=>x.id===id);S.gform=c?{...c,rows:c.rows.map(r=>({...r}))}:{id:'',name:'',active:true,note:'',image:null,rows:[gBlankRow()]};go('giftCard')},
+  gEdit(el,id){const c=id&&S.gift.cards.find(x=>x.id===id);
+    S.gform=c?{...c,rows:c.rows.map(r=>({...r,tiers:gTiers(r)}))}:{id:'',name:'',active:true,note:'',image:null,rows:[gBlankRow()]};go('giftCard')},
   gRowAdd(){gfSync();const last=S.gform.rows[S.gform.rows.length-1]||gBlankRow();S.gform.rows.push({...gBlankRow(),country:last.country,cur:last.cur});render()},
   gRowDel(el,i){gfSync();S.gform.rows.splice(Number(i),1);render()},
+  gBandAdd(el){gfSync();const i=Number(el.dataset.id),r=S.gform.rows[i];r.tiers=r.tiers&&r.tiers.length?r.tiers:[{from:'',rate:''}];if(r.tiers.length<8)r.tiers.push({from:'',rate:''});render()},
+  gBandDel(el){gfSync();const a=el.dataset.id.split('-').map(Number),r=S.gform.rows[a[0]];r.tiers.splice(a[1],1);if(!r.tiers.length)r.tiers.push({from:'',rate:''});render()},
   gImgDel(){gfSync();S.gform.image=null;render()},
   async gCardDel(el,id){if(!await ask('Delete this card?',`${S.gform.name} will be removed. Cards customers already sent stay in Receipts.`,'Delete card',1))return;
     await api('DELETE','/api/admin/gift/cards/'+encodeURIComponent(id));toast('Card deleted');S.gform=null;await loadGift();go('gift')},
@@ -1328,10 +1342,12 @@ const FORMS={
   async gaNew(){const startsAt=new Date(val('ga-s'));if(isNaN(startsAt))throw new Error('Choose the start date and time');
     await api('POST','/api/admin/giveaways',{title:val('ga-t'),amount:num(val('ga-a')),winners:num(val('ga-w')),keyword:val('ga-k'),startsAt:startsAt.toISOString(),announce:$('#ga-n').checked});toast('Giveaway created');await loadGas()},
   async gCard(){const f=gfSync();if(!f.name.trim())throw new Error('Type the card name');
-    const rows=f.rows.map(r=>({id:r.id,country:r.country.trim(),kind:r.kind,cur:r.cur,rate:num(r.rate),min:num(r.min),max:num(r.max)}));
+    const rows=f.rows.map(r=>{let tiers=(r.tiers||[]).map(t=>({from:num(t.from),rate:num(t.rate)})).filter((t,i,a)=>a.length===1||t.rate>0||t.from>0);if(!tiers.length)tiers=[{from:0,rate:0}];return{id:r.id,country:r.country.trim(),kind:r.kind,cur:r.cur,min:num(r.min),max:num(r.max),tiers}});
     const body={id:f.id||undefined,name:f.name.trim(),active:f.active,note:f.note,sort:f.sort,rows};
     const orig=f.id&&S.gift.cards.find(x=>x.id===f.id);if(!orig||f.image!==orig.image)body.image=f.image||null;
-    await api('POST','/api/admin/gift/cards',body);toast(rows.some(r=>r.rate>0)&&f.active?'Card saved. Customers can see it.':'Card saved');S.gform=null;await loadGift();go('gift')},
+    const anyRate=rows.some(r=>r.tiers.some(t=>t.rate>0)),name=f.name.trim();
+    const d=await api('POST','/api/admin/gift/cards',body);toast(anyRate&&f.active?'Card saved. Customers can see it.':'Card saved');S.gform=null;await loadGift();go('gift');
+    if(d.rateChanged&&await ask('Tell customers about the new rates?','Everyone gets a notification to check the new gift card rates.','Notify customers',0)){try{await api('POST','/api/admin/gift/notify-rates',{name});toast('Customers notified')}catch(e){toast(e.message)}}},
   async gCode(){const amount=num(val('gc-a')),maxUses=num(val('gc-u'))||1,e=val('gc-e');if(!amount)throw new Error('Enter how much the code is worth');
     const d=await api('POST','/api/admin/gift/codes',{amount,maxUses,code:val('gc-c'),note:val('gc-n'),expiresAt:e?new Date(e).toISOString():''});
     await loadGift();await ask('Gift code ready',`${d.shown} is worth ${naira(amount)}${maxUses>1?' for each of '+maxUses+' people':''}. Tap Share or Copy on the code to send it.`,'Done',0)},
