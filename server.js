@@ -316,8 +316,10 @@ async function requireApprovedStaff(req, res, next) {
 // ============================================================
 app.post('/api/register', async (req, res) => {
   try {
-    const { name, phone, accountNumber, bankName, password } = req.body || {};
-    if (!name || !phone || !accountNumber || !bankName || !password) {
+    const { name, phone, accountNumber, bankName, bankCode, password } = req.body || {};
+    const acctNo = String(accountNumber || '').replace(/\D/g, '');
+    const verifyOn = flw.configured() && await payoutColsReady();   // verify the account name at sign-up once set up
+    if (!name || !phone || !acctNo || !password || (verifyOn ? !bankCode : !bankName)) {
       return res.status(400).json({ error: 'All fields are required.' });
     }
     if (badPin(password)) return res.status(400).json({ error: badPin(password) });
@@ -325,13 +327,25 @@ app.post('/api/register', async (req, res) => {
     if (await store.findUserByPhone(String(phone).trim())) {
       return res.status(409).json({ error: 'An account with this phone number already exists.' });
     }
+    // Confirm the bank account (real name) BEFORE the account is created.
+    let verified = null, canonicalBank = bankName;
+    if (verifyOn) {
+      const bankList = await flw.banks().catch(() => []);
+      const bank = bankList.find(b => String(b.code) === String(bankCode));
+      if (!bank) return res.status(400).json({ error: 'Pick your bank from the list.' });
+      let r; try { r = await flw.resolveAccount(acctNo, bankCode); } catch (e) { return res.status(400).json({ error: 'We could not verify that account. Check the number and the bank.' }); }
+      const nm = resolvedName(r);
+      if (!nm) return res.status(400).json({ error: 'We could not verify that account. Check the number and the bank.' });
+      verified = { bankCode: String(bankCode), accountName: nm }; canonicalBank = bank.name;
+    }
     const email = await signupEmail('user', req.body || {});
     if (email.error) return res.status(400).json({ error: email.error });
     const user = await store.createUser({
       name: String(name).trim(), phone: String(phone).trim(),
-      accountNumber: String(accountNumber).trim(), bankName: String(bankName).trim(),
+      accountNumber: acctNo, bankName: String(canonicalBank || '').trim(),
       passwordHash: bcrypt.hashSync(password, 10), email: email.value
     });
+    if (verified) { try { await store.setPayoutVerified(user.id, { accountNumber: acctNo, bankCode: verified.bankCode, bankName: String(canonicalBank).trim(), accountName: verified.accountName }); PAYOUT_COLS.ok = true; } catch (e) { console.error('Verify store at signup:', e.message); } }
     ipFail('signup', req, 5, 60);
     req.session.userId = user.id;
     res.json({ ok: true, status: user.status });
@@ -412,14 +426,14 @@ async function payoutColsReady() {
   return ok;
 }
 const resolvedName = r => (r && (r.account_name || r.accountName)) || '';
-app.get('/api/banks', requireUser, async (req, res) => {
+app.get('/api/banks', async (req, res) => {   // needed during sign-up, before login
   try {
     if (!flw.configured()) return res.json({ configured: false, banks: [] });
     const list = await flw.banks();
     res.json({ configured: true, banks: list.map(b => ({ code: String(b.code), name: b.name })).sort((a, b) => a.name.localeCompare(b.name)) });
   } catch (err) { console.error('Banks error:', err.message); res.status(502).json({ error: 'Could not load the bank list. Try again.' }); }
 });
-app.post('/api/account/resolve', requireUser, async (req, res) => {
+app.post('/api/account/resolve', async (req, res) => {   // name enquiry; usable during sign-up (throttled per device)
   try {
     if (!flw.configured()) return res.status(400).json({ error: 'Account checks are not available yet.' });
     if (ipFail('resolve', req, 25, 1)) return res.status(429).json({ error: 'Too many account checks. Wait a minute and try again.' });

@@ -101,7 +101,7 @@
 > ```sql
 > alter table users add column if not exists bank_code text, add column if not exists account_name text, add column if not exists payout_verified_at timestamptz;
 > ```
-> This uses the same `FLW_SECRET_KEY` as above. Once it's on, a customer can't withdraw until their account is confirmed, so the money always goes to a real, checked name. (If Flutterwave isn't set up, withdrawals keep working the old way.)
+> This uses the same `FLW_SECRET_KEY` as above. Once it's on, **new sign-ups confirm their account during registration** (bank + account number → real name → create), and existing customers confirm on their next withdrawal — so a withdrawal always goes to a real, checked name. (If Flutterwave isn't set up, sign-up and withdrawals keep working the old free-text way.)
 > For **deleting a message so staff and the customer no longer see it, but the admin still can** (and for **pinning a message to the top of a chat**), run this one line:
 > ```sql
 > alter table messages add column if not exists deleted_at timestamptz, add column if not exists pinned_at timestamptz; alter table team_messages add column if not exists deleted_at timestamptz, add column if not exists pinned_at timestamptz;
