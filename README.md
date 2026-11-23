@@ -97,6 +97,11 @@
 > - `FLW_WEBHOOK_HASH` — any long random string; paste the **same** value into Flutterwave → Settings → Webhooks as the "Secret hash".
 >
 > In the Flutterwave dashboard, set the **Webhook URL** to `https://recio-exchange.onrender.com/api/flw/webhook`. Keep a funded Flutterwave balance — transfers are debited from it. Auto-pay stays **off** until you switch it on under Admin → Withdrawals, and it only ever covers withdrawals up to your set limit (default ₦50,000) with a daily ceiling (default ₦500,000); anything above waits for you to pay by hand.
+> For **confirming the real account name before a withdrawal** (customer picks their bank, types the account number, the real name pops up, they confirm), run this one line:
+> ```sql
+> alter table users add column if not exists bank_code text, add column if not exists account_name text, add column if not exists payout_verified_at timestamptz;
+> ```
+> This uses the same `FLW_SECRET_KEY` as above. Once it's on, a customer can't withdraw until their account is confirmed, so the money always goes to a real, checked name. (If Flutterwave isn't set up, withdrawals keep working the old way.)
 > For **deleting a message so staff and the customer no longer see it, but the admin still can** (and for **pinning a message to the top of a chat**), run this one line:
 > ```sql
 > alter table messages add column if not exists deleted_at timestamptz, add column if not exists pinned_at timestamptz; alter table team_messages add column if not exists deleted_at timestamptz, add column if not exists pinned_at timestamptz;

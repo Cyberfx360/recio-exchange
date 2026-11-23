@@ -31,6 +31,7 @@ function userRow(r) {
   return {
     id: r.id, name: r.name, phone: r.phone,
     accountNumber: r.account_number, bankName: r.bank_name,
+    bankCode: r.bank_code || null, accountName: r.account_name || null, payoutVerifiedAt: r.payout_verified_at || null,
     passwordHash: r.password_hash, status: r.status, email: r.email == null ? null : r.email,
     balance: Number(r.balance), createdAt: r.created_at
   };
@@ -71,6 +72,20 @@ async function updateUser(id, fields) {
   if (fields.accountNumber !== undefined) patch.account_number = fields.accountNumber;
   const { error } = await supabase.from('users').update(patch).eq('id', id);
   if (error) throw error;
+  // Changing the raw account details un-verifies the payout account (name must be looked up again).
+  if (fields.accountNumber !== undefined || fields.bankName !== undefined) {
+    await supabase.from('users').update({ account_name: null, payout_verified_at: null }).eq('id', id).then(() => {}, () => {});
+  }
+}
+// True once the verified-payout columns have been added (so the server only enforces verification after the SQL is run).
+async function payoutColsReady() { const { error } = await supabase.from('users').select('payout_verified_at').limit(1); return !error; }
+// Store a payout account whose real name was just confirmed via the bank.
+async function setPayoutVerified(id, f) {
+  const { error } = await supabase.from('users').update({
+    account_number: f.accountNumber, bank_name: f.bankName, bank_code: f.bankCode,
+    account_name: f.accountName, payout_verified_at: new Date().toISOString()
+  }).eq('id', id);
+  if (error) { if (/bank_code|account_name|payout_verified_at/.test(String(error.message))) { const e = new Error('payout columns missing'); e.code = 'PAYOUT_COLS'; throw e; } throw error; }
 }
 // Clears rows in a table that may not exist on older setups (so a missing table never blocks a delete).
 async function clearOptional(table, column, id, setNull) {
@@ -1221,7 +1236,7 @@ module.exports = {
   getPushKeys, savePushKeys, savePushSubscription, deletePushSubscription, listPushSubscriptions,
   addNotification, listNotificationsForUser,
   createEscalation, findEscalationById, listEscalations, resolveEscalation,
-  createUser, findUserByPhone, findUserById, listUsers, setUserStatus, updateUser, deleteUser, addToBalance,
+  createUser, findUserByPhone, findUserById, listUsers, setUserStatus, updateUser, setPayoutVerified, payoutColsReady, deleteUser, addToBalance,
   createStaff, findStaffByPhone, findStaffById, listStaff, setStaffStatus, deleteStaff,
   listAccountsPublic, listAccountsForAmount, listAllAccounts, listAccountsByStaff, findAccountById, createAccount, updateAccount, deleteAccount,
   listApprovedTradeTotals, createTrade, findTradeById, findTradesByCardCode, listTradesForUser, listTradesForStaff, listAllTrades, updateTradeStatus, setSettlement,

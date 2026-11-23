@@ -372,7 +372,8 @@ app.get('/api/me', async (req, res) => {
     if (!user) return res.json({ loggedIn: false });
     res.json({
       loggedIn: true, name: user.name, phone: user.phone, accountNumber: user.accountNumber,
-      bankName: user.bankName, status: user.status, balance: user.balance,
+      bankName: user.bankName, bankCode: user.bankCode, accountName: user.accountName, payoutVerifiedAt: user.payoutVerifiedAt,
+      status: user.status, balance: user.balance,
       email: user.email, needsPin: (await pinReady()) && user.email === null
     });
   } catch (err) {
@@ -400,6 +401,56 @@ app.put('/api/me', requireUser, async (req, res) => {
     console.error('Update me error:', err);
     res.status(500).json({ error: 'Could not update your details.' });
   }
+});
+
+// --- Verified payout accounts: look up the REAL account-holder name from the bank ---
+let PAYOUT_COLS = { at: 0, ok: false };
+async function payoutColsReady() {
+  if (Date.now() - PAYOUT_COLS.at < 300000) return PAYOUT_COLS.ok;
+  const ok = await store.payoutColsReady().catch(() => false);
+  PAYOUT_COLS = { at: Date.now(), ok };
+  return ok;
+}
+const resolvedName = r => (r && (r.account_name || r.accountName)) || '';
+app.get('/api/banks', requireUser, async (req, res) => {
+  try {
+    if (!flw.configured()) return res.json({ configured: false, banks: [] });
+    const list = await flw.banks();
+    res.json({ configured: true, banks: list.map(b => ({ code: String(b.code), name: b.name })).sort((a, b) => a.name.localeCompare(b.name)) });
+  } catch (err) { console.error('Banks error:', err.message); res.status(502).json({ error: 'Could not load the bank list. Try again.' }); }
+});
+app.post('/api/account/resolve', requireUser, async (req, res) => {
+  try {
+    if (!flw.configured()) return res.status(400).json({ error: 'Account checks are not available yet.' });
+    if (ipFail('resolve', req, 25, 1)) return res.status(429).json({ error: 'Too many account checks. Wait a minute and try again.' });
+    const accountNumber = String((req.body || {}).accountNumber || '').replace(/\D/g, '');
+    const bankCode = String((req.body || {}).bankCode || '').trim();
+    if (accountNumber.length < 10 || !bankCode) return res.status(400).json({ error: 'Enter a 10-digit account number and pick your bank.' });
+    let r; try { r = await flw.resolveAccount(accountNumber, bankCode); } catch (e) { return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' }); }
+    const name = resolvedName(r);
+    if (!name) return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' });
+    res.json({ accountName: name });
+  } catch (err) { console.error('Resolve error:', err.message); res.status(500).json({ error: 'Could not check that account.' }); }
+});
+app.post('/api/me/payout', requireUser, async (req, res) => {
+  try {
+    if (!flw.configured()) return res.status(400).json({ error: 'Account verification is not available yet.' });
+    const accountNumber = String((req.body || {}).accountNumber || '').replace(/\D/g, '');
+    const bankCode = String((req.body || {}).bankCode || '').trim();
+    if (accountNumber.length < 10 || !bankCode) return res.status(400).json({ error: 'Enter a 10-digit account number and pick your bank.' });
+    const bankList = await flw.banks().catch(() => []);
+    const bank = bankList.find(b => String(b.code) === bankCode);
+    if (!bank) return res.status(400).json({ error: 'Pick your bank from the list.' });
+    let r; try { r = await flw.resolveAccount(accountNumber, bankCode); } catch (e) { return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' }); }
+    const name = resolvedName(r);
+    if (!name) return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' });
+    const before = await store.findUserById(req.session.userId);
+    try { await store.setPayoutVerified(req.session.userId, { accountNumber, bankCode, bankName: bank.name, accountName: name }); }
+    catch (e) { if (e.code === 'PAYOUT_COLS') return res.status(500).json({ error: 'Run the verified-payout SQL from the README in Supabase first.' }); throw e; }
+    PAYOUT_COLS.ok = true;
+    if (before && before.accountNumber !== accountNumber) csSet('bank:' + req.session.userId, Date.now(), 0); // a real account change arms the auto-pay guard
+    res.json({ ok: true, accountName: name, bankName: bank.name, accountNumber });
+  } catch (err) { console.error('Payout save error:', err.message); res.status(500).json({ error: 'Could not save your account.' }); }
 });
 
 // ============================================================
@@ -932,6 +983,10 @@ app.post('/api/withdrawals', requireUser, requireApprovedUser, moneyLock(req => 
     const amount = Math.round(Number((req.body || {}).amount) * 100) / 100;
     if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Enter a valid amount.' });
     const user = await store.findUserById(req.user.id);
+    // Make sure we're paying a real, confirmed bank account (the name was looked up from the bank).
+    if (flw.configured() && await payoutColsReady() && !user.payoutVerifiedAt) {
+      return res.status(403).json({ needVerify: true, error: 'Confirm your withdrawal account first, so your money goes to the right name.' });
+    }
     // Hold the funds first; this refuses if the balance is not enough (even with many requests at once).
     const held = await store.addToBalance(user.id, -amount, { noNegative: true });
     if (!held.ok) return res.status(400).json({ error: 'You cannot withdraw more than your balance.' });
@@ -1757,6 +1812,7 @@ app.get('/api/admin/withdrawals', requireAdmin, async (req, res) => {
       ...w,
       userName: (users.find(u => u.id === w.userId) || {}).name || 'Unknown',
       userPhone: (users.find(u => u.id === w.userId) || {}).phone || '',
+      payoutName: (users.find(u => u.id === w.userId) || {}).accountName || null,   // real name confirmed from the bank
       bankChangedAt: csGet('bank:' + w.userId) || null   // the customer changed their payout account at this time
     }));
     res.json({ withdrawals: enriched });
@@ -1811,11 +1867,16 @@ app.post('/api/admin/withdrawals/:id/autopay', requireAdmin, ADMIN_MONEY, async 
     if (changedAt && Date.now() - changedAt < 24 * 3600 * 1000) return res.status(400).json({ error: 'This customer changed their payout account in the last 24 hours. Check it, then pay manually.' });
     const user = await store.findUserById(w.userId);
     const acctNo = (user && user.accountNumber) || w.payoutAccount;
-    const bankNm = (user && user.bankName) || w.payoutBank;
-    if (!acctNo || !bankNm) return res.status(400).json({ error: 'This customer has no saved payout account. Pay manually.' });
+    if (!acctNo) return res.status(400).json({ error: 'This customer has no saved payout account. Pay manually.' });
     let bank;
-    try { bank = await flw.bankCode(bankNm); } catch (e) { return res.status(502).json({ error: 'Could not reach Flutterwave to check the bank. Try again, or pay manually.' }); }
-    if (!bank) return res.status(400).json({ error: `Could not match the bank "${bankNm}" automatically. Pay this one manually.` });
+    if (user && user.payoutVerifiedAt && user.bankCode) {
+      bank = { code: user.bankCode, name: user.bankName };   // already confirmed against the bank
+    } else {
+      const bankNm = (user && user.bankName) || w.payoutBank;
+      if (!bankNm) return res.status(400).json({ error: 'This customer has no saved payout account. Pay manually.' });
+      try { bank = await flw.bankCode(bankNm); } catch (e) { return res.status(502).json({ error: 'Could not reach Flutterwave to check the bank. Try again, or pay manually.' }); }
+      if (!bank) return res.status(400).json({ error: `Could not match the bank "${bankNm}" automatically. Pay this one manually.` });
+    }
     try { await flw.resolveAccount(acctNo, bank.code); } catch (e) { return res.status(400).json({ error: 'Flutterwave could not verify that account number. Check it, or pay manually.' }); }
     const ref = 'wd_' + String(w.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20) + '_' + Date.now().toString(36);
     let t;
