@@ -654,6 +654,9 @@ const glogo=(c,sm)=>{const img=safeImg(c.image);return `<span class="gl" style="
 const gbest=c=>c.rows.reduce((a,r)=>r.rate>a.rate?r:a,c.rows[0]);
 const gTiers=r=>(r.tiers&&r.tiers.length)?r.tiers.map(t=>({from:+t.from||0,rate:+t.rate||0})):[{from:0,rate:+r.rate||0}];
 const rateFor=(r,v)=>{const ts=gTiers(r);let x=ts[0].rate;for(const t of ts)if(v>=t.from)x=t.rate;return x};
+// A prefix with its own rate bands sets the rate; otherwise the card type's bands do.
+const gPfx=(c,digits)=>(c.prefixes||[]).find(p=>p.digits===digits);
+const gRateC=(c,r,digits,v)=>{const p=gPfx(c,digits);return (p&&p.tiers&&p.tiers.some(t=>+t.rate>0))?rateFor(p,v):rateFor(r,v)};
 const rateHi=r=>Math.max(...gTiers(r).map(t=>t.rate));
 const gLive=r=>gTiers(r).filter(t=>t.rate>0);
 const tieredRow=r=>gLive(r).length>1;
@@ -889,13 +892,13 @@ giftSell:()=>{const g=S.gs,c=(S.gcards||[]).find(x=>x.id===g.cardId);if(!c)retur
   <div class="card sum" style="margin:0 calc(var(--m) * -1);border-radius:20px;padding:16px 18px">
    <div><b style="font-family:var(--body);font-size:15px;font-weight:600">Card summary</b>${glogo(c,1)}</div>
    <div><span>Card value</span><b id="g-val">${esc(r.cur)}${amt(v)}</b></div>
-   <div><span>You get about</span><b id="g-get" style="color:#0E9F6E">${naira(v*rateFor(r,v))}</b></div>
-   <div><span>Rate</span><b id="g-rate" style="font-size:15px">${naira0(rateFor(r,v))} per ${esc(r.cur)}1</b></div></div>
+   <div><span>You get about</span><b id="g-get" style="color:#0E9F6E">${naira(v*gRateC(c,r,g.prefix,v))}</b></div>
+   <div><span>Rate</span><b id="g-rate" style="font-size:15px">${naira0(gRateC(c,r,g.prefix,v))} per ${esc(r.cur)}1</b></div></div>
   <form data-form="giftSell" novalidate>
   <label class="lb" style="margin-top:18px;font-size:14px">Card type</label>
   <div class="gtp" role="radiogroup" aria-label="Card type">${c.rows.map(x=>`<button type="button" role="radio" aria-checked="${x.id===r.id}" class="${x.id===r.id?'on':''}" data-act="gRow" data-id="${esc(x.id)}">${esc(glabel(x))}</button>`).join('')}</div>
   ${(c.prefixes&&c.prefixes.length)?`<label class="lb" style="margin-top:16px;font-size:14px">Card prefix <span style="font-weight:400;color:var(--muted)">— the numbers your card starts with</span></label>
-  <div class="gtp" role="radiogroup" aria-label="Card prefix">${c.prefixes.map(p=>`<button type="button" role="radio" aria-checked="${g.prefix===p.digits}" class="${g.prefix===p.digits?'on':''}" data-act="gPrefix" data-id="${esc(p.digits)}" style="font-family:var(--mono)">${flag(p.country)} ${esc(p.digits)}***</button>`).join('')}</div>`:''}
+  <div class="gtp" role="radiogroup" aria-label="Card prefix">${c.prefixes.map(p=>{const pr=gRateC(c,r,p.digits,v>0?v:0);return `<button type="button" role="radio" aria-checked="${g.prefix===p.digits}" class="${g.prefix===p.digits?'on':''}" data-act="gPrefix" data-id="${esc(p.digits)}" style="font-family:var(--mono)">${flag(p.country)} ${esc(p.digits)}***${pr?`<small style="display:block;font-family:var(--body);font-weight:700;color:var(--blue);margin-top:3px">${naira0(pr)}/${esc(r.cur)}1</small>`:''}</button>`}).join('')}</div>`:''}
   <label class="lb" style="margin-top:16px;font-size:14px" for="g-v">Value on the card</label>
   <div class="field sm"><b style="color:var(--blue)">${esc(r.cur)}</b><input id="g-v" inputmode="decimal" placeholder="e.g. 100" value="${esc(g.value)}"></div>
   ${(()=>{const w=gLimMsg(r,v,g.value!=='');return `<small id="g-lim" style="display:${w.msg?'block':'none'};margin-top:6px;font-size:12.5px;font-weight:${w.bad?'600':'400'};color:${w.bad?'#B91C1C':'var(--muted)'}">${esc(w.msg)}</small>`})()}
@@ -1371,7 +1374,7 @@ document.addEventListener('input',e=>{const t=e.target;
   if(t.id==='s-a'){S.send.amount=t.value;$('#s-send').textContent=amt(num(t.value))}
   if(t.id==='g-rc'){S.grc=t.value;if(S.gchk){S.gchk=null;const k=$('.gchk');if(k)k.remove()}}
   if(t.id==='g-v'||t.id==='g-code'){const g=S.gs;if(t.id==='g-code'){g.code=t.value;return}g.value=t.value;const c=(S.gcards||[]).find(x=>x.id===g.cardId),r=c&&c.rows.find(x=>x.id===g.rowId);
-    if(r){const vv=num(t.value);$('#g-val').textContent=r.cur+amt(vv);$('#g-get').textContent=naira(vv*rateFor(r,vv));const gr=$('#g-rate');if(gr)gr.textContent=naira0(rateFor(r,vv))+' per '+r.cur+'1';
+    if(r){const vv=num(t.value),rt=gRateC(c,r,g.prefix,vv);$('#g-val').textContent=r.cur+amt(vv);$('#g-get').textContent=naira(vv*rt);const gr=$('#g-rate');if(gr)gr.textContent=naira0(rt)+' per '+r.cur+'1';
       const w=gLimMsg(r,vv,t.value!==''),el=$('#g-lim'),sb=$('#g-submit');if(el){el.textContent=w.msg;el.style.display=w.msg?'block':'none';el.style.color=w.bad?'#B91C1C':'var(--muted)';el.style.fontWeight=w.bad?'600':'400'}if(sb){sb.disabled=w.bad;sb.style.opacity=w.bad?'.5':''}}}
   if(t.id==='w-a'){const v=num(t.value);$('#w-amt').textContent=naira(v);$('#w-tot').textContent=naira(v)}
   if(t.id==='acct-q'){const q=t.value.toLowerCase();document.querySelectorAll('#acct-list .acct').forEach(el=>el.style.display=el.dataset.k.includes(q)?'':'none')}
