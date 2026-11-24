@@ -2591,22 +2591,38 @@ function giftRows(list) {
 }
 // A card value gets the rate of the band with the largest "from" that is <= the value. A plain rate = one band from 0.
 const rowTiers = row => (row.tiers && row.tiers.length) ? row.tiers.map(t => ({ from: Number(t.from) || 0, rate: Number(t.rate) || 0 })) : [{ from: 0, rate: Number(row.rate) || 0 }];
-const rateFor = (row, value) => { const ts = rowTiers(row); let r = ts[0].rate; for (const t of ts) if (value >= t.from) r = t.rate; return r; };
+// The rate a set of bands gives a card of this value: the band with the largest "from" that is <= value.
+const tiersRate = (tiers, value) => { const ts = (Array.isArray(tiers) && tiers.length ? tiers : [{ from: 0, rate: 0 }]).map(t => ({ from: Number(t.from) || 0, rate: Number(t.rate) || 0 })).sort((a, b) => a.from - b.from); let r = ts[0].rate; for (const t of ts) if (value >= t.from) r = t.rate; return r; };
+const rateFor = (row, value) => tiersRate(rowTiers(row), value);
 const rowHasRate = row => rowTiers(row).some(t => t.rate > 0);
 const rowTopRate = row => Math.max(...rowTiers(row).map(t => t.rate));
 // A short signature of a card's rate bands, to tell whether the admin's save actually changed any rate.
-const rateSig = card => (card && card.rows ? card.rows.map(r => `${r.id}:${rowTiers(r).map(t => t.from + '@' + t.rate).join(',')}`).join('|') : '');
-// Card number prefixes a customer picks from (Visa/Mastercard/Vanilla BINs): { digits, country }.
+const rateSig = card => (card && card.rows ? card.rows.map(r => `${r.id}:${rowTiers(r).map(t => t.from + '@' + t.rate).join(',')}`).join('|') : '')
+  + '::' + ((card && Array.isArray(card.prefixes) ? card.prefixes : []).map(p => `${p.digits}:${(Array.isArray(p.tiers) ? p.tiers : []).map(t => (Number(t.from) || 0) + '@' + (Number(t.rate) || 0)).join(',')}`).join('|'));
+// Card number prefixes a customer picks from (Visa/Mastercard/Vanilla BINs): { digits, country, tiers }.
+// Each prefix can carry its own rate bands; the chosen prefix's bands override the type's bands.
 function giftPrefixes(list) {
   if (!Array.isArray(list)) return [];
   const out = [];
   for (const p of list.slice(0, 10)) {
     const digits = String((p && p.digits) || '').replace(/[^0-9]/g, '').slice(0, 10);
     const country = (String((p && p.country) || 'US').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2)) || 'US';
-    if (digits.length >= 2 && !out.some(x => x.digits === digits)) out.push({ digits, country });
+    if (digits.length < 2 || out.some(x => x.digits === digits)) continue;
+    const src = Array.isArray(p && p.tiers) ? p.tiers.slice(0, 8) : [];
+    const tiers = [];
+    for (const t of src) {
+      const from = Number(t && t.from) || 0, rate = Number(t && t.rate) || 0;
+      if ([from, rate].every(n => Number.isFinite(n) && n >= 0 && n < 1e7)) tiers.push({ from, rate });
+    }
+    tiers.sort((a, b) => a.from - b.from);
+    out.push({ digits, country, tiers });
   }
   return out;
 }
+// True when a prefix defines at least one real (non-zero) rate of its own.
+const pfxHasRate = p => Array.isArray(p && p.tiers) && p.tiers.some(t => Number(t.rate) > 0);
+// Highest rate any prefix on this card offers (0 if none carry their own rate).
+const cardPrefixTop = c => Math.max(0, ...((Array.isArray(c && c.prefixes) ? c.prefixes : []).flatMap(p => (Array.isArray(p.tiers) ? p.tiers : []).map(t => Number(t.rate) || 0))));
 // Cards are read on every customer visit, so they are kept in memory and refreshed when the admin changes one.
 let GIFT_CACHE = null;
 async function giftCards() {
@@ -2633,8 +2649,12 @@ async function giftSeed() {
   }
   csSet('gift:seeded', Date.now(), 0); GIFT_CACHE = null;
 }
-const giftPublic = c => ({ id: c.id, name: c.name, image: c.image, note: c.note, prefixes: Array.isArray(c.prefixes) ? c.prefixes : [],
-  rows: c.rows.filter(rowHasRate).map(r => ({ id: r.id, country: r.country, kind: r.kind, cur: r.cur, min: Number(r.min) || 0, max: Number(r.max) || 0, tiers: rowTiers(r), rate: rowTopRate(r) })) });
+const giftPublic = c => { const ptop = cardPrefixTop(c);
+  return { id: c.id, name: c.name, image: c.image, note: c.note,
+    prefixes: (Array.isArray(c.prefixes) ? c.prefixes : []).map(p => ({ digits: p.digits, country: p.country, tiers: Array.isArray(p.tiers) ? p.tiers : [], rate: pfxHasRate(p) ? Math.max(...p.tiers.map(t => Number(t.rate) || 0)) : 0 })),
+    // A type shows if it sets a rate itself, or if a prefix on this card does. Its headline rate reflects whichever is higher.
+    rows: c.rows.filter(r => rowHasRate(r) || ptop > 0).map(r => ({ id: r.id, country: r.country, kind: r.kind, cur: r.cur, min: Number(r.min) || 0, max: Number(r.max) || 0, tiers: rowTiers(r), rate: Math.max(rowTopRate(r), ptop) })) };
+};
 const codeKey = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 app.get('/api/gift/cards', async (req, res) => {
@@ -2672,12 +2692,15 @@ app.post('/api/gift/trades', requireUser, requireApprovedUser, moneyLock(req => 
       prefix = card.prefixes.find(p => p.digits === chosen) || null;
       if (!prefix) return res.status(400).json({ error: 'Choose which number your card starts with (card prefix).' });
     }
-    const rate = rateFor(row, value), est = Math.round(value * rate * 100) / 100;
+    // A prefix with its own rate bands sets the rate; otherwise the card type's bands do.
+    const rate = pfxHasRate(prefix) ? tiersRate(prefix.tiers, value) : rateFor(row, value);
+    const est = Math.round(value * rate * 100) / 100;
+    const prefixTag = prefix ? { digits: prefix.digits, country: prefix.country } : null;
     const trade = await store.createTrade({
       userId: req.user.id, accountId: null, staffId: null, intendedAmount: value, receiptImage: images[0] || '',
       accountNumberUsed: label, accountTitleUsed: card.name + ' gift card',
       userPayoutAccount: req.user.accountNumber, userPayoutBank: req.user.bankName,
-      card: { cardId: card.id, name: card.name, rowId: row.id, country: row.country, kind: row.kind, cur: row.cur, rate, value, est, code, codeKey: key || null, images: images.slice(1), prefix }
+      card: { cardId: card.id, name: card.name, rowId: row.id, country: row.country, kind: row.kind, cur: row.cur, rate, value, est, code, codeKey: key || null, images: images.slice(1), prefix: prefixTag }
     });
     alertTeam({ admin: true }, 'New gift card', `${req.user.name} sent a ${card.name} gift card (${label}) worth ${row.cur}${plain(value)}, about ₦${plain(est)}.`, { admin: 'receipts' });
     res.json({ ok: true, trade });
