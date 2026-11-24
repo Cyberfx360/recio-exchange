@@ -242,6 +242,11 @@ a.role{display:flex}
 .feed>i{width:8px;height:8px;border-radius:50%;background:var(--blue);flex:none}
 .feed b{display:block;font-size:14px;font-weight:600}.feed small{font-size:12px;color:#4B5563}.feed em{font-style:normal;font-weight:700;color:var(--blue);font-size:14px;white-space:nowrap}
 .write{display:flex;gap:6px;align-items:center;background:#EAF1FE;border:1px solid #BFD3F8;color:var(--blue);font-weight:700;font-size:14px;padding:7px 14px;border-radius:999px}
+.bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--w);background:rgba(255,255,255,.96);backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;z-index:60;padding-bottom:env(safe-area-inset-bottom)}
+.bnav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 2px 8px;font-size:10.5px;font-weight:600;color:var(--muted);position:relative}
+.bnav a.on{color:var(--blue)}
+.bnav a .ic{display:grid;place-items:center}
+.bnav a .dot{position:absolute;top:3px;left:calc(50% + 6px);min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--red);color:#fff;font:700 9.5px var(--body);font-style:normal;display:grid;place-items:center}
 .av{width:40px;height:40px;border-radius:50%;background:#EAF1FE;color:var(--blue);display:grid;place-items:center;font-family:var(--head);font-weight:700;font-size:14px;flex:none}
 .av.sm{width:30px;height:30px;font-size:11px}.av.xl{width:76px;height:76px;font-size:26px;margin:0 auto}.av.red{background:#FDE8E8;color:var(--red)}
 .badge.xs{font-size:10px;padding:3px 8px;border-radius:6px;letter-spacing:.02em}
@@ -731,8 +736,8 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
  const alertsOn=S.users.filter(u=>u.alerts>0).length;
  const cnt={staff:S.staff.filter(x=>x.status==='pending').length,accounts:S.accounts.filter(a=>!a.active).length,chats:S.convos.filter(c=>c.unread).length+S.escs.filter(x=>x.status==='open').length+fwNew()+(S.teamUnread||0),
    receipts:act.length,wds:S.wds.filter(w=>w.status==='pending').length+S.loans.filter(l=>l.status==='pending').length};
- const primary=[['receipts','file','Receipts'],['wds','dl','Withdrawals'],['accounts','users','Accounts'],['chats','help','Help &amp; Support']];
- const more=[['staff','users','Manage Staff'],['users','users','Manage Users'],['rules','gear','Edit Rules'],['rates','trend','Edit Rates']];
+ const primary=[['receipts','file','Receipts'],['wds','dl','Withdrawals'],['accounts','bank','Accounts'],['chats','help','Help &amp; Support']];
+ const more=[['staff','shield','Manage Staff'],['users','users','Manage Users'],['rules','gear','Edit Rules'],['rates','trend','Edit Rates']];
  return `<section class="scr">${hd('Admin Panel','AzaPlug Executive Control','',`<button class="write" data-go="announce">${I('pen','style="width:15px;height:15px"')}Write</button>`)}
  <div class="bd">${alertCard()}<div class="g2">
   <div class="stat"><small>Total Users</small><b>${n0(S.users.length)}</b><i style="color:var(--green)">+${week} this week</i></div>
@@ -1257,7 +1262,12 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-pin]
 let poll=null;
 const typing=()=>document.activeElement&&document.activeElement.matches('input,textarea');
 const inChat=()=>S.route==='chat'||S.route==='staffChat';
-function render(){$('#app').innerHTML=V[S.route]();if(inChat())chatBottom();if(S.route==='tfa')tfaQR()}
+const NAVBAR=new Set(['dash','receipts','wds','chats','accounts','users','staff','rates','rules','gift','health','chal','giveaway','console','inbox','team','staffChats']);
+const NAV_TABS=[['dash','home','Home'],['receipts','file','Receipts'],['wds','dl','Withdraw'],['chats','help','Support'],['accounts','bank','Accounts']];
+function bottomNav(){if(!NAVBAR.has(S.route))return '';
+  const cnt={receipts:(S.trades||[]).filter(pending).length,wds:(S.wds||[]).filter(w=>w.status==='pending').length+(S.loans||[]).filter(l=>l.status==='pending').length,chats:(S.convos||[]).filter(c=>c.unread).length+(S.escs||[]).filter(x=>x.status==='open').length+fwNew()+(S.teamUnread||0)};
+  return `<nav class="bnav">${NAV_TABS.map(t=>`<a data-go="${t[0]}" class="${S.route===t[0]?'on':''}"><span class="ic">${I(t[1],'style="width:23px;height:23px"')}</span>${t[2]}${cnt[t[0]]?`<i class="dot" aria-label="${cnt[t[0]]} waiting">${cnt[t[0]]}</i>`:''}</a>`).join('')}</nav>`}
+function render(){const nav=bottomNav();$('#app').innerHTML=V[S.route]()+nav;$('#app').style.paddingBottom=nav?'74px':'';if(inChat())chatBottom();if(S.route==='tfa')tfaQR()}
 function tfaQR(){const el=$('#tfqr'),t=S.tfa;if(!el||!t||!t.uri)return;const make=()=>{try{const q=qrcode(0,'M');q.addData(t.uri);q.make();el.innerHTML=q.createSvgTag({scalable:true})}catch(e){}};
   if(window.qrcode)return make();const sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';sc.onload=make;document.head.appendChild(sc)}
 function go(r,o,pop){
