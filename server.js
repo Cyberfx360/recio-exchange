@@ -322,6 +322,7 @@ app.post('/api/register', async (req, res) => {
     if (!name || !phone || !acctNo || !password || (verifyOn ? !bankCode : !bankName)) {
       return res.status(400).json({ error: 'All fields are required.' });
     }
+    if (acctNo.length < 10 || acctNo.length > 11) return res.status(400).json({ error: 'Enter a valid 10-digit account number.' });
     if (badPin(password)) return res.status(400).json({ error: badPin(password) });
     const sp = signupProblem(req, req.body); if (sp) return res.status(400).json({ error: sp });
     if (await store.findUserByPhone(String(phone).trim())) {
@@ -439,7 +440,7 @@ app.post('/api/account/resolve', async (req, res) => {   // name enquiry; usable
     if (ipFail('resolve', req, 25, 1)) return res.status(429).json({ error: 'Too many account checks. Wait a minute and try again.' });
     const accountNumber = String((req.body || {}).accountNumber || '').replace(/\D/g, '');
     const bankCode = String((req.body || {}).bankCode || '').trim();
-    if (accountNumber.length < 10 || !bankCode) return res.status(400).json({ error: 'Enter a 10-digit account number and pick your bank.' });
+    if (accountNumber.length < 10 || accountNumber.length > 11 || !bankCode) return res.status(400).json({ error: 'Enter a 10-digit account number and pick your bank.' });
     let r; try { r = await flw.resolveAccount(accountNumber, bankCode); } catch (e) { return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' }); }
     const name = resolvedName(r);
     if (!name) return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' });
@@ -451,7 +452,7 @@ app.post('/api/me/payout', requireUser, async (req, res) => {
     if (!flw.configured()) return res.status(400).json({ error: 'Account verification is not available yet.' });
     const accountNumber = String((req.body || {}).accountNumber || '').replace(/\D/g, '');
     const bankCode = String((req.body || {}).bankCode || '').trim();
-    if (accountNumber.length < 10 || !bankCode) return res.status(400).json({ error: 'Enter a 10-digit account number and pick your bank.' });
+    if (accountNumber.length < 10 || accountNumber.length > 11 || !bankCode) return res.status(400).json({ error: 'Enter a 10-digit account number and pick your bank.' });
     const bankList = await flw.banks().catch(() => []);
     const bank = bankList.find(b => String(b.code) === bankCode);
     if (!bank) return res.status(400).json({ error: 'Pick your bank from the list.' });
