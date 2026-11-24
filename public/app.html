@@ -316,6 +316,8 @@ a.role{display:flex}
 @keyframes fpp{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.35)}50%{box-shadow:0 0 0 18px rgba(255,255,255,0)}}
 @media (prefers-reduced-motion:reduce){.ax.lock .fp{animation:none}}
 .cfm-b .ok{background:var(--blue);color:#fff}
+.cfm-b.slipn{position:relative}.cfm-b.slipn b{display:block;padding-right:28px}
+.cfm-b.slipn .nx{position:absolute;top:12px;right:12px;width:30px;height:30px;flex:none;border-radius:50%;background:#F1F3F7;font-size:18px;line-height:1;color:#6B7280;display:grid;place-items:center;padding:0}
 /* ---------- Fits every screen: phones use the full width, tablets and computers get a wider centred panel ---------- */
 :root{--w:100%}
 @media (min-width:600px){:root{--w:600px}#app{box-shadow:0 0 0 1px rgba(17,24,39,.05),0 30px 80px -30px rgba(17,24,39,.35)}body{background:linear-gradient(180deg,#E6EAF2,#D9E0EE) fixed}}
@@ -1247,6 +1249,12 @@ const mdBtn=m=>`<button type="button" class="md" data-md="${esc(m.id)}" aria-lab
 function uiConfirm(title,text,ok){return new Promise(res=>{const d=document.createElement('div');d.className='cfm';
   d.innerHTML=`<div class="cfm-b" role="alertdialog" aria-modal="true" aria-label="${esc(title)}"><b>${esc(title)}</b><p>${esc(text)}</p><div><button type="button" data-k="0">Cancel</button><button type="button" data-k="1" class="dg">${esc(ok)}</button></div></div>`;
   d.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(!b&&e.target!==d)return;d.remove();res(!!b&&b.dataset.k==='1')});document.body.appendChild(d)})}
+// Informational warning pop-up. withX adds a top X and lets the backdrop close it; otherwise only Okay dismisses.
+const SLIP_DEFAULT="Please note: we confirm every slip manually, so approval can take up to 2–3 days. Keep this in mind before you use an account or send a receipt.";
+const slipNotice=()=>(S.me&&S.me.slipNotice)||SLIP_DEFAULT;
+function uiNotice(text,withX){return new Promise(res=>{const d=document.createElement('div');d.className='cfm';
+  d.innerHTML=`<div class="cfm-b slipn" role="alertdialog" aria-modal="true" aria-label="Please note">${withX?'<button type="button" class="nx" data-k="x" aria-label="Close">×</button>':''}<b>⚠️ Please note</b><p>${esc(text)}</p><div><button type="button" data-k="1" class="ok">Okay</button></div></div>`;
+  d.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(b){d.remove();res();return}if(withX&&e.target===d){d.remove();res()}});document.body.appendChild(d)})}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-md]');if(!b)return;const id=b.dataset.md;
   if(!await uiConfirm('Delete this message?','It will be removed from the chat for everyone.','Delete'))return;
   try{await api('DELETE',MD_URL(id));if(String(VN.id)===id)vnStop();S.chat=S.chat.filter(m=>String(m.id)!==id);
@@ -1300,6 +1308,7 @@ function go(r,o,pop){
   if(r!=='rates')S.rateFrom=r;
   if(r==='trade'||r==='home'||r==='history'||r==='withdraw'||r==='profile')Promise.all([loadMe(),loadAll()]).then(()=>{if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
   if(r==='accounts'||r==='send'||r==='rates')api('GET','/api/accounts').then(d=>{S.accounts=d.accounts||[];S.accLoaded=true;if(S.route===r&&!document.activeElement.matches('input,select'))render()}).catch(()=>{});
+  if(r==='accounts'&&!pop)uiNotice(slipNotice(),true);
   if(r==='gift'||r==='giftSell'||r==='rates'||r==='home')loadGift();
   if(r==='gift'&&S.giftTab==='friend')loadGiftMine();
   if(r==='crypto'||r==='cryptoSend'||r==='rates')api('GET','/api/crypto-rates').then(d=>{CRYPTO.BTC.rate=d.btc||null;CRYPTO.USDT.rate=d.usdt||null;if(S.route===r&&!(document.activeElement&&document.activeElement.matches('input')))render();else{const p=$('#cs-get');if(p)p.textContent=csGet()}}).catch(()=>{});
@@ -1384,6 +1393,7 @@ const FORMS={
     await api('POST','/api/crypto/trades',{coin:S.coin,usdAmount,receiptImage:S.cimg,address:CRYPTO[S.coin].address});S.cusd='';S.cimg=null;await loadAll();toast('Receipt sent to the admin');go('history')},
   async send(){const intendedAmount=num(S.send.amount);
     if(!intendedAmount)throw new Error('Enter the amount you sent');if(!S.send.image)throw new Error('Add a photo of your receipt');
+    await uiNotice(slipNotice(),false);
     const d=await api('POST','/api/trades',{accountId:S.send.accountId,intendedAmount,receiptImage:S.send.image});
     S.slip=d.trade;S.send={title:'',accountId:'',amount:'',image:null};go('slip')},
   async giftSell(){const g=S.gs,c=(S.gcards||[]).find(x=>x.id===g.cardId),r=c&&c.rows.find(x=>x.id===g.rowId);if(!r)throw new Error('Choose the card type');

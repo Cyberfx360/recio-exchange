@@ -496,6 +496,8 @@ async function setSettlement(id, screenshot) {
 // SETTINGS (single row)
 // ============================================================
 
+// Default slip-delay notice shown to customers (editable by admin; falls back to this until a row/column exists).
+const SLIP_DEFAULT = 'Please note: we confirm every slip manually, so approval can take up to 2–3 days. Keep this in mind before you use an account or send a receipt.';
 async function getSettings() {
   const { data, error } = await supabase.from('settings').select('*').eq('id', 1).maybeSingle();
   if (error) throw error;
@@ -505,7 +507,7 @@ async function getSettings() {
       settlement_account: '', settlement_bank: '', max_deposit: 3000000
     };
     await supabase.from('settings').insert(defaults);
-    return { rulesText: defaults.rules_text, settlementAccount: '', settlementBank: '', maxDeposit: 3000000, btcRate: 0, usdtRate: 0 };
+    return { rulesText: defaults.rules_text, settlementAccount: '', settlementBank: '', maxDeposit: 3000000, btcRate: 0, usdtRate: 0, slipNotice: SLIP_DEFAULT };
   }
   return {
     rulesText: data.rules_text, settlementAccount: data.settlement_account,
@@ -515,7 +517,8 @@ async function getSettings() {
     challengeOn: data.challenge_on !== false,   // December tournament shown to customers (on until the admin turns it off)
     autopayOn: data.autopay_on === true,        // Flutterwave auto-pay for small withdrawals (OFF until the admin turns it on)
     autopayMax: Number(data.autopay_max) || 50000,       // biggest withdrawal that can be auto-paid (naira)
-    autopayDailyCap: Number(data.autopay_daily_cap) || 500000  // total auto-paid per day before it pauses to manual
+    autopayDailyCap: Number(data.autopay_daily_cap) || 500000,  // total auto-paid per day before it pauses to manual
+    slipNotice: data.slip_notice || SLIP_DEFAULT   // customer warning about manual slip confirmation delay (editable by admin)
   };
 }
 async function updateSettings(fields) {
@@ -531,8 +534,16 @@ async function updateSettings(fields) {
   if (fields.autopayOn !== undefined) patch.autopay_on = !!fields.autopayOn;
   if (fields.autopayMax !== undefined) patch.autopay_max = fields.autopayMax;
   if (fields.autopayDailyCap !== undefined) patch.autopay_daily_cap = fields.autopayDailyCap;
+  if (fields.slipNotice !== undefined) patch.slip_notice = String(fields.slipNotice).slice(0, 1000);
   if (!Object.keys(patch).length) return;
-  const { error } = await supabase.from('settings').update(patch).eq('id', 1);
+  let { error } = await supabase.from('settings').update(patch).eq('id', 1);
+  // slip_notice column may not exist yet — save everything else rather than failing the whole update.
+  if (error && /slip_notice/.test(error.message || '') && patch.slip_notice !== undefined) {
+    delete patch.slip_notice;
+    if (Object.keys(patch).length) ({ error } = await supabase.from('settings').update(patch).eq('id', 1));
+    if (error) throw error;
+    const e = new Error('SLIP_NOTICE_COL'); e.slipNoticeCol = true; throw e;
+  }
   if (error) throw error;
 }
 
