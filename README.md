@@ -107,6 +107,11 @@
 > alter table messages add column if not exists deleted_at timestamptz, add column if not exists pinned_at timestamptz; alter table team_messages add column if not exists deleted_at timestamptz, add column if not exists pinned_at timestamptz;
 > ```
 > (Until you run it, deletes still work — they just remove the message for everyone, the old way — and pinning shows a reminder to run the SQL.)
+> For **the admin controls** (System Health → your gains, the withdrawal charge, and maintenance mode), run this one line:
+> ```sql
+> alter table settings add column if not exists maintenance_on boolean not null default false, add column if not exists withdraw_charge_pct numeric not null default 0, add column if not exists gain_total numeric not null default 0, add column if not exists gain_acct_number text, add column if not exists gain_acct_bank text, add column if not exists gain_acct_code text, add column if not exists gain_acct_name text, add column if not exists charge_total numeric not null default 0, add column if not exists charge_auto_monthly boolean not null default false, add column if not exists charge_last_sweep text; alter table withdrawals add column if not exists payout_amount numeric;
+> ```
+> This turns on three things in **Admin → System Health**: (1) when you credit a trade the app asks **"what gain did you make?"** and adds it to your **Trade gains**, which you send to your own account with one tap; (2) a **withdrawal charge** — a % the customer pays on each withdrawal that you keep, building up as **Charge earnings** that are paid to your account **automatically every month** (or on demand); and (3) **maintenance mode**, a switch that logs every customer and staff member out until you turn it off. Set **My account** (the bank account your money is sent to) first — changing it later needs your admin password. Gains and charges are sent through the same payout provider as withdrawals (Paystack), and releasing them asks for your payout PIN. Until you run the SQL, everything else keeps working and System Health shows a one-line reminder.
 > That's it — no other schema changes, nothing else to touch in Supabase.
 
 > **Escalated chats (Admin Console)** need one more table. Run this once in the Supabase SQL Editor:

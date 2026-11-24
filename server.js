@@ -145,6 +145,21 @@ app.use('/api', (req, res, next) => {
   }
   next();
 });
+// Maintenance mode: when on, everyone but the admin is locked out. Cached so it costs ~nothing per request.
+let MAINT = { at: 0, on: false };
+async function maintenanceOn() {
+  if (Date.now() - MAINT.at < 15000) return MAINT.on;
+  const s = await store.getSettings().catch(() => ({}));
+  MAINT = { at: Date.now(), on: !!s.maintenanceOn };
+  return MAINT.on;
+}
+app.use('/api', async (req, res, next) => {
+  if (req.session.isAdmin) return next();                       // admin always gets through to turn it off
+  if (req.path === '/admin/login') return next();               // admin can still sign in during maintenance
+  try { if (await maintenanceOn()) return res.status(503).json({ maintenance: true, error: 'AZAPLUG is under maintenance. Please check back shortly.' }); }
+  catch (e) {}
+  next();
+});
 const teamChatKey = (a, b) => 't:' + [String(a), String(b)].sort().join(':');
 const STAFF_C = new Map();
 async function staffCached(id) {
@@ -401,12 +416,14 @@ app.get('/api/me', async (req, res) => {
     if (!req.session.userId) return res.json({ loggedIn: false });
     const user = await store.findUserById(req.session.userId);
     if (!user) return res.json({ loggedIn: false });
+    const st = await store.getSettings();
     res.json({
       loggedIn: true, name: user.name, phone: user.phone, accountNumber: user.accountNumber,
       bankName: user.bankName, bankCode: user.bankCode, accountName: user.accountName, payoutVerifiedAt: user.payoutVerifiedAt,
       status: user.status, balance: user.balance,
       email: user.email, needsPin: (await pinReady()) && user.email === null,
-      slipNotice: (await store.getSettings()).slipNotice
+      slipNotice: st.slipNotice,
+      withdrawChargePct: Number(st.withdrawChargePct) || 0   // % charge shown on the withdrawal screen
     });
   } catch (err) {
     console.error('Me error:', err);
@@ -444,6 +461,65 @@ async function payoutColsReady() {
   return ok;
 }
 const resolvedName = r => (r && (r.account_name || r.accountName)) || '';
+
+// --- Admin payout PIN (4 digits) ---
+const badTxPin = p => /^\d{4}$/.test(String(p || '')) ? '' : 'Your PIN must be exactly 4 digits.';
+const ADMIN_PIN_SQL = 'Run this in Supabase first: alter table settings add column if not exists admin_payout_pin_hash text; alter table settings add column if not exists admin_payout_pin_off boolean default false;';
+let APIN_COLS = { at: 0, ok: false };
+async function adminPinReady() {   // admin payout-PIN gate is live once the settings.admin_payout_pin_hash column exists
+  if (Date.now() - APIN_COLS.at < 300000) return APIN_COLS.ok;
+  const ok = await store.adminPinColsReady().catch(() => false);
+  APIN_COLS = { at: Date.now(), ok };
+  return ok;
+}
+// Gate a payout on the admin PIN. Returns true to proceed; otherwise it has already sent the response.
+// No enforcement before the column exists (never lock the admin out) or while the admin has switched the PIN off.
+async function adminPayoutPinOk(req, res) {
+  if (!(await adminPinReady())) return true;
+  const s = await store.getSettings();
+  if (!s.adminPayoutPinHash) { res.status(400).json({ needAdminPin: true, error: 'Set your payout PIN in Settings first, then release this payment.' }); return false; }
+  if (s.adminPayoutPinOff) return true;   // admin turned the PIN off for now
+  if (ipFail('apin', req, 6, 10)) { res.status(429).json({ error: 'Too many PIN tries. Wait a few minutes and try again.' }); return false; }
+  if (!(await bcrypt.compare(String((req.body || {}).pin || ''), s.adminPayoutPinHash))) { res.status(403).json({ error: 'Wrong payout PIN.' }); return false; }
+  return true;
+}
+let ACTL_COLS = { at: 0, ok: false };
+async function adminCtlReady() {   // gains / charge / maintenance columns present?
+  if (Date.now() - ACTL_COLS.at < 300000) return ACTL_COLS.ok;
+  const ok = await store.adminCtlColsReady().catch(() => false);
+  ACTL_COLS = { at: Date.now(), ok };
+  return ok;
+}
+const ADMINCTL_SQL = 'Run the admin-controls SQL from the README in Supabase first.';
+// Move the admin's own money (gains or withdrawal charges) out to their bank account via the active provider.
+async function sweepToAccount(acct, amount, narration) {
+  const prov = payoutProvider();
+  if (!prov) throw Object.assign(new Error('No payout provider is set up yet. Add PAYSTACK_SECRET_KEY in Render first.'), { code: 'NO_PROV' });
+  if (!acct || !acct.number || !acct.code) throw Object.assign(new Error('Set the account to send to first.'), { code: 'NO_ACCT' });
+  const ref = 'sweep_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  return prov.createTransfer({ accountNumber: acct.number, bankCode: acct.code, amount: Number(amount), reference: ref, narration: narration || 'AZAPLUG payout', name: acct.name || 'AZAPLUG' });
+}
+// Lazy monthly payout: if auto-monthly is on and this month's charge payout hasn't run yet, send it.
+// Triggered by admin activity (System Health / settings load) so it doesn't need an always-on scheduler.
+async function runMonthlyChargeSweep() {
+  if (!(await adminCtlReady())) return;
+  const s = await store.getSettings().catch(() => null);
+  if (!s || !s.chargeAutoMonthly || !s.gainAcct) return;
+  const ym = new Date().toISOString().slice(0, 7);   // YYYY-MM
+  if (s.chargeLastSweep === ym) return;               // already handled this month
+  await withLock('admin-money', async () => {
+    const s2 = await store.getSettings().catch(() => null);   // re-read inside the lock
+    if (!s2 || !s2.chargeAutoMonthly || !s2.gainAcct || s2.chargeLastSweep === ym) return;
+    const total = Number(s2.chargeTotal) || 0;
+    if (total <= 0) { await store.setChargeLastSweep(ym).catch(() => {}); return; }
+    try {
+      await sweepToAccount(s2.gainAcct, total, 'AZAPLUG monthly withdrawal charges');
+      await store.setChargeTotal(0);
+      await store.setChargeLastSweep(ym);
+      alertTeam({ admin: true }, 'Charge earnings paid', `₦${plain(total)} in withdrawal charges was sent to your account (${s2.gainAcct.bank}).`, { admin: 'health' });
+    } catch (e) { console.error('Monthly charge sweep failed:', e.message || e); }
+  });
+}
 app.get('/api/banks', async (req, res) => {   // needed during sign-up, before login
   try {
     const prov = payoutProvider();
@@ -1022,13 +1098,31 @@ app.post('/api/withdrawals', requireUser, requireApprovedUser, moneyLock(req => 
     if (payoutConfigured() && await payoutColsReady() && !user.payoutVerifiedAt) {
       return res.status(403).json({ needVerify: true, error: 'Confirm your withdrawal account first, so your money goes to the right name.' });
     }
+    // The customer must confirm the withdrawal with their login PIN.
+    if (!(await bcrypt.compare(String((req.body || {}).pin || ''), user.passwordHash || ''))) {
+      if (ipFail('wdpin:' + user.id, req, 6, 15)) return res.status(429).json({ error: 'Too many wrong PIN tries. Wait a few minutes and try again.' });
+      return res.status(400).json({ error: 'Wrong PIN. Enter your login PIN to confirm.' });
+    }
+    // Withdrawal charge: the customer pays a % of the amount; they receive the rest. The charge is the admin's to keep.
+    let charge = 0, payout = amount;
+    if (await adminCtlReady()) {
+      const s = await store.getSettings().catch(() => ({}));
+      const pct = Math.max(0, Math.min(100, Number(s.withdrawChargePct) || 0));
+      if (pct > 0) { charge = Math.round(amount * pct) / 100; payout = Math.round((amount - charge) * 100) / 100; }
+    }
     // Hold the funds first; this refuses if the balance is not enough (even with many requests at once).
+    // The full amount leaves the balance; the customer is paid the net (amount − charge).
     const held = await store.addToBalance(user.id, -amount, { noNegative: true });
     if (!held.ok) return res.status(400).json({ error: 'You cannot withdraw more than your balance.' });
     let withdrawal;
     try {
-      withdrawal = await store.createWithdrawal({ userId: user.id, amount, payoutAccount: user.accountNumber, payoutBank: user.bankName });
+      withdrawal = await store.createWithdrawal({ userId: user.id, amount, payoutAmount: payout, payoutAccount: user.accountNumber, payoutBank: user.bankName });
     } catch (err) { await store.addToBalance(user.id, amount).catch(() => {}); throw err; } // give the money back if saving failed
+    // Bank the charge as the admin's earnings (paid out to the admin account monthly).
+    if (charge > 0 && (await adminCtlReady())) {
+      try { const s = await store.getSettings(); await store.setChargeTotal((Number(s.chargeTotal) || 0) + charge); }
+      catch (e) { if (e.code !== 'ADMINCTL_COL') console.error('charge capture skipped:', e.message || e); }
+    }
     alertTeam({ admin: true }, 'Withdrawal request', `${user.name} asked to withdraw ₦${plain(amount)} to ${user.bankName}.`, { admin: 'wds' });
     res.json({ ok: true, withdrawal });
   } catch (err) {
@@ -1811,6 +1905,12 @@ app.post('/api/admin/trades/:id/credit', requireAdmin, ADMIN_MONEY, async (req, 
     if (!creditedAmount || Number(creditedAmount) <= 0) {
       return res.status(400).json({ error: 'Enter the final amount to credit to the customer\'s balance.' });
     }
+    // Admin's gain on this trade (profit kept) — accumulates in gainTotal, swept to the admin account from System Health.
+    const gain = Math.max(0, Number((req.body || {}).gain) || 0);
+    if (gain > 0 && (await adminCtlReady())) {
+      try { const s = await store.getSettings(); await store.setGainTotal((Number(s.gainTotal) || 0) + gain); }
+      catch (e) { if (e.code !== 'ADMINCTL_COL') console.error('gain capture skipped:', e.message || e); }
+    }
 
     const user = await store.findUserById(trade.userId);
     await store.updateTradeStatus(trade.id, {
@@ -1864,6 +1964,7 @@ app.post('/api/admin/withdrawals/:id/mark', requireAdmin, ADMIN_MONEY, async (re
     const { status, reason, reasonImage } = req.body || {};
     if (!['paid', 'rejected'].includes(status)) return res.status(400).json({ error: 'Invalid status.' });
     if (status === 'rejected' && !reason) return res.status(400).json({ error: 'A reason is required when rejecting a withdrawal.' });
+    if (status === 'paid' && !(await adminPayoutPinOk(req, res))) return;   // releasing money needs the payout PIN
 
     const patch = { status, reason, reasonImage: status === 'rejected' ? (reasonImage || null) : undefined };
     // Lock in exactly which account this was paid to, at the moment of payment —
@@ -1873,8 +1974,9 @@ app.post('/api/admin/withdrawals/:id/mark', requireAdmin, ADMIN_MONEY, async (re
       if (user) { patch.payoutAccount = user.accountNumber; patch.payoutBank = user.bankName; }
     }
     await store.updateWithdrawalStatus(withdrawal.id, patch);
-    if (status === 'rejected') await store.addToBalance(withdrawal.userId, withdrawal.amount); // refund the hold
-    if (status === 'paid') notify(withdrawal.userId, 'tx', 'Withdrawal paid', `Your withdrawal of ₦${plain(withdrawal.amount)} has been paid to ${patch.payoutBank || withdrawal.payoutBank}.`);
+    if (status === 'rejected') await store.addToBalance(withdrawal.userId, withdrawal.amount); // refund the full hold
+    const netPaid = Number(withdrawal.payoutAmount != null ? withdrawal.payoutAmount : withdrawal.amount);   // amount after the charge
+    if (status === 'paid') notify(withdrawal.userId, 'tx', 'Withdrawal paid', `Your withdrawal of ₦${plain(netPaid)} has been paid to ${patch.payoutBank || withdrawal.payoutBank}.`);
     else notify(withdrawal.userId, 'tx', 'Withdrawal cancelled', `Your withdrawal of ₦${plain(withdrawal.amount)} was cancelled: ${reason}. The money is back in your balance.`);
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not update withdrawal.' }); }
@@ -1887,6 +1989,7 @@ app.post('/api/admin/withdrawals/:id/mark', requireAdmin, ADMIN_MONEY, async (re
 const AUTOPAY_SQL = 'Run the auto-payout SQL from the README in Supabase first.';
 app.post('/api/admin/withdrawals/:id/autopay', requireAdmin, ADMIN_MONEY, async (req, res) => {
   try {
+    if (!(await adminPayoutPinOk(req, res))) return;   // admin must enter the payout PIN to release money
     const s = await store.getSettings();
     if (!s.autopayOn) return res.status(400).json({ error: 'Auto-pay is turned off. Turn it on in Settings, or pay this one manually.' });
     const prov = payoutProvider();
@@ -1918,13 +2021,14 @@ app.post('/api/admin/withdrawals/:id/autopay', requireAdmin, ADMIN_MONEY, async 
     let resolved; try { resolved = await prov.resolveAccount(acctNo, bank.code); } catch (e) { return res.status(400).json({ error: `${prov.name} could not verify that account number. Check it, or pay manually.` }); }
     const acctName = (resolved && (resolved.account_name || resolved.accountName)) || (user && user.accountName) || 'AZAPLUG customer';
     const ref = 'wd_' + String(w.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20) + '_' + Date.now().toString(36);
+    const net = Number(w.payoutAmount != null ? w.payoutAmount : w.amount);   // what the customer actually receives (after the charge)
     let t;
-    try { t = await prov.createTransfer({ accountNumber: acctNo, bankCode: bank.code, amount: w.amount, reference: ref, narration: 'AZAPLUG withdrawal', name: acctName }); }
+    try { t = await prov.createTransfer({ accountNumber: acctNo, bankCode: bank.code, amount: net, reference: ref, narration: 'AZAPLUG withdrawal', name: acctName }); }
     catch (e) { console.error(prov.name + ' transfer error:', e.message); return res.status(502).json({ error: `${prov.name} did not accept the transfer: ` + (e.message || 'try again') + '. The money is still held — pay manually if you need to.' }); }
     try {
-      await store.setWithdrawalTransfer(w.id, { status: 'processing', method: methodOf(prov), transferId: t.id, transferRef: ref, transferStatus: 'initiated', autopayAt: new Date().toISOString(), autoNote: `Sent to ${bank.name} ${acctNo} via ${prov.name}`, payoutAccount: acctNo, payoutBank: bank.name });
+      await store.setWithdrawalTransfer(w.id, { status: 'processing', method: methodOf(prov), transferId: t.id, transferRef: ref, transferStatus: 'initiated', autopayAt: new Date().toISOString(), autoNote: `Sent ₦${plain(net)} to ${bank.name} ${acctNo} via ${prov.name}`, payoutAccount: acctNo, payoutBank: bank.name });
     } catch (e) { if (e.code === 'AUTOPAY_COLS') return res.status(500).json({ error: AUTOPAY_SQL }); throw e; }
-    notify(w.userId, 'tx', 'Withdrawal processing', `Your withdrawal of ₦${plain(w.amount)} is being paid to ${bank.name}. You'll get a note when it lands.`);
+    notify(w.userId, 'tx', 'Withdrawal processing', `Your withdrawal of ₦${plain(net)} is being paid to ${bank.name}. You'll get a note when it lands.`);
     res.json({ ok: true, status: 'processing' });
   } catch (err) { console.error('Autopay error:', err); res.status(500).json({ error: 'Could not start the auto-payment.' }); }
 });
@@ -1998,8 +2102,128 @@ app.post('/api/paystack/webhook', async (req, res) => {
 // ADMIN: rules + settings
 // ============================================================
 app.get('/api/admin/settings', requireAdmin, async (req, res) => {
-  try { const s = await store.getSettings(); s.ratesCheckedAt = csGet('rates:checked') || null; res.json(s); }
+  try {
+    const s = await store.getSettings();
+    s.ratesCheckedAt = csGet('rates:checked') || null;
+    s.adminPayoutPinOn = await adminPinReady();          // feature ready (column exists)?
+    s.adminPayoutPinSet = !!s.adminPayoutPinHash;         // has a PIN been set?
+    // adminPayoutPinOff already present from getSettings (true = switched off for now)
+    delete s.adminPayoutPinHash;                          // never expose the hash
+    s.adminCtlOn = await adminCtlReady();                 // gains/charge/maintenance columns present?
+    runMonthlyChargeSweep().catch(() => {});              // lazy monthly charge payout, fired by admin activity
+    res.json(s);
+  }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load settings.' }); }
+});
+// Admin sets or changes the payout PIN. Changing requires the current PIN.
+app.post('/api/admin/payout-pin', requireAdmin, async (req, res) => {
+  try {
+    if (!(await adminPinReady())) return res.status(500).json({ error: ADMIN_PIN_SQL });
+    const b = req.body || {}, pin = String(b.pin || '');
+    if (badTxPin(pin)) return res.status(400).json({ error: badTxPin(pin) });
+    const s = await store.getSettings();
+    if (s.adminPayoutPinHash) {
+      if (ipFail('apin', req, 6, 10)) return res.status(429).json({ error: 'Too many tries. Wait a few minutes and try again.' });
+      if (!(await bcrypt.compare(String(b.current || ''), s.adminPayoutPinHash))) return res.status(400).json({ error: 'Your current payout PIN is not right.' });
+    }
+    try { await store.setAdminPayoutPin(bcrypt.hashSync(pin, 10)); await store.setAdminPayoutPinOff(false); }
+    catch (e) { if (e.code === 'ADMIN_PIN_COL') return res.status(500).json({ error: ADMIN_PIN_SQL }); throw e; }
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not set the payout PIN.' }); }
+});
+// Admin turns the payout-PIN requirement off (needs the PIN) or back on (free).
+app.post('/api/admin/payout-pin/off', requireAdmin, async (req, res) => {
+  try {
+    if (!(await adminPinReady())) return res.status(500).json({ error: ADMIN_PIN_SQL });
+    const s = await store.getSettings();
+    if (!s.adminPayoutPinHash) return res.status(400).json({ needAdminPin: true, error: 'Set your payout PIN first.' });
+    const off = (req.body || {}).off === true;
+    if (off) {   // switching the protection OFF requires the PIN
+      if (ipFail('apin', req, 6, 10)) return res.status(429).json({ error: 'Too many PIN tries. Wait a few minutes and try again.' });
+      if (!(await bcrypt.compare(String((req.body || {}).pin || ''), s.adminPayoutPinHash))) return res.status(403).json({ error: 'Wrong payout PIN.' });
+    }
+    try { await store.setAdminPayoutPinOff(off); }
+    catch (e) { if (e.code === 'ADMIN_PIN_COL') return res.status(500).json({ error: ADMIN_PIN_SQL }); throw e; }
+    res.json({ ok: true, off });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not change the payout PIN setting.' }); }
+});
+// ============================================================
+// ADMIN CONTROLS: maintenance mode, withdrawal charge, gains & charge payouts
+// ============================================================
+// Maintenance mode: log everyone (customers + staff) out until it's turned off. Admin stays in.
+app.post('/api/admin/maintenance', requireAdmin, async (req, res) => {
+  try {
+    if (!(await adminCtlReady())) return res.status(500).json({ error: ADMINCTL_SQL });
+    const on = (req.body || {}).on === true;
+    await store.setMaintenance(on);
+    MAINT = { at: 0, on };   // clear the cache so the gate sees it at once
+    res.json({ ok: true, on });
+  } catch (e) { if (e.code === 'ADMINCTL_COL') return res.status(500).json({ error: ADMINCTL_SQL }); console.error(e); res.status(500).json({ error: 'Could not change maintenance mode.' }); }
+});
+// Set the withdrawal charge the customer pays (a percentage the admin keeps). 0 turns it off.
+app.post('/api/admin/withdraw-charge', requireAdmin, async (req, res) => {
+  try {
+    if (!(await adminCtlReady())) return res.status(500).json({ error: ADMINCTL_SQL });
+    let pct = Number((req.body || {}).pct);
+    if (!isFinite(pct) || pct < 0 || pct > 100) return res.status(400).json({ error: 'Enter a charge between 0 and 100 percent.' });
+    pct = Math.round(pct * 100) / 100;
+    await store.setWithdrawChargePct(pct);
+    res.json({ ok: true, pct });
+  } catch (e) { if (e.code === 'ADMINCTL_COL') return res.status(500).json({ error: ADMINCTL_SQL }); console.error(e); res.status(500).json({ error: 'Could not save the withdrawal charge.' }); }
+});
+// Turn the automatic monthly charge payout on/off.
+app.post('/api/admin/charge/auto', requireAdmin, async (req, res) => {
+  try {
+    if (!(await adminCtlReady())) return res.status(500).json({ error: ADMINCTL_SQL });
+    const on = (req.body || {}).on === true;
+    await store.setChargeAutoMonthly(on);
+    res.json({ ok: true, on });
+  } catch (e) { if (e.code === 'ADMINCTL_COL') return res.status(500).json({ error: ADMINCTL_SQL }); console.error(e); res.status(500).json({ error: 'Could not change the auto-payout setting.' }); }
+});
+// Set / change the account that gains and charges are paid out to.
+// Changing it once it's already set needs the admin password (money-safety).
+app.post('/api/admin/gain-account', requireAdmin, async (req, res) => {
+  try {
+    if (!(await adminCtlReady())) return res.status(500).json({ error: ADMINCTL_SQL });
+    const prov = payoutProvider();
+    if (!prov) return res.status(400).json({ error: 'No payout provider is set up yet. Add PAYSTACK_SECRET_KEY in Render first.' });
+    const accountNumber = String((req.body || {}).accountNumber || '').trim();
+    const bankCode = String((req.body || {}).bankCode || '').trim();
+    if (accountNumber.length < 10 || accountNumber.length > 11 || !bankCode) return res.status(400).json({ error: 'Enter a 10-digit account number and pick the bank.' });
+    const s = await store.getSettings();
+    if (s.gainAcct && !sameText(String((req.body || {}).password || ''), ADMIN_PASSWORD)) {
+      return res.status(403).json({ needPassword: true, error: 'Enter your admin password to change the payout account.' });
+    }
+    const bankList = await prov.banks();
+    const bank = (bankList || []).find(b => String(b.code) === bankCode);
+    if (!bank) return res.status(400).json({ error: 'Pick a valid bank.' });
+    let r; try { r = await prov.resolveAccount(accountNumber, bankCode); } catch (e) { return res.status(404).json({ error: 'Could not verify that account. Check the number and the bank.' }); }
+    const name = (r && (r.account_name || r.accountName)) || '';
+    if (!name) return res.status(404).json({ error: 'Could not verify that account. Check the number and the bank.' });
+    await store.setGainAccount({ number: accountNumber, bank: bank.name, code: bankCode, name });
+    res.json({ ok: true, account: { number: accountNumber, bank: bank.name, name } });
+  } catch (e) { if (e.code === 'ADMINCTL_COL') return res.status(500).json({ error: ADMINCTL_SQL }); console.error(e); res.status(500).json({ error: 'Could not save the payout account.' }); }
+});
+// Send my gains (or my charge earnings) out to my account now. kind = 'gain' | 'charge'.
+app.post('/api/admin/sweep', requireAdmin, ADMIN_MONEY, async (req, res) => {
+  try {
+    if (!(await adminCtlReady())) return res.status(500).json({ error: ADMINCTL_SQL });
+    if (!(await adminPayoutPinOk(req, res))) return;   // releasing money needs the payout PIN
+    const kind = (req.body || {}).kind === 'charge' ? 'charge' : 'gain';
+    const s = await store.getSettings();
+    if (!s.gainAcct) return res.status(400).json({ needAccount: true, error: 'Set the account to send to first.' });
+    const total = kind === 'charge' ? (Number(s.chargeTotal) || 0) : (Number(s.gainTotal) || 0);
+    if (total <= 0) return res.status(400).json({ error: `You have no ${kind === 'charge' ? 'charge earnings' : 'gains'} to send yet.` });
+    try {
+      await sweepToAccount(s.gainAcct, total, kind === 'charge' ? 'AZAPLUG withdrawal charges' : 'AZAPLUG gains');
+    } catch (e) {
+      if (e.code === 'NO_PROV' || e.code === 'NO_ACCT') return res.status(400).json({ error: e.message });
+      console.error('Sweep transfer error:', e.message); return res.status(502).json({ error: `${payoutProvider() ? payoutProvider().name : 'The provider'} did not accept the transfer: ${e.message || 'try again'}.` });
+    }
+    if (kind === 'charge') { await store.setChargeTotal(0); await store.setChargeLastSweep(new Date().toISOString().slice(0, 7)).catch(() => {}); }
+    else await store.setGainTotal(0);
+    res.json({ ok: true, sent: total, kind });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Could not send the payout.' }); }
 });
 // "I've checked today's rates" — stamps the reminder done for the day even when nothing changed.
 app.post('/api/admin/rates/checked', requireAdmin, (req, res) => { stampRates(); res.json({ ok: true, at: csGet('rates:checked') }); });

@@ -539,9 +539,12 @@ async function api(method,url,body){
   const r=await fetch(url,{method,credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
   let d={};try{d=await r.json()}catch(e){}
   if(r.status===401&&S.me){S.me=null;go('login')}
+  if(r.status===503&&d.maintenance){showMaint(d.error);const e=new Error(d.error||'Under maintenance');Object.assign(e,d);throw e}
   if(!r.ok){const e=new Error(d.error||'Something went wrong. Try again.');Object.assign(e,d);throw e}
   return d;
 }
+function showMaint(msg){let el=document.getElementById('maint');if(!el){el=document.createElement('div');el.id='maint';document.body.appendChild(el)}
+  el.innerHTML=`<div style="position:fixed;inset:0;z-index:99999;background:#0F1B2D;color:#fff;display:grid;place-items:center;padding:30px;text-align:center"><div style="max-width:320px"><div style="font-size:46px;margin-bottom:14px">🛠️</div><h2 style="font-family:var(--head);margin:0 0 10px">Under maintenance</h2><p style="opacity:.82;line-height:1.5">${esc(msg||'AZAPLUG is under maintenance. Please check back shortly.')}</p><button class="btn sq" style="margin-top:22px;max-width:200px" onclick="location.reload()">Try again</button></div></div>`}
 async function loadMe(){const d=await api('GET','/api/me');S.me=d.loggedIn?d:null;return S.me}
 async function loadAll(){
   const [a,t,w]=await Promise.all([api('GET','/api/accounts'),api('GET','/api/trades'),api('GET','/api/withdrawals')]);
@@ -967,8 +970,13 @@ withdraw:()=>{const u=S.me;return `<section class="screen">
    <div class="row" style="gap:14px;margin-top:14px"><span style="width:44px;height:44px;border-radius:12px;background:#EEF2FB;color:var(--blue);display:grid;place-items:center">${I('bank')}</span>
    <span style="min-width:0"><b class="h" style="font-weight:600;font-size:16.5px;display:block">${esc(u.bankName)}</b><span class="muted" style="font-size:14px">${esc(u.accountNumber)}</span><br><small style="color:var(--soft);text-transform:uppercase">${esc(u.accountName||u.name)}</small>${u.accountName?` <small style="color:#059669;font-weight:700;text-transform:none">✓ confirmed</small>`:''}</span></div></div>
   <div class="card sum plain" style="margin-top:22px"><div class="cap" style="display:block;padding:0 0 6px">Transaction summary</div>
-   <div><span>Withdrawal Amount</span><b id="w-amt">${naira(0)}</b></div><div class="hr"></div>
-   <div><b style="font-weight:600;font-size:16px">Total to Deduct</b><b id="w-tot" style="font-family:var(--head);font-weight:700;font-size:19px;color:var(--blue)">${naira(0)}</b></div></div>
+   <div><span>Withdrawal Amount</span><b id="w-amt">${naira(0)}</b></div>
+   ${(u.withdrawChargePct||0)>0?`<div><span>Charge (${u.withdrawChargePct}%)</span><b id="w-chg">${naira(0)}</b></div>`:''}
+   <div class="hr"></div>
+   ${(u.withdrawChargePct||0)>0
+     ?`<div><b style="font-weight:600;font-size:16px">You'll receive</b><b id="w-net" style="font-family:var(--head);font-weight:700;font-size:19px;color:#059669">${naira(0)}</b></div>
+       <div class="between" style="margin-top:6px"><span class="muted" style="font-size:13px">Deducted from your balance</span><span class="muted" style="font-size:13px" id="w-tot">${naira(0)}</span></div>`
+     :`<div><b style="font-weight:600;font-size:16px">Total to Deduct</b><b id="w-tot" style="font-family:var(--head);font-weight:700;font-size:19px;color:var(--blue)">${naira(0)}</b></div>`}</div>
   <button class="btn sq" style="margin-top:22px;font-family:var(--body)">Confirm Withdrawal</button></form></section>`},
 
 verifyAcct:()=>{const v=S.vacct||(S.vacct=vInit()),banks=S.banks;return `<section class="screen">
@@ -1255,6 +1263,25 @@ const slipNotice=()=>(S.me&&S.me.slipNotice)||SLIP_DEFAULT;
 function uiNotice(text,withX){return new Promise(res=>{const d=document.createElement('div');d.className='cfm';
   d.innerHTML=`<div class="cfm-b slipn" role="alertdialog" aria-modal="true" aria-label="Please note">${withX?'<button type="button" class="nx" data-k="x" aria-label="Close">×</button>':''}<b>⚠️ Please note</b><p>${esc(text)}</p><div><button type="button" data-k="1" class="ok">Okay</button></div></div>`;
   d.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(b){d.remove();res();return}if(withX&&e.target===d){d.remove();res()}});document.body.appendChild(d)})}
+// PIN modal. mode 'enter' -> one 4-digit PIN; 'set' -> new + confirm. Resolves to the PIN, or null if cancelled.
+function uiPin({title,sub,mode='enter',err='',len=4}){return new Promise(res=>{const d=document.createElement('div');d.className='cfm';const two=mode==='set';
+  const box=`class="in" inputmode="numeric" maxlength="${len}" autocomplete="off" style="text-align:center;letter-spacing:7px;font-size:20px;font-family:var(--mono);margin-top:8px"`;
+  d.innerHTML=`<div class="cfm-b" role="dialog" aria-modal="true"><b>${esc(title)}</b>${sub?`<p>${esc(sub)}</p>`:''}
+    <input id="pb1" placeholder="${'•'.repeat(len)}" ${box}>${two?`<input id="pb2" placeholder="Repeat PIN" ${box}>`:''}
+    <div id="pberr" style="color:var(--red);font-size:12.5px;min-height:15px;margin-top:6px">${esc(err)}</div>
+    <div><button type="button" data-k="0">Cancel</button><button type="button" data-k="1" class="ok">${two?'Save PIN':'Confirm'}</button></div></div>`;
+  const cl=v=>String(v||'').replace(/\D/g,'').slice(0,len);
+  d.addEventListener('input',e=>{if(e.target.id==='pb1'||e.target.id==='pb2')e.target.value=cl(e.target.value)});
+  d.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(!b)return;
+    if(b.dataset.k==='0'){d.remove();res(null);return}
+    const p1=cl(d.querySelector('#pb1').value),p2=two?cl((d.querySelector('#pb2')||{}).value):p1,er=d.querySelector('#pberr');
+    if(p1.length!==len){er.textContent='Enter a '+len+'-digit PIN.';return}
+    if(two&&p1!==p2){er.textContent='The two PINs do not match.';return}
+    d.remove();res(p1)});
+  document.body.appendChild(d);setTimeout(()=>{const i=d.querySelector('#pb1');if(i)i.focus()},60)})}
+// Make sure the customer has a withdrawal PIN, then collect it. Returns the PIN, or null if they cancel.
+// Confirm a withdrawal with the customer's login PIN. Returns the PIN, or null if cancelled.
+const getWithdrawPin=()=>uiPin({title:'Enter your PIN',sub:'Use your login PIN to confirm this withdrawal.',len:6});
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-md]');if(!b)return;const id=b.dataset.md;
   if(!await uiConfirm('Delete this message?','It will be removed from the chat for everyone.','Delete'))return;
   try{await api('DELETE',MD_URL(id));if(String(VN.id)===id)vnStop();S.chat=S.chat.filter(m=>String(m.id)!==id);
@@ -1376,7 +1403,7 @@ document.addEventListener('input',e=>{const t=e.target;
   if(t.id==='g-v'||t.id==='g-code'){const g=S.gs;if(t.id==='g-code'){g.code=t.value;return}g.value=t.value;const c=(S.gcards||[]).find(x=>x.id===g.cardId),r=c&&c.rows.find(x=>x.id===g.rowId);
     if(r){const vv=num(t.value),rt=gRateC(c,r,g.prefix,vv);$('#g-val').textContent=r.cur+amt(vv);$('#g-get').textContent=naira(vv*rt);const gr=$('#g-rate');if(gr)gr.textContent=naira0(rt)+' per '+r.cur+'1';
       const w=gLimMsg(r,vv,t.value!==''),el=$('#g-lim'),sb=$('#g-submit');if(el){el.textContent=w.msg;el.style.display=w.msg?'block':'none';el.style.color=w.bad?'#B91C1C':'var(--muted)';el.style.fontWeight=w.bad?'600':'400'}if(sb){sb.disabled=w.bad;sb.style.opacity=w.bad?'.5':''}}}
-  if(t.id==='w-a'){const v=num(t.value);$('#w-amt').textContent=naira(v);$('#w-tot').textContent=naira(v)}
+  if(t.id==='w-a'){const v=num(t.value),pct=(S.me&&S.me.withdrawChargePct)||0,chg=pct>0?Math.round(v*pct)/100:0,net=Math.round((v-chg)*100)/100;$('#w-amt').textContent=naira(v);if($('#w-chg'))$('#w-chg').textContent=naira(chg);if($('#w-net'))$('#w-net').textContent=naira(net);if($('#w-tot'))$('#w-tot').textContent=naira(v)}
   if(t.id==='acct-q'){const q=t.value.toLowerCase();document.querySelectorAll('#acct-list .acct').forEach(el=>el.style.display=el.dataset.k.includes(q)?'':'none')}
 });
 const val=id=>$('#'+id).value.trim();
@@ -1411,8 +1438,11 @@ const FORMS={
     if(!await uiChoice(`Make a ${naira0(amount)} gift code?`,`${naira0(amount)} leaves your balance now. Anyone who has the code can redeem it, so only send it to your friend.`,'Make gift code','Not now'))return;
     const d=await api('POST','/api/gift/send',{amount,message});S.me.balance=d.balance;S.gnew={code:d.code,amount:d.amount,message};await loadGiftMine();render();window.scrollTo(0,0)},
   async withdraw(){const amount=num(val('w-a'));if(!amount)throw new Error('Enter an amount');
-    try{const d=await api('POST','/api/withdrawals',{amount});S.wd=d.withdrawal;go('withdrawn')}
-    catch(e){if(e.needVerify){S.vacct=vInit();S.vfrom='withdraw';toast('Confirm your withdrawal account first');return go('verifyAcct')}throw e}},
+    const pin=await getWithdrawPin();if(pin===null)return;   // cancelled the PIN step
+    try{const d=await api('POST','/api/withdrawals',{amount,pin});S.wd=d.withdrawal;go('withdrawn')}
+    catch(e){
+      if(e.needVerify){S.vacct=vInit();S.vfrom='withdraw';toast('Confirm your withdrawal account first');return go('verifyAcct')}
+      throw e}},
   async loan(){const amount=num(val('l-a'));if(!amount)throw new Error('Enter a loan amount');if(S.loan&&amount>S.loan.limit)throw new Error('The most you can borrow is '+naira(S.loan.limit));
     await api('POST','/api/loans',{amount});toast('Loan request sent for review');await loadLoan();render()},
   async chpin(){const o=val('cp-o'),n=val('cp-n'),c=val('cp-c');if(!/^\d{6}$/.test(o))throw new Error('Enter your current 6-digit PIN');if(!/^\d{6}$/.test(n))throw new Error('Your new PIN must be 6 digits');if(n!==c)throw new Error('The two new PINs are not the same');
