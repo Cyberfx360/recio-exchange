@@ -726,6 +726,10 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
   <div class="stat"><small>Active Trades</small><b>${act.length}</b><i style="color:var(--blue)">${S.trades.length} all time</i></div>
   <button class="stat" data-go="receipts"><small>Pending</small><b style="color:var(--orange)">${rec} Receipt${rec===1?'':'s'}</b><i>Needs review</i></button>
   <button class="stat" data-go="users" data-tab="alertsoff"><small>Notifications On</small><b style="color:${alertsOn===S.users.length?'var(--green)':'var(--slate)'}">${alertsOn}<span style="font-size:15px;color:var(--muted);font-weight:600"> / ${S.users.length}</span></b><i style="color:${alertsOn<S.users.length?'var(--orange)':'var(--green)'}">${S.users.length-alertsOn?(S.users.length-alertsOn)+' customer'+(S.users.length-alertsOn===1?'':'s')+' without':'Every customer'}</i></button></div>
+  <h2 class="sh">Money</h2>
+  <div class="g2">${(()=>{const paid=S.trades.filter(t=>t.creditedAmount>0),rev=paid.reduce((s,t)=>s+t.creditedAmount,0),gt=paid.filter(t=>t.card),gv=gt.reduce((s,t)=>s+t.creditedAmount,0);
+   return `<div class="stat"><small>Revenue · paid to customers</small><b style="color:var(--green)">${naira(rev)}</b><i>${n0(paid.length)} trade${paid.length===1?'':'s'} credited</i></div>
+   <div class="stat"><small>Gift Cards Loaded</small><b style="color:#6D28D9">${naira(gv)}</b><i>${n0(gt.length)} card${gt.length===1?'':'s'} traded</i></div>`})()}</div>
   <h2 class="sh">Quick Actions</h2>
   <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
   <button class="gab" data-go="giveaway"><span class="gai">${I('gift','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Giveaways</b><small>Reward the first customers to say hi</small></span>${I('cr','style="width:18px;height:18px"')}</button>
