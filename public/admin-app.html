@@ -828,8 +828,9 @@ wds:()=>{const pend=S.wds.filter(w=>w.status==='pending'),paidToday=S.wds.filter
  const title={pending:`Pending Review (${pend.length})`,all:'All Requests',paid:'Approved',rejected:'Declined'}[S.wdTab];
  return `<section class="scr">${hd('Withdrawals','Executive Control','dash',`<button class="fbtn" data-set="wdTab:${next}">${I('filter','style="width:13px;height:13px"')}Filter</button>`,'dark')}
  <div class="bd"><div class="card" style="padding:14px;margin-bottom:14px">
-  <div class="gsw" style="margin:0"><span class="grow" style="min-width:0"><b>Auto-pay with Flutterwave</b><small>${S.settings&&S.settings.autopayOn?`On: one-tap pay withdrawals up to ${naira(Number(S.settings.autopayMax)||50000)} (cap ${naira(Number(S.settings.autopayDailyCap)||500000)}/day).`:'Off: you pay every withdrawal by hand.'}</small></span><button class="tgl" role="switch" aria-checked="${!!(S.settings&&S.settings.autopayOn)}" aria-label="Auto-pay on or off" data-act="autoSwitch"></button></div>
+  <div class="gsw" style="margin:0"><span class="grow" style="min-width:0"><b>Auto-pay</b><small>${S.settings&&S.settings.autopayOn?`On: one-tap pay withdrawals up to ${naira(Number(S.settings.autopayMax)||50000)} (cap ${naira(Number(S.settings.autopayDailyCap)||500000)}/day).`:'Off: you pay every withdrawal by hand.'}</small></span><button class="tgl" role="switch" aria-checked="${!!(S.settings&&S.settings.autopayOn)}" aria-label="Auto-pay on or off" data-act="autoSwitch"></button></div>
   ${S.settings&&S.settings.autopayOn?`<form data-form="autopayCfg" class="g2" style="margin-top:12px"><div><label class="cl" for="ap-max" style="margin-top:0">Max per withdrawal ₦</label><input class="in" id="ap-max" inputmode="numeric" value="${esc(Number(S.settings.autopayMax)||50000)}"></div><div><label class="cl" for="ap-cap" style="margin-top:0">Daily cap ₦</label><input class="in" id="ap-cap" inputmode="numeric" value="${esc(Number(S.settings.autopayDailyCap)||500000)}"></div><button class="b blue" style="grid-column:1/-1;height:42px">Save limits</button></form>`:''}</div>
+  <div class="gsw" style="margin:14px 0 0"><span class="grow" style="min-width:0"><b>Payout PIN</b><small>${!(S.settings&&S.settings.adminPayoutPinOn)?'Add the payout-PIN column in Supabase to turn this on.':(S.settings.adminPayoutPinSet?'Set ✓ — asked every time you release a payment.':'Not set — set it so payouts can go out.')}</small></span>${(S.settings&&S.settings.adminPayoutPinOn)?`<button class="b blue" style="flex:none;width:auto;height:38px;padding:0 18px;font-size:13.5px" data-act="setPayoutPin">${S.settings.adminPayoutPinSet?'Change':'Set'}</button>`:''}</div>
   <div class="g3"><div class="stat sm"><small>Total Requests</small><b>${S.wds.length}</b><i>All time</i></div>
   <div class="stat sm" style="border:1.5px solid var(--blue)"><small>Pending</small><b style="color:#D97706">${pend.length}</b><i>Needs action</i></div>
   <div class="stat sm"><small>Approved Today</small><b>${paidToday.length}</b><i>${naira(paidToday.reduce((s,w)=>s+w.amount,0))} paid</i></div></div>
@@ -851,7 +852,7 @@ wd:()=>{const w=S.wds.find(x=>x.id===S.id);if(!w)return V.wds();const b=wBadge(w
   ${w.status==='processing'?`<div class="card" style="margin-top:16px;padding:14px;background:#EFF6FF;border:1px solid #BFDBFE;color:#1E40AF;font-size:13.5px;line-height:1.4"><b style="display:block;margin-bottom:4px">Paying through Flutterwave…</b>${esc(w.autoNote||'The transfer has been sent. It updates to Paid automatically when Flutterwave confirms.')}</div>
    <button class="b blue" data-act="wdCheck" data-id="${esc(w.id)}">Check payment status</button>`:''}
   ${w.status==='pending'&&w.transferStatus==='failed'?`<div class="card" style="margin-top:16px;padding:12px 14px;background:#FEF2F2;border:1px solid #FECACA;color:#B91C1C;font-size:13.5px;line-height:1.4"><b>Auto-pay failed</b><br>${esc(w.autoNote||'The Flutterwave transfer did not go through. The money is still held — pay it manually below.')}</div>`:''}
-  ${w.status==='pending'?`${autoPayable(w)?`<button class="b green" style="margin-top:18px" data-act="wdAuto" data-id="${esc(w.id)}">${I('cardi','style="width:16px;height:16px"')}AUTO-PAY ${naira(w.amount)} VIA FLUTTERWAVE</button><p class="muted" style="font-size:12px;text-align:center;margin:8px 0 2px">or handle it by hand</p>`:S.settings&&S.settings.autopayOn&&Number(w.amount)>(Number(S.settings.autopayMax)||50000)?`<p class="muted" style="font-size:12.5px;margin:18px 0 4px">Above the ${naira(Number(S.settings.autopayMax)||50000)} auto-pay limit — pay this one manually.</p>`:''}
+  ${w.status==='pending'?`${autoPayable(w)?`<button class="b green" style="margin-top:18px" data-act="wdAuto" data-id="${esc(w.id)}">${I('cardi','style="width:16px;height:16px"')}AUTO-PAY ${naira(w.amount)}</button><p class="muted" style="font-size:12px;text-align:center;margin:8px 0 2px">or handle it by hand</p>`:S.settings&&S.settings.autopayOn&&Number(w.amount)>(Number(S.settings.autopayMax)||50000)?`<p class="muted" style="font-size:12.5px;margin:18px 0 4px">Above the ${naira(Number(S.settings.autopayMax)||50000)} auto-pay limit — pay this one manually.</p>`:''}
    <label for="w-reason" style="display:block;font-weight:600;font-size:13px;margin:16px 0 8px">Reason for cancellation</label><textarea class="in" id="w-reason" rows="3" placeholder="Enter reason why request was cancelled..."></textarea>
    <button class="b green" data-act="wdPaid" data-id="${esc(w.id)}">${I('check','style="width:16px;height:16px"')}MARK AS PAID</button><button class="b red2" data-act="wdCancel" data-id="${esc(w.id)}">${I('xc','style="width:16px;height:16px"')}CANCEL REQUEST</button>`:''}</div></section>`},
 
@@ -1247,6 +1248,27 @@ const PIN_URL=id=>(S.route==='staffChat'?'/api/admin/team/'+encodeURIComponent(S
 function uiConfirm(title,text,ok){return new Promise(res=>{const d=document.createElement('div');d.className='cfm';
   d.innerHTML=`<div class="cfm-b" role="alertdialog" aria-modal="true" aria-label="${esc(title)}"><b>${esc(title)}</b><p>${esc(text)}</p><div><button type="button" data-k="0">Cancel</button><button type="button" data-k="1" class="dg">${esc(ok)}</button></div></div>`;
   d.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(!b&&e.target!==d)return;d.remove();res(!!b&&b.dataset.k==='1')});document.body.appendChild(d)})}
+// PIN modal. mode 'enter' -> one 4-digit PIN; 'set' -> new + confirm. Resolves to the PIN, or null if cancelled.
+function uiPin({title,sub,mode='enter',err=''}){return new Promise(res=>{const d=document.createElement('div');d.className='cfm';const two=mode==='set';
+  const box='class="in" inputmode="numeric" maxlength="4" autocomplete="off" style="text-align:center;letter-spacing:7px;font-size:20px;font-family:var(--mono);margin-top:8px"';
+  d.innerHTML=`<div class="cfm-b" role="dialog" aria-modal="true"><b>${esc(title)}</b>${sub?`<p>${esc(sub)}</p>`:''}
+    <input id="pb1" placeholder="••••" ${box}>${two?`<input id="pb2" placeholder="Repeat PIN" ${box}>`:''}
+    <div id="pberr" style="color:var(--red);font-size:12.5px;min-height:15px;margin-top:6px">${esc(err)}</div>
+    <div><button type="button" data-k="0">Cancel</button><button type="button" data-k="1" class="ok">${two?'Save PIN':'Confirm'}</button></div></div>`;
+  const cl=v=>String(v||'').replace(/\D/g,'').slice(0,4);
+  d.addEventListener('input',e=>{if(e.target.id==='pb1'||e.target.id==='pb2')e.target.value=cl(e.target.value)});
+  d.addEventListener('click',e=>{const b=e.target.closest('[data-k]');if(!b)return;
+    if(b.dataset.k==='0'){d.remove();res(null);return}
+    const p1=cl(d.querySelector('#pb1').value),p2=two?cl((d.querySelector('#pb2')||{}).value):p1,er=d.querySelector('#pberr');
+    if(p1.length!==4){er.textContent='Enter a 4-digit PIN.';return}
+    if(two&&p1!==p2){er.textContent='The two PINs do not match.';return}
+    d.remove();res(p1)});
+  document.body.appendChild(d);setTimeout(()=>{const i=d.querySelector('#pb1');if(i)i.focus()},60)})}
+// Collect the admin payout PIN before releasing money. '' = feature off (no PIN), null = cancelled/blocked.
+async function payoutPin(){const s=S.settings||{};
+  if(!s.adminPayoutPinOn)return '';
+  if(!s.adminPayoutPinSet){toast('Set your payout PIN in Settings first');return null}
+  return await uiPin({title:'Payout PIN',sub:'Enter your PIN to release this payment.'});}
 document.addEventListener('click',async e=>{const b=e.target.closest('[data-md]');if(!b)return;const id=b.dataset.md;
   if(!await uiConfirm('Delete this message?','Staff and the customer will no longer see it. You will still see it here, marked as deleted.','Delete'))return;
   try{await api('DELETE',MD_URL(id));if(String(VN.id)===id)vnStop();const m=S.chat.find(x=>String(x.id)===id);if(m){m.deleted=true;m.deletedAt=new Date().toISOString();m.pinnedAt=null}
@@ -1374,13 +1396,21 @@ const ACT={
   async escResolve(el,id){const e=S.escs.find(x=>x.id===id),fb=await askText('Resolve this escalation?',`Your feedback is sent back to ${e.staffName}, who escalated ${e.userName}'s chat.`,'Feedback for staff (e.g. Refund processed. You may continue follow-up.)','Mark as resolved');if(fb===null)return;
     await api('POST',`/api/admin/escalations/${id}/resolve`,{feedback:fb});toast('Escalation resolved');await reload()},
   async wdPaid(el,id){const w=S.wds.find(x=>x.id===id);if(!await ask('Mark as paid?',`Confirm you have sent ${naira(w.amount)} to ${w.userName} (${w.payoutBank}, ${w.payoutAccount}). This cannot be undone.`,'Mark as paid'))return;
-    await api('POST',`/api/admin/withdrawals/${id}/mark`,{status:'paid'});await refresh();go('wdDone',{done:S.wds.find(x=>x.id===id)||w})},
-  async wdAuto(el,id){const w=S.wds.find(x=>x.id===id);if(!await ask('Auto-pay with Flutterwave?',`${naira(w.amount)} will be sent to ${w.userName} (${w.payoutBank}, ${w.payoutAccount}) through Flutterwave now. Make sure your Flutterwave balance can cover it.`,'Send '+naira(w.amount)))return;
-    const r=await api('POST',`/api/admin/withdrawals/${id}/autopay`);toast(r.status==='processing'?'Payment sent — waiting for Flutterwave to confirm':'Done');await refresh();go('wd',{id})},
+    const pin=await payoutPin();if(pin===null)return;
+    try{await api('POST',`/api/admin/withdrawals/${id}/mark`,{status:'paid',pin})}catch(e){if(e.needAdminPin)return toast('Set your payout PIN in Settings first');throw e}
+    await refresh();go('wdDone',{done:S.wds.find(x=>x.id===id)||w})},
+  async wdAuto(el,id){const w=S.wds.find(x=>x.id===id);if(!await ask('Auto-pay this withdrawal?',`${naira(w.amount)} will be sent to ${w.userName} (${w.payoutBank}, ${w.payoutAccount}) now. Make sure your payout balance can cover it.`,'Send '+naira(w.amount)))return;
+    const pin=await payoutPin();if(pin===null)return;
+    let r;try{r=await api('POST',`/api/admin/withdrawals/${id}/autopay`,{pin})}catch(e){if(e.needAdminPin)return toast('Set your payout PIN in Settings first');throw e}
+    toast(r.status==='processing'?'Payment sent — waiting for confirmation':'Done');await refresh();go('wd',{id})},
   async wdCheck(el,id){const r=await api('POST',`/api/admin/withdrawals/${id}/autopay/check`);toast(r.status==='paid'?'Paid ✓':r.status==='pending'?'Transfer failed — pay manually':'Still processing');await refresh();go('wd',{id})},
   async ratesChecked(){try{await api('POST','/api/admin/rates/checked');S.settings=S.settings||{};S.settings.ratesCheckedAt=Date.now();toast('Marked checked for today');render()}catch(e){toast(e.message)}},
+  async setPayoutPin(){if(!(S.settings&&S.settings.adminPayoutPinOn))return toast('Add the payout-PIN column in Supabase first');
+    let current='';if(S.settings.adminPayoutPinSet){current=await uiPin({title:'Current payout PIN'});if(!current)return}
+    const np=await uiPin({title:'New payout PIN',sub:'A 4-digit PIN you’ll enter to release every payment.',mode:'set'});if(!np)return;
+    try{await api('POST','/api/admin/payout-pin',{current,pin:np});toast('Payout PIN saved');await refresh();render()}catch(e){toast(e.message)}},
   async autoSwitch(el){const on=!(S.settings&&S.settings.autopayOn);
-    if(!await ask(on?'Turn on auto-pay?':'Turn off auto-pay?',on?`You'll be able to one-tap pay withdrawals up to ${naira(Number((S.settings||{}).autopayMax)||50000)} through Flutterwave. Flutterwave must be set up and funded.`:'Auto-pay buttons disappear. You pay every withdrawal by hand. Anything already sent is unaffected.',on?'Turn on':'Turn off',!on))return;
+    if(!await ask(on?'Turn on auto-pay?':'Turn off auto-pay?',on?`You'll be able to one-tap pay withdrawals up to ${naira(Number((S.settings||{}).autopayMax)||50000)} through your payout provider. It must be set up and funded.`:'Auto-pay buttons disappear. You pay every withdrawal by hand. Anything already sent is unaffected.',on?'Turn on':'Turn off',!on))return;
     await api('PUT','/api/admin/settings',{autopayOn:on});toast(on?'Auto-pay is on':'Auto-pay is off');await refresh();render()},
   async wdCancel(el,id){const r=$('#w-reason').value.trim(),w=S.wds.find(x=>x.id===id);if(!r){toast('Enter the reason for cancellation');$('#w-reason').focus();return}
     if(!await ask('Cancel this request?',`${naira(w.amount)} will be returned to ${w.userName}'s balance.`,'Cancel request',1))return;
