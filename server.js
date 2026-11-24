@@ -88,6 +88,8 @@ function csSet(id, t, saveEvery) {
   CS.set(id, t);
   if (t - (CS_SAVED.get(id) || 0) >= (saveEvery || 0)) CS_DIRTY.add(id);
 }
+// Last time the admin reviewed/updated rates — powers the daily "update today's rates" reminder. Persisted via csSet.
+const stampRates = () => csSet('rates:checked', Date.now(), 0);
 async function csLoad() {
   csTried = Date.now();
   try {
@@ -1690,6 +1692,7 @@ app.post('/api/admin/accounts', requireAdmin, async (req, res) => {
       higherAmount: Number(b.higherAmount) || 0, higherRate: Number(b.higherRate) || 0,
       minAmount: Number(b.minAmount) || 0, maxAmount: Number(b.maxAmount) || 0
     });
+    stampRates();
     res.json({ ok: true, account });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not create account.' }); }
 });
@@ -1704,6 +1707,7 @@ app.put('/api/admin/accounts/:id', requireAdmin, async (req, res) => {
       if (!owner || owner.status !== 'approved') return res.status(400).json({ error: 'Choose an approved staff member.' });
     }
     await store.updateAccount(req.params.id, b);
+    if (['lowestRate', 'higherRate', 'lowestAmount', 'higherAmount'].some(k => b[k] !== undefined)) stampRates();
     if (b.active === false) { if (before.active) alertAccountOff(before); notifyAccountGone(before); } // un-verified = hidden from customers
     if (b.active === true && !before.active && before.staffId) alertTeam({ staffId: before.staffId }, 'Account verified', `Your ${before.title} (${before.bankName}) account is now live for customers.`, { staff: 'acctAll' });
     if (b.staffId && b.staffId !== before.staffId) alertTeam({ staffId: b.staffId }, 'Account assigned to you', `The ${before.title} (${before.bankName}) account is now yours to manage.`, { staff: 'acctAll' });
@@ -1952,9 +1956,11 @@ app.post('/api/flw/webhook', async (req, res) => {
 // ADMIN: rules + settings
 // ============================================================
 app.get('/api/admin/settings', requireAdmin, async (req, res) => {
-  try { res.json(await store.getSettings()); }
+  try { const s = await store.getSettings(); s.ratesCheckedAt = csGet('rates:checked') || null; res.json(s); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not load settings.' }); }
 });
+// "I've checked today's rates" — stamps the reminder done for the day even when nothing changed.
+app.post('/api/admin/rates/checked', requireAdmin, (req, res) => { stampRates(); res.json({ ok: true, at: csGet('rates:checked') }); });
 app.put('/api/admin/settings', requireAdmin, async (req, res) => {
   try {
     const b = req.body || {}, patch = {};
@@ -1974,7 +1980,9 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
       if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'Enter the amount as a number, like 50000.' });
       patch[k] = n;
     }
-    await store.updateSettings(patch); if (patch.giftOn !== undefined) GIFT_ON = null; if (patch.challengeOn !== undefined) CHAL_ON = null; res.json({ ok: true });
+    await store.updateSettings(patch); if (patch.giftOn !== undefined) GIFT_ON = null; if (patch.challengeOn !== undefined) CHAL_ON = null;
+    if (patch.btcRate !== undefined || patch.usdtRate !== undefined) stampRates();
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
     const msg = String(err && err.message), cryptoCols = /btc_rate|usdt_rate/.test(msg);
@@ -2847,6 +2855,7 @@ app.post('/api/admin/gift/cards', requireAdmin, async (req, res) => {
     GIFT_CACHE = null;
     // Did an existing, visible card's rates actually change? (so the admin can offer to tell customers)
     const rateChanged = !!(old && b.active !== false && r.rows.some(rowHasRate) && rateSig({ rows: r.rows }) !== rateSig(old));
+    stampRates();
     res.json({ ok: true, id, rateChanged });
   } catch (err) { const hint = giftSqlHint(err); if (!hint) console.error(err); res.status(500).json({ error: hint || 'Could not save the card.' }); }
 });
