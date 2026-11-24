@@ -6,6 +6,19 @@ const path = require('path');
 const crypto = require('crypto');
 const store = require('./storage');
 const flw = require('./flutterwave');
+const paystack = require('./paystack');
+// Active payout provider: prefer Paystack when its keys are set, else Flutterwave; override with PAYOUT_PROVIDER.
+function payoutProvider() {
+  const pref = (process.env.PAYOUT_PROVIDER || '').toLowerCase();
+  if (pref === 'paystack' && paystack.configured()) return paystack;
+  if (pref === 'flutterwave' && flw.configured()) return flw;
+  if (paystack.configured()) return paystack;
+  if (flw.configured()) return flw;
+  return null;
+}
+const payoutConfigured = () => !!payoutProvider();
+const providerByMethod = m => m === 'paystack' ? paystack : m === 'flutterwave' ? flw : null;
+const methodOf = prov => prov === paystack ? 'paystack' : 'flutterwave';
 
 const app = express();
 app.disable('x-powered-by');
@@ -30,7 +43,7 @@ if (!process.env.ADMIN_PASSWORD) {
   console.warn('\n⚠️  ADMIN_PASSWORD is not set in .env — using the default "changeme123". Change this before going live.\n');
 }
 
-app.use(express.json({ limit: '10mb' })); // receipts + settlement screenshots travel as base64
+app.use(express.json({ limit: '10mb', verify: (req, res, buf) => { req.rawBody = buf; } })); // receipts + settlement screenshots travel as base64; rawBody is kept for Paystack webhook signatures
 // Sessions are kept in the database (table "sessions"), so a restart or the server going to sleep does not
 // sign anyone out. If the table is not there yet, they are kept in memory like before.
 const SESSION_DAYS = 60, ADMIN_DAYS = 400;
@@ -320,7 +333,7 @@ app.post('/api/register', async (req, res) => {
   try {
     const { name, phone, accountNumber, bankName, bankCode, password } = req.body || {};
     const acctNo = String(accountNumber || '').replace(/\D/g, '');
-    const verifyOn = flw.configured() && await payoutColsReady();   // verify the account name at sign-up once set up
+    const verifyOn = payoutConfigured() && await payoutColsReady();   // verify the account name at sign-up once set up
     if (!name || !phone || !acctNo || !password || (verifyOn ? !bankCode : !bankName)) {
       return res.status(400).json({ error: 'All fields are required.' });
     }
@@ -333,10 +346,11 @@ app.post('/api/register', async (req, res) => {
     // Confirm the bank account (real name) BEFORE the account is created.
     let verified = null, canonicalBank = bankName;
     if (verifyOn) {
-      const bankList = await flw.banks().catch(() => []);
+      const prov = payoutProvider();
+      const bankList = await prov.banks().catch(() => []);
       const bank = bankList.find(b => String(b.code) === String(bankCode));
       if (!bank) return res.status(400).json({ error: 'Pick your bank from the list.' });
-      let r; try { r = await flw.resolveAccount(acctNo, bankCode); } catch (e) { return res.status(400).json({ error: 'We could not verify that account. Check the number and the bank.' }); }
+      let r; try { r = await prov.resolveAccount(acctNo, bankCode); } catch (e) { return res.status(400).json({ error: 'We could not verify that account. Check the number and the bank.' }); }
       const nm = resolvedName(r);
       if (!nm) return res.status(400).json({ error: 'We could not verify that account. Check the number and the bank.' });
       verified = { bankCode: String(bankCode), accountName: nm }; canonicalBank = bank.name;
@@ -432,19 +446,21 @@ async function payoutColsReady() {
 const resolvedName = r => (r && (r.account_name || r.accountName)) || '';
 app.get('/api/banks', async (req, res) => {   // needed during sign-up, before login
   try {
-    if (!flw.configured()) return res.json({ configured: false, banks: [] });
-    const list = await flw.banks();
+    const prov = payoutProvider();
+    if (!prov) return res.json({ configured: false, banks: [] });
+    const list = await prov.banks();
     res.json({ configured: true, banks: list.map(b => ({ code: String(b.code), name: b.name })).sort((a, b) => a.name.localeCompare(b.name)) });
   } catch (err) { console.error('Banks error:', err.message); res.status(502).json({ error: 'Could not load the bank list. Try again.' }); }
 });
 app.post('/api/account/resolve', async (req, res) => {   // name enquiry; usable during sign-up (throttled per device)
   try {
-    if (!flw.configured()) return res.status(400).json({ error: 'Account checks are not available yet.' });
+    const prov = payoutProvider();
+    if (!prov) return res.status(400).json({ error: 'Account checks are not available yet.' });
     if (ipFail('resolve', req, 25, 1)) return res.status(429).json({ error: 'Too many account checks. Wait a minute and try again.' });
     const accountNumber = String((req.body || {}).accountNumber || '').replace(/\D/g, '');
     const bankCode = String((req.body || {}).bankCode || '').trim();
     if (accountNumber.length < 10 || accountNumber.length > 11 || !bankCode) return res.status(400).json({ error: 'Enter a 10-digit account number and pick your bank.' });
-    let r; try { r = await flw.resolveAccount(accountNumber, bankCode); } catch (e) { return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' }); }
+    let r; try { r = await prov.resolveAccount(accountNumber, bankCode); } catch (e) { return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' }); }
     const name = resolvedName(r);
     if (!name) return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' });
     res.json({ accountName: name });
@@ -452,14 +468,15 @@ app.post('/api/account/resolve', async (req, res) => {   // name enquiry; usable
 });
 app.post('/api/me/payout', requireUser, async (req, res) => {
   try {
-    if (!flw.configured()) return res.status(400).json({ error: 'Account verification is not available yet.' });
+    const prov = payoutProvider();
+    if (!prov) return res.status(400).json({ error: 'Account verification is not available yet.' });
     const accountNumber = String((req.body || {}).accountNumber || '').replace(/\D/g, '');
     const bankCode = String((req.body || {}).bankCode || '').trim();
     if (accountNumber.length < 10 || accountNumber.length > 11 || !bankCode) return res.status(400).json({ error: 'Enter a 10-digit account number and pick your bank.' });
-    const bankList = await flw.banks().catch(() => []);
+    const bankList = await prov.banks().catch(() => []);
     const bank = bankList.find(b => String(b.code) === bankCode);
     if (!bank) return res.status(400).json({ error: 'Pick your bank from the list.' });
-    let r; try { r = await flw.resolveAccount(accountNumber, bankCode); } catch (e) { return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' }); }
+    let r; try { r = await prov.resolveAccount(accountNumber, bankCode); } catch (e) { return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' }); }
     const name = resolvedName(r);
     if (!name) return res.status(404).json({ error: 'We could not find that account. Check the number and the bank.' });
     const before = await store.findUserById(req.session.userId);
@@ -1002,7 +1019,7 @@ app.post('/api/withdrawals', requireUser, requireApprovedUser, moneyLock(req => 
     if (!amount || !isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Enter a valid amount.' });
     const user = await store.findUserById(req.user.id);
     // Make sure we're paying a real, confirmed bank account (the name was looked up from the bank).
-    if (flw.configured() && await payoutColsReady() && !user.payoutVerifiedAt) {
+    if (payoutConfigured() && await payoutColsReady() && !user.payoutVerifiedAt) {
       return res.status(403).json({ needVerify: true, error: 'Confirm your withdrawal account first, so your money goes to the right name.' });
     }
     // Hold the funds first; this refuses if the balance is not enough (even with many requests at once).
@@ -1872,7 +1889,8 @@ app.post('/api/admin/withdrawals/:id/autopay', requireAdmin, ADMIN_MONEY, async 
   try {
     const s = await store.getSettings();
     if (!s.autopayOn) return res.status(400).json({ error: 'Auto-pay is turned off. Turn it on in Settings, or pay this one manually.' });
-    if (!flw.configured()) return res.status(400).json({ error: 'Flutterwave is not set up yet. Add FLW_SECRET_KEY in Render first.' });
+    const prov = payoutProvider();
+    if (!prov) return res.status(400).json({ error: 'No payout provider is set up yet. Add PAYSTACK_SECRET_KEY (or FLW_SECRET_KEY) in Render first.' });
     const w = await store.findWithdrawalById(req.params.id);
     if (!w) return res.status(404).json({ error: 'Withdrawal not found.' });
     if (w.status !== 'pending') return res.status(400).json({ error: 'This withdrawal has already been handled.' });
@@ -1894,16 +1912,17 @@ app.post('/api/admin/withdrawals/:id/autopay', requireAdmin, ADMIN_MONEY, async 
     } else {
       const bankNm = (user && user.bankName) || w.payoutBank;
       if (!bankNm) return res.status(400).json({ error: 'This customer has no saved payout account. Pay manually.' });
-      try { bank = await flw.bankCode(bankNm); } catch (e) { return res.status(502).json({ error: 'Could not reach Flutterwave to check the bank. Try again, or pay manually.' }); }
+      try { bank = await prov.bankCode(bankNm); } catch (e) { return res.status(502).json({ error: `Could not reach ${prov.name} to check the bank. Try again, or pay manually.` }); }
       if (!bank) return res.status(400).json({ error: `Could not match the bank "${bankNm}" automatically. Pay this one manually.` });
     }
-    try { await flw.resolveAccount(acctNo, bank.code); } catch (e) { return res.status(400).json({ error: 'Flutterwave could not verify that account number. Check it, or pay manually.' }); }
+    let resolved; try { resolved = await prov.resolveAccount(acctNo, bank.code); } catch (e) { return res.status(400).json({ error: `${prov.name} could not verify that account number. Check it, or pay manually.` }); }
+    const acctName = (resolved && (resolved.account_name || resolved.accountName)) || (user && user.accountName) || 'AZAPLUG customer';
     const ref = 'wd_' + String(w.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20) + '_' + Date.now().toString(36);
     let t;
-    try { t = await flw.createTransfer({ accountNumber: acctNo, bankCode: bank.code, amount: w.amount, reference: ref, narration: 'AZAPLUG withdrawal' }); }
-    catch (e) { console.error('FLW transfer error:', e.message); return res.status(502).json({ error: 'Flutterwave did not accept the transfer: ' + (e.message || 'try again') + '. The money is still held — pay manually if you need to.' }); }
+    try { t = await prov.createTransfer({ accountNumber: acctNo, bankCode: bank.code, amount: w.amount, reference: ref, narration: 'AZAPLUG withdrawal', name: acctName }); }
+    catch (e) { console.error(prov.name + ' transfer error:', e.message); return res.status(502).json({ error: `${prov.name} did not accept the transfer: ` + (e.message || 'try again') + '. The money is still held — pay manually if you need to.' }); }
     try {
-      await store.setWithdrawalTransfer(w.id, { status: 'processing', method: 'flutterwave', transferId: t.id, transferRef: ref, transferStatus: 'initiated', autopayAt: new Date().toISOString(), autoNote: `Sent to ${bank.name} ${acctNo} via Flutterwave`, payoutAccount: acctNo, payoutBank: bank.name });
+      await store.setWithdrawalTransfer(w.id, { status: 'processing', method: methodOf(prov), transferId: t.id, transferRef: ref, transferStatus: 'initiated', autopayAt: new Date().toISOString(), autoNote: `Sent to ${bank.name} ${acctNo} via ${prov.name}`, payoutAccount: acctNo, payoutBank: bank.name });
     } catch (e) { if (e.code === 'AUTOPAY_COLS') return res.status(500).json({ error: AUTOPAY_SQL }); throw e; }
     notify(w.userId, 'tx', 'Withdrawal processing', `Your withdrawal of ₦${plain(w.amount)} is being paid to ${bank.name}. You'll get a note when it lands.`);
     res.json({ ok: true, status: 'processing' });
@@ -1914,10 +1933,11 @@ app.post('/api/admin/withdrawals/:id/autopay', requireAdmin, ADMIN_MONEY, async 
 app.post('/api/admin/withdrawals/:id/autopay/check', requireAdmin, ADMIN_MONEY, async (req, res) => {
   try {
     const w = await store.findWithdrawalById(req.params.id);
-    if (!w || w.method !== 'flutterwave' || !w.transferId) return res.status(400).json({ error: 'Nothing to check on this one.' });
+    const prov = providerByMethod(w && w.method);
+    if (!w || !prov || !w.transferId) return res.status(400).json({ error: 'Nothing to check on this one.' });
     if (w.status !== 'processing') return res.json({ ok: true, status: w.status });
     let t;
-    try { t = await flw.fetchTransfer(w.transferId); } catch (e) { return res.status(502).json({ error: 'Could not reach Flutterwave.' }); }
+    try { t = await prov.fetchTransfer(w.transferId); } catch (e) { return res.status(502).json({ error: `Could not reach ${prov.name}.` }); }
     const st = String((t && t.status) || '').toUpperCase();
     if (st === 'SUCCESSFUL') {
       await store.setWithdrawalTransfer(w.id, { status: 'paid', transferStatus: 'success' });
@@ -1925,7 +1945,7 @@ app.post('/api/admin/withdrawals/:id/autopay/check', requireAdmin, ADMIN_MONEY, 
       return res.json({ ok: true, status: 'paid' });
     }
     if (st === 'FAILED') {
-      await store.setWithdrawalTransfer(w.id, { status: 'pending', transferStatus: 'failed', autoNote: 'Flutterwave transfer failed — pay manually.' });
+      await store.setWithdrawalTransfer(w.id, { status: 'pending', transferStatus: 'failed', autoNote: `${prov.name} transfer failed — pay manually.` });
       return res.json({ ok: true, status: 'pending' });
     }
     res.json({ ok: true, status: 'processing' });
@@ -1951,6 +1971,27 @@ app.post('/api/flw/webhook', async (req, res) => {
     }
     res.json({ ok: true });
   } catch (err) { console.error('FLW webhook error:', err); res.json({ ok: true }); }
+});
+
+// Paystack webhook: finalizes a processing auto-payment. Public, authenticated by the HMAC-SHA512 signature.
+app.post('/api/paystack/webhook', async (req, res) => {
+  try {
+    if (!paystack.verifyWebhook(req)) return res.status(401).end();
+    const b = req.body || {}, d = b.data || {};
+    const ref = d.reference || '';
+    const ev = String(b.event || '');
+    if (!ref) return res.json({ ok: true });
+    const w = await store.findWithdrawalByTransferRef(ref).catch(() => null);
+    if (!w || w.method !== 'paystack' || w.status !== 'processing') return res.json({ ok: true });
+    if (ev === 'transfer.success') {
+      await store.setWithdrawalTransfer(w.id, { status: 'paid', transferStatus: 'success' });
+      notify(w.userId, 'tx', 'Withdrawal paid', `Your withdrawal of ₦${plain(w.amount)} has been paid to ${w.payoutBank}.`);
+    } else if (ev === 'transfer.failed' || ev === 'transfer.reversed') {
+      await store.setWithdrawalTransfer(w.id, { status: 'pending', transferStatus: 'failed', autoNote: 'Paystack transfer failed — pay manually. ' + (d.reason || d.message || '') });
+      alertTeam({ admin: true }, 'Auto-pay failed', `A ₦${plain(w.amount)} auto-payment to ${w.payoutBank} failed. The money is still held — pay it manually.`, { admin: 'wds' });
+    }
+    res.json({ ok: true });
+  } catch (err) { console.error('Paystack webhook error:', err); res.json({ ok: true }); }
 });
 
 // ============================================================

@@ -125,4 +125,4 @@ function verifyWebhook(req) {
   try { return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected)); } catch (e) { return false; }
 }
 
-module.exports = { configured, isMock, banks, bankCode, resolveAccount, createTransfer, fetchTransfer, verifyWebhook };
+module.exports = { name: 'Flutterwave', configured, isMock, banks, bankCode, resolveAccount, createTransfer, fetchTransfer, verifyWebhook };
