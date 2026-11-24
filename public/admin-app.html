@@ -242,6 +242,12 @@ a.role{display:flex}
 .feed>i{width:8px;height:8px;border-radius:50%;background:var(--blue);flex:none}
 .feed b{display:block;font-size:14px;font-weight:600}.feed small{font-size:12px;color:#4B5563}.feed em{font-style:normal;font-weight:700;color:var(--blue);font-size:14px;white-space:nowrap}
 .write{display:flex;gap:6px;align-items:center;background:#EAF1FE;border:1px solid #BFD3F8;color:var(--blue);font-weight:700;font-size:14px;padding:7px 14px;border-radius:999px}
+.bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:var(--w);background:rgba(255,255,255,.97);backdrop-filter:blur(14px);border-top:1px solid #EEF1F6;box-shadow:0 -10px 30px -16px rgba(17,24,39,.22);display:flex;z-index:60;padding:9px 8px calc(9px + env(safe-area-inset-bottom))}
+.bnav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:#98A1B0;position:relative;transition:color .15s}
+.bnav a .ic{width:46px;height:30px;border-radius:12px;display:grid;place-items:center;transition:background .18s}
+.bnav a.on{color:var(--blue)}
+.bnav a.on .ic{background:#EAF1FE}
+.bnav a .dot{position:absolute;top:-4px;left:calc(50% + 8px);min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--red);color:#fff;font:700 10px var(--body);font-style:normal;display:grid;place-items:center;border:2px solid #fff}
 .av{width:40px;height:40px;border-radius:50%;background:#EAF1FE;color:var(--blue);display:grid;place-items:center;font-family:var(--head);font-weight:700;font-size:14px;flex:none}
 .av.sm{width:30px;height:30px;font-size:11px}.av.xl{width:76px;height:76px;font-size:26px;margin:0 auto}.av.red{background:#FDE8E8;color:var(--red)}
 .badge.xs{font-size:10px;padding:3px 8px;border-radius:6px;letter-spacing:.02em}
@@ -463,6 +469,34 @@ img,svg,video{max-width:100%}
 .gpi{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.gpi img{width:100%;border-radius:10px;display:block;background:#EEF2F8}
 .gab{display:flex;align-items:center;gap:12px;width:100%;margin-top:12px;padding:14px 16px;border-radius:16px;color:#fff;background:linear-gradient(135deg,#F59E0B,#EF4444)}
 .gab .gai{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.2);display:grid;place-items:center;flex:none}.gab b{display:block;font-size:15.5px}.gab small{font-size:12.5px;opacity:.9}
+/* Reorganised dashboard: primary actions, compact tools, feature tiles */
+.qa.pri{padding:20px 10px;gap:13px;font-size:14.5px}
+.qa.pri span{width:50px;height:50px}
+.mtiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.mtile{position:relative;background:#fff;border:1px solid var(--line);border-radius:14px;padding:13px 5px;display:flex;flex-direction:column;align-items:center;gap:8px;font-size:11px;font-weight:600;color:var(--slate);text-align:center;line-height:1.2;box-shadow:0 2px 6px rgba(17,24,39,.04)}
+.mtile span{width:36px;height:36px;border-radius:11px;background:#EEF3FE;color:var(--blue);display:grid;place-items:center}
+.mtile .glow{top:6px;right:6px;min-width:18px;height:18px;font-size:10px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fcard{display:flex;flex-direction:column;gap:12px;padding:16px;border-radius:18px;color:#fff;text-align:left;min-height:116px;background:linear-gradient(135deg,#F59E0B,#EF4444)}
+.fcard .gai{width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.2);display:grid;place-items:center;flex:none}
+.fcard .ftx{min-width:0}.fcard b{font-size:15px;display:block;font-family:var(--head)}.fcard small{font-size:11.5px;opacity:.92;line-height:1.3;display:block;margin-top:3px}
+.fcard.span2{grid-column:1/-1;flex-direction:row;align-items:center;min-height:0}.fcard.span2 .ftx{flex:1}
+.fcard.fcombo{flex-direction:column;align-items:stretch;min-height:0;gap:14px}
+.fcombo .fhdr{display:flex;align-items:center;gap:12px}.fcombo .fhdr .ftx{flex:1;min-width:0}
+.fchips{display:flex;gap:10px}
+.fchips button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:rgba(255,255,255,.2);color:#fff;font-weight:700;font-size:13px;font-family:var(--body);padding:11px 12px;border-radius:12px;border:0;cursor:pointer}
+.fchips button:active{background:rgba(255,255,255,.33)}
+.moneyc{display:flex;align-items:stretch;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 2px 10px rgba(17,24,39,.05);overflow:hidden}
+.moneyc .mcol{flex:1;padding:15px 16px;min-width:0}
+.moneyc .mcol small{display:block;font-size:12px;color:var(--muted);line-height:1.35}
+.moneyc .mcol b{display:block;font-family:var(--head);font-size:21px;font-weight:700;margin:8px 0 4px;line-height:1.05;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.moneyc .mcol i{font-style:normal;font-size:11.5px;color:var(--muted)}
+.moneyc .mdiv{width:1px;background:var(--line);margin:15px 0;flex:none}
+.setrow{display:flex;align-items:center;gap:13px;width:100%;padding:15px 16px;border-radius:16px;background:#fff;border:1px solid var(--line);box-shadow:0 2px 6px rgba(17,24,39,.04);text-align:left}
+.setrow .sic{width:38px;height:38px;border-radius:11px;background:#EEF3FE;color:var(--blue);display:grid;place-items:center;flex:none}
+.setrow .stx{flex:1;min-width:0}.setrow .stx b{display:block;font-size:14.5px;font-family:var(--head);color:var(--slate)}
+.setrow .stx small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.setrow svg{color:var(--muted);flex:none}
 .gar{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}.gar>b{width:34px;color:var(--blue);flex:none}
 .cnote{display:inline-flex;vertical-align:-3px;margin-right:6px;color:#10B981}.cnote.miss{color:#EF4444}
 </style>
@@ -743,7 +777,8 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
  const alertsOn=S.users.filter(u=>u.alerts>0).length;
  const cnt={staff:S.staff.filter(x=>x.status==='pending').length,accounts:S.accounts.filter(a=>!a.active).length,chats:S.convos.filter(c=>c.unread).length+S.escs.filter(x=>x.status==='open').length+fwNew()+(S.teamUnread||0),
    receipts:act.length,wds:S.wds.filter(w=>w.status==='pending').length+S.loans.filter(l=>l.status==='pending').length};
- const qa=[['staff','users','Manage Staff'],['accounts','users','Accounts'],['users','users','Manage Users'],['chats','help','Help &amp; Support'],['rules','gear','Edit Rules'],['receipts','file','Receipts'],['wds','dl','Withdrawer Request'],['rates','trend','Edit Rates']];
+ const primary=[['receipts','file','Receipts'],['wds','dl','Withdrawals'],['accounts','bank','Accounts'],['chats','help','Help &amp; Support']];
+ const more=[['staff','shield','Manage Staff'],['users','users','Manage Users'],['rules','gear','Edit Rules'],['rates','trend','Edit Rates']];
  return `<section class="scr">${hd('Admin Panel','AzaPlug Executive Control','',`<button class="write" data-go="announce">${I('pen','style="width:15px;height:15px"')}Write</button>`)}
  <div class="bd">${alertCard()}${rateReminder()}<div class="g2">
   <div class="stat"><small>Total Users</small><b>${n0(S.users.length)}</b><i style="color:var(--green)">+${week} this week</i></div>
@@ -751,16 +786,20 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
   <button class="stat" data-go="receipts"><small>Pending</small><b style="color:var(--orange)">${rec} Receipt${rec===1?'':'s'}</b><i>Needs review</i></button>
   <button class="stat" data-go="users" data-tab="alertsoff"><small>Notifications On</small><b style="color:${alertsOn===S.users.length?'var(--green)':'var(--slate)'}">${alertsOn}<span style="font-size:15px;color:var(--muted);font-weight:600"> / ${S.users.length}</span></b><i style="color:${alertsOn<S.users.length?'var(--orange)':'var(--green)'}">${S.users.length-alertsOn?(S.users.length-alertsOn)+' customer'+(S.users.length-alertsOn===1?'':'s')+' without':'Every customer'}</i></button></div>
   <h2 class="sh">Money</h2>
-  <div class="g2">${(()=>{const paid=S.trades.filter(t=>t.creditedAmount>0),rev=paid.reduce((s,t)=>s+t.creditedAmount,0),gt=paid.filter(t=>t.card),gv=gt.reduce((s,t)=>s+t.creditedAmount,0);
-   return `<div class="stat"><small>Revenue · paid to customers</small><b style="color:var(--green)">${naira(rev)}</b><i>${n0(paid.length)} trade${paid.length===1?'':'s'} credited</i></div>
-   <div class="stat"><small>Gift Cards Loaded</small><b style="color:#6D28D9">${naira(gv)}</b><i>${n0(gt.length)} card${gt.length===1?'':'s'} traded</i></div>`})()}</div>
+  ${(()=>{const paid=S.trades.filter(t=>t.creditedAmount>0),rev=paid.reduce((s,t)=>s+t.creditedAmount,0),gt=paid.filter(t=>t.card),gv=gt.reduce((s,t)=>s+t.creditedAmount,0);
+   return `<div class="moneyc"><div class="mcol"><small>Revenue · paid to customers</small><b style="color:var(--green)">${naira(rev)}</b><i>${n0(paid.length)} trade${paid.length===1?'':'s'} credited</i></div><div class="mdiv"></div><div class="mcol"><small>Gift Cards Loaded</small><b style="color:#6D28D9">${naira(gv)}</b><i>${n0(gt.length)} card${gt.length===1?'':'s'} traded</i></div></div>`})()}
   <h2 class="sh">Quick Actions</h2>
-  <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
-  <button class="gab" data-go="giveaway"><span class="gai">${I('gift','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Giveaways</b><small>Reward the first customers to say hi</small></span>${I('cr','style="width:18px;height:18px"')}</button>
-  <button class="gab gfb" data-go="gift"><span class="gai">${I('gift','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Gift Cards</b><small>Card rates, gift codes and the on/off switch</small></span>${I('cr','style="width:18px;height:18px"')}</button>
-  <button class="gab hlab" data-go="health"><span class="gai">${I('activity','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>System Health</b><small>Supabase, Render, Brevo limits in one place</small></span>${I('cr','style="width:18px;height:18px"')}</button>
-  <button class="gab chab" data-go="chal"><span class="gai">${I('trophy','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>December Challenge</b><small>Top 3 traders: real names and prizes</small></span>${I('cr','style="width:18px;height:18px"')}</button>
-  <button class="gab tfab" data-go="tfa"><span class="gai">${I('shielda','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Two-Step Login</b><small>Google Authenticator code for admin sign-in</small></span>${I('cr','style="width:18px;height:18px"')}</button>
+  <div class="g2">${primary.map(q=>`<button class="qa pri" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
+  <h2 class="sh">More Tools</h2>
+  <div class="mtiles">${more.map(q=>`<button class="mtile" data-go="${q[0]}"><span>${I(q[1],'style="width:18px;height:18px"')}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
+  <h2 class="sh">Features</h2>
+  <div class="fgrid">
+   <div class="fcard fcombo span2"><div class="fhdr"><span class="gai">${I('trophy','style="width:22px;height:22px"')}</span><span class="ftx"><b>Giveaways &amp; Challenge</b><small>Reward customers &amp; top-trader prizes</small></span></div><div class="fchips"><button data-go="giveaway">${I('gift','style="width:16px;height:16px"')} Giveaways</button><button data-go="chal">${I('trophy','style="width:16px;height:16px"')} Challenge</button></div></div>
+   <button class="fcard gfb" data-go="gift"><span class="gai">${I('gift','style="width:22px;height:22px"')}</span><span class="ftx"><b>Gift Cards</b><small>Rates, codes &amp; switch</small></span></button>
+   <button class="fcard hlab" data-go="health"><span class="gai">${I('activity','style="width:22px;height:22px"')}</span><span class="ftx"><b>System Health</b><small>Supabase · Render · Brevo</small></span></button>
+  </div>
+  <h2 class="sh">Settings</h2>
+  <button class="setrow" data-go="tfa"><span class="sic">${I('shielda','style="width:19px;height:19px"')}</span><span class="stx"><b>Two-Step Login</b><small>Google Authenticator for admin sign-in</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <div class="between" style="margin:22px 0 10px"><h2 class="sh" style="margin:0">Recent Activity Feed</h2><button class="link" style="font-size:14px" data-go="receipts">View All</button></div>
   ${feed.length?feed.map(f=>`<button class="feed" data-go="${f.go}" data-id="${esc(f.id)}"><i></i><span class="grow" style="min-width:0"><b>${f.t}</b><small>${f.s} • ${ago(f.at)}</small></span><em>${f.r}</em></button>`).join(''):'<p class="empty">No activity yet</p>'}
   <p style="text-align:center;margin-top:26px"><button class="link" style="color:var(--muted);font-weight:600;font-size:14px" data-act="logout">Log out</button></p></div></section>`},
@@ -1297,7 +1336,12 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-pin]
 let poll=null;
 const typing=()=>document.activeElement&&document.activeElement.matches('input,textarea');
 const inChat=()=>S.route==='chat'||S.route==='staffChat';
-function render(){$('#app').innerHTML=V[S.route]();if(inChat())chatBottom();if(S.route==='tfa')tfaQR()}
+const NAVBAR=new Set(['dash','receipts','wds','chats','accounts','users','staff','rates','rules','gift','health','chal','giveaway','console','inbox','team','staffChats']);
+const NAV_TABS=[['dash','home','Home'],['receipts','file','Receipts'],['wds','dl','Withdraw'],['chats','help','Support'],['accounts','bank','Accounts']];
+function bottomNav(){if(!NAVBAR.has(S.route))return '';
+  const cnt={receipts:(S.trades||[]).filter(pending).length,wds:(S.wds||[]).filter(w=>w.status==='pending').length+(S.loans||[]).filter(l=>l.status==='pending').length,chats:(S.convos||[]).filter(c=>c.unread).length+(S.escs||[]).filter(x=>x.status==='open').length+fwNew()+(S.teamUnread||0)};
+  return `<nav class="bnav">${NAV_TABS.map(t=>`<a data-go="${t[0]}" class="${S.route===t[0]?'on':''}"><span class="ic">${I(t[1],'style="width:23px;height:23px"')}</span>${t[2]}${cnt[t[0]]?`<i class="dot" aria-label="${cnt[t[0]]} waiting">${cnt[t[0]]}</i>`:''}</a>`).join('')}</nav>`}
+function render(){const nav=bottomNav();$('#app').innerHTML=V[S.route]()+nav;$('#app').style.paddingBottom=nav?'74px':'';if(inChat())chatBottom();if(S.route==='tfa')tfaQR()}
 function tfaQR(){const el=$('#tfqr'),t=S.tfa;if(!el||!t||!t.uri)return;const make=()=>{try{const q=qrcode(0,'M');q.addData(t.uri);q.make();el.innerHTML=q.createSvgTag({scalable:true})}catch(e){}};
   if(window.qrcode)return make();const sc=document.createElement('script');sc.src='https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js';sc.onload=make;document.head.appendChild(sc)}
 function go(r,o,pop){
