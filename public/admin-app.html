@@ -994,7 +994,8 @@ rates:()=>`<section class="scr">${hd('Rates &amp; Rules','Admin Controls • Str
     <div><label class="cl" for="cr-usdt" style="margin-top:0">USDT: $1 = ₦</label><input class="in" id="cr-usdt" inputmode="decimal" placeholder="Not set" value="${esc(S.settings.usdtRate||'')}"></div></div>
    <button class="b blue" style="margin-top:12px">Save Crypto Rates</button></form>
   <div class="pol"><b>System Policy Rules List</b><p>${esc((S.settings.rulesText||'No rules posted yet.').slice(0,220))}${(S.settings.rulesText||'').length>220?'…':''}</p><button class="link" style="font-size:13px" data-set="ratesTab:rules">+ Configure Policy Rules</button></div>`
- :`<form data-form="rules" novalidate><label class="cl" for="r-text" style="margin-top:0">Rules shown to customers</label><textarea class="in" id="r-text" rows="16">${esc(S.settings.rulesText||'')}</textarea>
+ :`<form data-form="rules" novalidate><label class="cl" for="r-text" style="margin-top:0">Rules shown to customers</label><textarea class="in" id="r-text" rows="13">${esc(S.settings.rulesText||'')}</textarea>
+  <label class="cl" for="r-slip">Delay warning pop-up</label><textarea class="in" id="r-slip" rows="4">${esc(S.settings.slipNotice||'')}</textarea><small class="muted" style="display:block;font-size:12px;margin-top:6px">Shown to customers when they open Get Account and when they tap Start Trade.</small>
   <label class="cl" for="r-max">Maximum receipt amount</label><input class="in" id="r-max" inputmode="decimal" placeholder="No limit" value="${+S.settings.maxDeposit>0?esc(S.settings.maxDeposit):''}"><small class="muted" style="display:block;font-size:12px;margin-top:6px">Receipts above this amount are told to chat with you. Leave empty for no limit.</small><button class="b blue">Save Change</button></form>`}</div></section>`,
 
 console:()=>{const open=S.escs.filter(e=>e.status==='open'),list=S.escTab==='open'?open:S.escTab==='resolved'?S.escs.filter(e=>e.status!=='open'):S.escs;
@@ -1421,7 +1422,7 @@ const FORMS={
   async userEdit(){const b={name:val('u-n'),bankName:val('u-b'),accountNumber:val('u-a')};if(Object.values(b).some(v=>!v))throw new Error('All fields are required');
     await api('PUT','/api/admin/users/'+S.id,b);toast('User saved');await reload(S.back)},
   async cryptoRates(){await api('PUT','/api/admin/settings',{btcRate:num(val('cr-btc'))||0,usdtRate:num(val('cr-usdt'))||0});toast('Crypto rates saved');await refresh()},
-  async rules(){await api('PUT','/api/admin/settings',{rulesText:$('#r-text').value,maxDeposit:num(val('r-max'))});toast('Rules saved');await refresh()},
+  async rules(){const r=await api('PUT','/api/admin/settings',{rulesText:$('#r-text').value,slipNotice:$('#r-slip').value,maxDeposit:num(val('r-max'))});toast(r&&r.slipNoticeSaved===false?'Saved — run the slip-notice SQL to keep the warning text':'Rules saved');await refresh()},
   async autopayCfg(){const max=num(val('ap-max')),cap=num(val('ap-cap'));if(!max||max<=0)return toast('Enter the max per withdrawal');if(!cap||cap<max)return toast('Daily cap must be at least the max per withdrawal');
     await api('PUT','/api/admin/settings',{autopayMax:max,autopayDailyCap:cap});toast('Limits saved');await refresh();render()},
   async chat(){const i=$('#c-in'),text=i.value.trim();if(!text)return;i.value='';const d=await api('POST',(S.route==='staffChat'?'/api/admin/team/'+encodeURIComponent(S.sid)+'/send':'/api/admin/chats/'+encodeURIComponent(S.id)+'/send'),{text});S.chat.push(d.message);$('#msgs').innerHTML=msgsHtml();chatBottom();i.focus()}

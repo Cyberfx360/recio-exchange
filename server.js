@@ -389,7 +389,8 @@ app.get('/api/me', async (req, res) => {
       loggedIn: true, name: user.name, phone: user.phone, accountNumber: user.accountNumber,
       bankName: user.bankName, bankCode: user.bankCode, accountName: user.accountName, payoutVerifiedAt: user.payoutVerifiedAt,
       status: user.status, balance: user.balance,
-      email: user.email, needsPin: (await pinReady()) && user.email === null
+      email: user.email, needsPin: (await pinReady()) && user.email === null,
+      slipNotice: (await store.getSettings()).slipNotice
     });
   } catch (err) {
     console.error('Me error:', err);
@@ -1965,6 +1966,7 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
       if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'Enter the rate as a number, like 1650.' });
       patch[k] = n;
     }
+    if (b.slipNotice !== undefined) patch.slipNotice = String(b.slipNotice).slice(0, 1000);
     if (b.giftOn !== undefined) patch.giftOn = b.giftOn === true;
     if (b.challengeOn !== undefined) patch.challengeOn = b.challengeOn === true;
     if (b.autopayOn !== undefined) patch.autopayOn = b.autopayOn === true;
@@ -1974,7 +1976,10 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
       if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'Enter the amount as a number, like 50000.' });
       patch[k] = n;
     }
-    await store.updateSettings(patch); if (patch.giftOn !== undefined) GIFT_ON = null; if (patch.challengeOn !== undefined) CHAL_ON = null; res.json({ ok: true });
+    try { await store.updateSettings(patch); }
+    catch (e) { if (e && e.slipNoticeCol) { if (patch.giftOn !== undefined) GIFT_ON = null; if (patch.challengeOn !== undefined) CHAL_ON = null; return res.json({ ok: true, slipNoticeSaved: false }); } throw e; }
+    if (patch.giftOn !== undefined) GIFT_ON = null; if (patch.challengeOn !== undefined) CHAL_ON = null;
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
     const msg = String(err && err.message), cryptoCols = /btc_rate|usdt_rate/.test(msg);
