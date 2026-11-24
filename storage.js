@@ -507,7 +507,9 @@ async function getSettings() {
       settlement_account: '', settlement_bank: '', max_deposit: 3000000
     };
     await supabase.from('settings').insert(defaults);
-    return { rulesText: defaults.rules_text, settlementAccount: '', settlementBank: '', maxDeposit: 3000000, btcRate: 0, usdtRate: 0, slipNotice: SLIP_DEFAULT };
+    return { rulesText: defaults.rules_text, settlementAccount: '', settlementBank: '', maxDeposit: 3000000, btcRate: 0, usdtRate: 0, slipNotice: SLIP_DEFAULT,
+      maintenanceOn: false, withdrawChargePct: 0, gainTotal: 0, gainAcct: null,
+      chargeTotal: 0, chargeAutoMonthly: false, chargeLastSweep: '' };
   }
   return {
     rulesText: data.rules_text, settlementAccount: data.settlement_account,
@@ -520,9 +522,26 @@ async function getSettings() {
     autopayDailyCap: Number(data.autopay_daily_cap) || 500000,  // total auto-paid per day before it pauses to manual
     slipNotice: data.slip_notice || SLIP_DEFAULT,   // customer warning about manual slip confirmation delay (editable by admin)
     adminPayoutPinHash: data.admin_payout_pin_hash || null,  // admin payout PIN (bcrypt); required to release a payout once set
-    adminPayoutPinOff: data.admin_payout_pin_off === true    // admin has temporarily switched the payout PIN off
+    adminPayoutPinOff: data.admin_payout_pin_off === true,   // admin has temporarily switched the payout PIN off
+    maintenanceOn: data.maintenance_on === true,             // app under maintenance: everyone but admin is locked out
+    withdrawChargePct: Number(data.withdraw_charge_pct) || 0, // % charge the customer pays on each withdrawal (admin keeps it)
+    gainTotal: Number(data.gain_total) || 0,                  // un-swept gains collected on credits (naira)
+    gainAcct: data.gain_acct_number ? { number: data.gain_acct_number, bank: data.gain_acct_bank, code: data.gain_acct_code, name: data.gain_acct_name } : null,  // where gains (and charges) are swept to
+    chargeTotal: Number(data.charge_total) || 0,              // un-swept withdrawal charges collected (naira); paid to admin monthly
+    chargeAutoMonthly: data.charge_auto_monthly === true,     // auto-send charge earnings to admin account once a month
+    chargeLastSweep: data.charge_last_sweep || ''            // YYYY-MM of the last charge payout (guards the monthly auto-send)
   };
 }
+// Dedicated setters for the new admin-control columns (graceful: a missing column reports ADMINCTL_COL).
+const adminCtlErr = (error, col) => { if (/maintenance_on|withdraw_charge_pct|gain_total|gain_acct|charge_total|charge_auto_monthly|charge_last_sweep/.test(String(error.message))) { const e = new Error('admin-control columns missing (' + col + ')'); e.code = 'ADMINCTL_COL'; return e; } return error; };
+async function adminCtlColsReady() { const { error } = await supabase.from('settings').select('gain_total').limit(1); return !error; }
+async function setMaintenance(on) { const { error } = await supabase.from('settings').update({ maintenance_on: !!on }).eq('id', 1); if (error) throw adminCtlErr(error, 'maintenance_on'); }
+async function setWithdrawChargePct(pct) { const { error } = await supabase.from('settings').update({ withdraw_charge_pct: Number(pct) || 0 }).eq('id', 1); if (error) throw adminCtlErr(error, 'withdraw_charge_pct'); }
+async function setGainTotal(v) { const { error } = await supabase.from('settings').update({ gain_total: Math.max(0, Math.round((Number(v) || 0) * 100) / 100) }).eq('id', 1); if (error) throw adminCtlErr(error, 'gain_total'); }
+async function setGainAccount(a) { const { error } = await supabase.from('settings').update({ gain_acct_number: a.number, gain_acct_bank: a.bank, gain_acct_code: a.code, gain_acct_name: a.name }).eq('id', 1); if (error) throw adminCtlErr(error, 'gain_acct'); }
+async function setChargeTotal(v) { const { error } = await supabase.from('settings').update({ charge_total: Math.max(0, Math.round((Number(v) || 0) * 100) / 100) }).eq('id', 1); if (error) throw adminCtlErr(error, 'charge_total'); }
+async function setChargeAutoMonthly(on) { const { error } = await supabase.from('settings').update({ charge_auto_monthly: !!on }).eq('id', 1); if (error) throw adminCtlErr(error, 'charge_auto_monthly'); }
+async function setChargeLastSweep(ym) { const { error } = await supabase.from('settings').update({ charge_last_sweep: String(ym || '') }).eq('id', 1); if (error) throw adminCtlErr(error, 'charge_last_sweep'); }
 async function updateSettings(fields) {
   const patch = {};
   if (fields.rulesText !== undefined) patch.rules_text = fields.rulesText;
@@ -669,6 +688,7 @@ async function listConversations() {
 function withdrawalRow(r) {
   return {
     id: r.id, userId: r.user_id, amount: Number(r.amount),
+    payoutAmount: r.payout_amount != null ? Number(r.payout_amount) : Number(r.amount),   // net sent to the customer after the charge (falls back to gross)
     payoutAccount: r.payout_account, payoutBank: r.payout_bank,
     status: r.status, reason: r.reason, reasonImage: pubMedia(r.reason_image),
     createdAt: r.created_at, updatedAt: r.updated_at,
@@ -678,10 +698,10 @@ function withdrawalRow(r) {
 }
 async function createWithdrawal(w) {
   const id = uid();
-  const { error } = await supabase.from('withdrawals').insert({
-    id, user_id: w.userId, amount: w.amount,
-    payout_account: w.payoutAccount, payout_bank: w.payoutBank, status: 'pending'
-  });
+  const row = { id, user_id: w.userId, amount: w.amount, payout_account: w.payoutAccount, payout_bank: w.payoutBank, status: 'pending' };
+  if (w.payoutAmount != null) row.payout_amount = w.payoutAmount;
+  let { error } = await supabase.from('withdrawals').insert(row);
+  if (error && /payout_amount/.test(String(error.message))) { delete row.payout_amount; ({ error } = await supabase.from('withdrawals').insert(row)); } // column not added yet
   if (error) throw error;
   const { data } = await supabase.from('withdrawals').select('*').eq('id', id).single();
   return withdrawalRow(data);
@@ -1266,6 +1286,8 @@ module.exports = {
   listAccountsPublic, listAccountsForAmount, listAllAccounts, listAccountsByStaff, findAccountById, createAccount, updateAccount, deleteAccount,
   listApprovedTradeTotals, createTrade, findTradeById, findTradesByCardCode, listTradesForUser, listTradesForStaff, listAllTrades, updateTradeStatus, setSettlement,
   getSettings, updateSettings, setAdminPayoutPin, setAdminPayoutPinOff, adminPinColsReady,
+  adminCtlColsReady, setMaintenance, setWithdrawChargePct, setGainTotal, setGainAccount,
+  setChargeTotal, setChargeAutoMonthly, setChargeLastSweep,
   addMessage, messagesForUser, listConversations, findMessageById, deleteMessage, softDeleteMessage, pinMessage,
   createWithdrawal, findWithdrawalById, findWithdrawalByTransferRef, listWithdrawalsForUser, listAllWithdrawals, updateWithdrawalStatus, setWithdrawalTransfer, sumAutoPayoutsToday
 };

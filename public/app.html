@@ -539,9 +539,12 @@ async function api(method,url,body){
   const r=await fetch(url,{method,credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
   let d={};try{d=await r.json()}catch(e){}
   if(r.status===401&&S.me){S.me=null;go('login')}
+  if(r.status===503&&d.maintenance){showMaint(d.error);const e=new Error(d.error||'Under maintenance');Object.assign(e,d);throw e}
   if(!r.ok){const e=new Error(d.error||'Something went wrong. Try again.');Object.assign(e,d);throw e}
   return d;
 }
+function showMaint(msg){let el=document.getElementById('maint');if(!el){el=document.createElement('div');el.id='maint';document.body.appendChild(el)}
+  el.innerHTML=`<div style="position:fixed;inset:0;z-index:99999;background:#0F1B2D;color:#fff;display:grid;place-items:center;padding:30px;text-align:center"><div style="max-width:320px"><div style="font-size:46px;margin-bottom:14px">🛠️</div><h2 style="font-family:var(--head);margin:0 0 10px">Under maintenance</h2><p style="opacity:.82;line-height:1.5">${esc(msg||'AZAPLUG is under maintenance. Please check back shortly.')}</p><button class="btn sq" style="margin-top:22px;max-width:200px" onclick="location.reload()">Try again</button></div></div>`}
 async function loadMe(){const d=await api('GET','/api/me');S.me=d.loggedIn?d:null;return S.me}
 async function loadAll(){
   const [a,t,w]=await Promise.all([api('GET','/api/accounts'),api('GET','/api/trades'),api('GET','/api/withdrawals')]);
@@ -967,8 +970,13 @@ withdraw:()=>{const u=S.me;return `<section class="screen">
    <div class="row" style="gap:14px;margin-top:14px"><span style="width:44px;height:44px;border-radius:12px;background:#EEF2FB;color:var(--blue);display:grid;place-items:center">${I('bank')}</span>
    <span style="min-width:0"><b class="h" style="font-weight:600;font-size:16.5px;display:block">${esc(u.bankName)}</b><span class="muted" style="font-size:14px">${esc(u.accountNumber)}</span><br><small style="color:var(--soft);text-transform:uppercase">${esc(u.accountName||u.name)}</small>${u.accountName?` <small style="color:#059669;font-weight:700;text-transform:none">✓ confirmed</small>`:''}</span></div></div>
   <div class="card sum plain" style="margin-top:22px"><div class="cap" style="display:block;padding:0 0 6px">Transaction summary</div>
-   <div><span>Withdrawal Amount</span><b id="w-amt">${naira(0)}</b></div><div class="hr"></div>
-   <div><b style="font-weight:600;font-size:16px">Total to Deduct</b><b id="w-tot" style="font-family:var(--head);font-weight:700;font-size:19px;color:var(--blue)">${naira(0)}</b></div></div>
+   <div><span>Withdrawal Amount</span><b id="w-amt">${naira(0)}</b></div>
+   ${(u.withdrawChargePct||0)>0?`<div><span>Charge (${u.withdrawChargePct}%)</span><b id="w-chg">${naira(0)}</b></div>`:''}
+   <div class="hr"></div>
+   ${(u.withdrawChargePct||0)>0
+     ?`<div><b style="font-weight:600;font-size:16px">You'll receive</b><b id="w-net" style="font-family:var(--head);font-weight:700;font-size:19px;color:#059669">${naira(0)}</b></div>
+       <div class="between" style="margin-top:6px"><span class="muted" style="font-size:13px">Deducted from your balance</span><span class="muted" style="font-size:13px" id="w-tot">${naira(0)}</span></div>`
+     :`<div><b style="font-weight:600;font-size:16px">Total to Deduct</b><b id="w-tot" style="font-family:var(--head);font-weight:700;font-size:19px;color:var(--blue)">${naira(0)}</b></div>`}</div>
   <button class="btn sq" style="margin-top:22px;font-family:var(--body)">Confirm Withdrawal</button></form></section>`},
 
 verifyAcct:()=>{const v=S.vacct||(S.vacct=vInit()),banks=S.banks;return `<section class="screen">
@@ -1395,7 +1403,7 @@ document.addEventListener('input',e=>{const t=e.target;
   if(t.id==='g-v'||t.id==='g-code'){const g=S.gs;if(t.id==='g-code'){g.code=t.value;return}g.value=t.value;const c=(S.gcards||[]).find(x=>x.id===g.cardId),r=c&&c.rows.find(x=>x.id===g.rowId);
     if(r){const vv=num(t.value),rt=gRateC(c,r,g.prefix,vv);$('#g-val').textContent=r.cur+amt(vv);$('#g-get').textContent=naira(vv*rt);const gr=$('#g-rate');if(gr)gr.textContent=naira0(rt)+' per '+r.cur+'1';
       const w=gLimMsg(r,vv,t.value!==''),el=$('#g-lim'),sb=$('#g-submit');if(el){el.textContent=w.msg;el.style.display=w.msg?'block':'none';el.style.color=w.bad?'#B91C1C':'var(--muted)';el.style.fontWeight=w.bad?'600':'400'}if(sb){sb.disabled=w.bad;sb.style.opacity=w.bad?'.5':''}}}
-  if(t.id==='w-a'){const v=num(t.value);$('#w-amt').textContent=naira(v);$('#w-tot').textContent=naira(v)}
+  if(t.id==='w-a'){const v=num(t.value),pct=(S.me&&S.me.withdrawChargePct)||0,chg=pct>0?Math.round(v*pct)/100:0,net=Math.round((v-chg)*100)/100;$('#w-amt').textContent=naira(v);if($('#w-chg'))$('#w-chg').textContent=naira(chg);if($('#w-net'))$('#w-net').textContent=naira(net);if($('#w-tot'))$('#w-tot').textContent=naira(v)}
   if(t.id==='acct-q'){const q=t.value.toLowerCase();document.querySelectorAll('#acct-list .acct').forEach(el=>el.style.display=el.dataset.k.includes(q)?'':'none')}
 });
 const val=id=>$('#'+id).value.trim();

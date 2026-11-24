@@ -569,13 +569,14 @@ async function api(method,url,body){
   const r=await fetch(url,{method,credentials:'same-origin',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
   let d={};try{d=await r.json()}catch(e){}
   if(r.status===401&&S.route!=='login'){go('login')}
-  if(!r.ok)throw Object.assign(new Error(d.error||'Something went wrong. Try again.'),{status:r.status});
+  if(!r.ok)throw Object.assign(new Error(d.error||'Something went wrong. Try again.'),d,{status:r.status});
   return d;
 }
 const fwBody=f=>`<div class="fwb">${safeImg(f.imageData)?`<img src="${safeImg(f.imageData)}" alt="Forwarded photo"><button class="svp" style="color:var(--blue)" data-act="savePic" data-kind="chat" data-id="${esc(f.id)}">${I('dl','style="width:13px;height:13px"')}Save picture</button><br>`:''}${voiceHtml(f)}${esc(f.text||'').replace(/\n/g,'<br>')}</div>`;
 const fwNew=()=>(S.fwds||[]).filter(f=>f.status==='new').length;
 async function loadGas(){try{S.gas=(await api('GET','/api/admin/giveaways')).giveaways||[];S.gaErr=''}catch(e){S.gas=[];S.gaErr=e.message}if(S.route==='giveaway'&&!typing())render()}
 async function loadHealth(){try{S.health=await api('GET','/api/admin/health');if(S.route==='health')render()}catch(e){toast(e.message)}}
+async function loadBanks(){if(S.banks)return S.banks;const r=await api('GET','/api/banks');S.banks=r.banks||[];return S.banks}
 async function refresh(){
   // one list failing (e.g. settings) must not lock the admin out: load the rest and say which one failed
   const [u,s,a,t,w,st,c]=await Promise.all(['users','staff','accounts','trades','withdrawals','settings','chats'].map(x=>api('GET','/api/admin/'+x).catch(err=>{if(err.status===401)throw err;toast(err.message);return {}})));
@@ -662,6 +663,17 @@ health:()=>{const h=S.health,col=p=>p==null?'#CBD5E1':p>=95?'#EF4444':p>=80?'#F5
    <div class="gsw" style="margin:0"><span class="grow" style="min-width:0"><b>Payout PIN</b><small>${!(S.settings&&S.settings.adminPayoutPinOn)?'Add the payout-PIN columns in Supabase to turn this on.':!S.settings.adminPayoutPinSet?'Not set — set a PIN so payouts can go out.':S.settings.adminPayoutPinOff?'⚠️ Switched OFF — payouts don’t ask for the PIN right now.':'On ✓ — asked every time you release a payment.'}</small></span>${(S.settings&&S.settings.adminPayoutPinOn)?`<button class="b blue" style="flex:none;width:auto;height:38px;padding:0 16px;font-size:13.5px" data-act="setPayoutPin">${S.settings.adminPayoutPinSet?'Change':'Set'}</button>`:''}</div>
    ${(S.settings&&S.settings.adminPayoutPinOn&&S.settings.adminPayoutPinSet)?`<div class="gsw" style="margin:12px 0 0"><span class="grow" style="min-width:0"><b>Require PIN for payouts</b><small>${S.settings.adminPayoutPinOff?'Off — turn it back on when you’re done.':'On — turn off for a stretch to pay without retyping.'}</small></span><button class="tgl" role="switch" aria-checked="${!S.settings.adminPayoutPinOff}" aria-label="Require payout PIN" data-act="togglePayoutPin"></button></div>`:''}
   </div>
+  ${(S.settings&&S.settings.adminCtlOn)?`
+  <div class="card" style="padding:14px 16px;margin-bottom:12px">
+   <div class="gsw" style="margin:0"><span class="grow" style="min-width:0"><b>My account</b><small>${S.settings.gainAcct?`${esc(S.settings.gainAcct.bank)} •••${esc(String(S.settings.gainAcct.number).slice(-4))} · ${esc(S.settings.gainAcct.name)}`:'Not set — add the account your money is sent to.'}</small></span><button class="b blue" style="flex:none;width:auto;height:38px;padding:0 16px;font-size:13.5px" data-act="setGainAcct">${S.settings.gainAcct?'Change':'Set account'}</button></div>
+   <div class="gsw" style="margin:12px 0 0"><span class="grow" style="min-width:0"><b>Withdrawal charge</b><small>${(S.settings.withdrawChargePct||0)>0?`Customers pay ${S.settings.withdrawChargePct}% on each withdrawal — you keep it`:'Off — customers pay no charge'}</small></span><button class="b blue" style="flex:none;width:auto;height:38px;padding:0 16px;font-size:13.5px" data-act="setCharge">Set</button></div>
+   <div class="gsw" style="margin:12px 0 0"><span class="grow" style="min-width:0"><b>Trade gains</b><small>${naira(S.settings.gainTotal||0)} waiting to send</small></span><button class="b green" style="flex:none;width:auto;height:38px;padding:0 16px;font-size:13.5px" data-act="sweepGain"${(S.settings.gainTotal||0)<=0?' disabled':''}>Send now</button></div>
+   <div class="gsw" style="margin:12px 0 0"><span class="grow" style="min-width:0"><b>Charge earnings</b><small>${naira(S.settings.chargeTotal||0)} waiting${S.settings.chargeAutoMonthly?' · auto-paid monthly':''}</small></span><button class="b green" style="flex:none;width:auto;height:38px;padding:0 16px;font-size:13.5px" data-act="sweepCharge"${(S.settings.chargeTotal||0)<=0?' disabled':''}>Send now</button></div>
+   <div class="gsw" style="margin:12px 0 0"><span class="grow" style="min-width:0"><b>Pay charges monthly</b><small>${S.settings.chargeAutoMonthly?'On — sent to your account at the start of each month.':'Off — charges wait until you send them yourself.'}</small></span><button class="tgl" role="switch" aria-checked="${!!S.settings.chargeAutoMonthly}" aria-label="Auto-pay charges monthly" data-act="toggleChargeAuto"></button></div>
+  </div>
+  <div class="card" style="padding:14px 16px;margin-bottom:12px">
+   <div class="gsw" style="margin:0"><span class="grow" style="min-width:0"><b>Maintenance mode</b><small>${S.settings.maintenanceOn?'⚠️ ON — customers and staff are locked out until you turn it off.':'Off — everyone can use the app.'}</small></span><button class="tgl" role="switch" aria-checked="${!!S.settings.maintenanceOn}" aria-label="Maintenance mode" data-act="toggleMaint"></button></div>
+  </div>`:`<div class="card" style="padding:12px 14px;margin-bottom:12px;background:#FEF3C7;border-color:#FDE68A;font-size:13px">Run the <b>admin-controls SQL</b> from the README in Supabase to turn on gains, the withdrawal charge and maintenance mode.</div>`}
   ${!h?'<p class="empty">Loading…</p>':`
   <div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:12px;background:${worst>=95?'#FEF2F2':worst>=80?'#FFFBEB':'#ECFDF5'};border-color:transparent">
    <span style="width:12px;height:12px;border-radius:50%;flex:none;background:${col(worst)}"></span>
@@ -1396,7 +1408,9 @@ const ACT={
   failPicClear(){S.failReasonDraft=($('#t-reason')||{}).value||S.failReasonDraft||'';S.failPic=null;render()},
   async tradeCredit(el,id){const amount=num($('#t-credit').value),t=S.trades.find(x=>x.id===id);if(!amount){toast('Enter the final amount to credit');$('#t-credit').focus();return}
     if(!await ask('Credit this balance?',`${naira(amount)} will be added to ${t.userName}'s balance.`,'Credit '+naira(amount)))return;
-    await api('POST',`/api/admin/trades/${id}/credit`,{creditedAmount:amount});toast('Balance credited');await reload()},
+    let gain=0;
+    if(S.settings&&S.settings.adminCtlOn){const g=await askText('What gain did you make?','Your profit on this trade. It’s added to your gains, to send to your account later. Leave blank for none.','Gain in ₦ (e.g. 1500)','Save credit');if(g===null)return;gain=num(g)||0}
+    await api('POST',`/api/admin/trades/${id}/credit`,{creditedAmount:amount,gain});toast('Balance credited');await reload()},
   async escResolve(el,id){const e=S.escs.find(x=>x.id===id),fb=await askText('Resolve this escalation?',`Your feedback is sent back to ${e.staffName}, who escalated ${e.userName}'s chat.`,'Feedback for staff (e.g. Refund processed. You may continue follow-up.)','Mark as resolved');if(fb===null)return;
     await api('POST',`/api/admin/escalations/${id}/resolve`,{feedback:fb});toast('Escalation resolved');await reload()},
   async wdPaid(el,id){const w=S.wds.find(x=>x.id===id);if(!await ask('Mark as paid?',`Confirm you have sent ${naira(w.amount)} to ${w.userName} (${w.payoutBank}, ${w.payoutAccount}). This cannot be undone.`,'Mark as paid'))return;
@@ -1418,6 +1432,34 @@ const ACT={
     if(turningOff){pin=await uiPin({title:'Turn off payout PIN?',sub:'Enter your PIN to switch it off. Payouts won’t ask for it until you turn it back on.'});if(!pin)return}
     else{if(!await ask('Turn the payout PIN back on?','Payouts will ask for your PIN again before money goes out.','Turn on'))return}
     try{await api('POST','/api/admin/payout-pin/off',{off:turningOff,pin});toast(turningOff?'Payout PIN switched off':'Payout PIN back on');await refresh();render()}catch(e){toast(e.message)}},
+  async toggleMaint(){const s=S.settings||{};if(!s.adminCtlOn)return toast('Run the admin-controls SQL in Supabase first');
+    const on=!s.maintenanceOn;
+    if(on){if(!await ask('Turn on maintenance mode?','Every customer and staff member is logged out and locked out until you turn it off. You stay in.','Turn on',1))return}
+    else{if(!await ask('End maintenance mode?','Customers and staff can use the app again.','Turn off'))return}
+    try{await api('POST','/api/admin/maintenance',{on});toast(on?'Maintenance mode ON':'Maintenance mode off');await refresh();render()}catch(e){toast(e.message)}},
+  async setCharge(){const s=S.settings||{};if(!s.adminCtlOn)return toast('Run the admin-controls SQL in Supabase first');
+    const v=await askText('Withdrawal charge','The % a customer pays on each withdrawal — you keep it. Enter 0 to turn it off.',`Current: ${s.withdrawChargePct||0}%`,'Save');if(v===null)return;
+    const pct=num(v);if(pct===null||pct<0||pct>100)return toast('Enter a number between 0 and 100');
+    try{await api('POST','/api/admin/withdraw-charge',{pct});toast('Withdrawal charge saved');await refresh();render()}catch(e){toast(e.message)}},
+  async toggleChargeAuto(){const s=S.settings||{};if(!s.adminCtlOn)return toast('Run the admin-controls SQL in Supabase first');
+    const on=!s.chargeAutoMonthly;
+    if(on&&!s.gainAcct)return toast('Set your account first');
+    try{await api('POST','/api/admin/charge/auto',{on});toast(on?'Charges will be paid to you monthly':'Monthly auto-pay off');await refresh();render()}catch(e){toast(e.message)}},
+  async sweepGain(){return ACT._sweep('gain')},
+  async sweepCharge(){return ACT._sweep('charge')},
+  async _sweep(kind){const s=S.settings||{};if(!s.gainAcct)return toast('Set your account first');
+    const total=kind==='charge'?(s.chargeTotal||0):(s.gainTotal||0);if(total<=0)return toast('Nothing to send yet');
+    if(!await ask(`Send ${naira(total)}?`,`${naira(total)} ${kind==='charge'?'in withdrawal charges':'in gains'} will be sent to ${s.gainAcct.bank} •••${String(s.gainAcct.number).slice(-4)} (${s.gainAcct.name}).`,'Send '+naira(total)))return;
+    const pin=await payoutPin();if(pin===null)return;
+    try{const r=await api('POST','/api/admin/sweep',{kind,pin});toast(`Sent ${naira(r.sent)} ✓`);await refresh();render()}catch(e){if(e.needAdminPin)return toast('Set your payout PIN first');if(e.needAccount)return toast('Set your account first');toast(e.message)}},
+  async setGainAcct(){const s=S.settings||{};if(!s.adminCtlOn)return toast('Run the admin-controls SQL in Supabase first');
+    const acctNo=await askText('My account','The account your gains and charges are sent to.','10-digit account number','Next');if(acctNo===null)return;
+    const no=String(acctNo).replace(/\D/g,'');if(no.length<10||no.length>11)return toast('Enter a 10-digit account number');
+    let banks;try{banks=await loadBanks()}catch(e){return toast('Could not load the bank list')}
+    const picked=await pick('Choose your bank',banks.map(b=>({id:b.code,label:b.name})));if(!picked||!picked.id)return;const bankCode=picked.id;
+    let password='';
+    if(s.gainAcct){const p=await askText('Admin password','Changing your account needs your admin password.','Admin password','Save');if(p===null)return;password=p}
+    try{const r=await api('POST','/api/admin/gain-account',{accountNumber:no,bankCode,password});toast(`Saved — ${r.account.name}`);await refresh();render()}catch(e){if(e.needPassword)return toast('Enter your admin password to change it');toast(e.message)}},
   async autoSwitch(el){const on=!(S.settings&&S.settings.autopayOn);
     if(!await ask(on?'Turn on auto-pay?':'Turn off auto-pay?',on?`You'll be able to one-tap pay withdrawals up to ${naira(Number((S.settings||{}).autopayMax)||50000)} through your payout provider. It must be set up and funded.`:'Auto-pay buttons disappear. You pay every withdrawal by hand. Anything already sent is unaffected.',on?'Turn on':'Turn off',!on))return;
     await api('PUT','/api/admin/settings',{autopayOn:on});toast(on?'Auto-pay is on':'Auto-pay is off');await refresh();render()},
