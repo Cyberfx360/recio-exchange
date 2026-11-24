@@ -296,6 +296,13 @@ form .g2{margin-top:14px;row-gap:14px}form .g2 .cl{margin-top:0}
 @media (prefers-reduced-motion:reduce){.glow{animation:none;box-shadow:0 0 0 4px rgba(239,68,68,.25)}}
 .alertc{display:flex;align-items:center;gap:12px;background:#EEF3FE;border:1px solid #C9D9FA;border-radius:14px;padding:12px 14px;margin-bottom:14px}.alertc>span{width:36px;height:36px;border-radius:50%;background:#fff;color:var(--blue);display:grid;place-items:center;flex:none}
 .alertc b{display:block;font-size:14px}.alertc small{font-size:12.5px;color:#4B5563;display:block}.alertc button{background:var(--blue);color:#fff;font-weight:700;font-size:13px;padding:8px 14px;border-radius:999px;flex:none}
+.rrem{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:16px;margin-bottom:14px;background:linear-gradient(135deg,#0D4DC7,#0A3FA6);color:#fff}
+.rrem>span{width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.17);display:grid;place-items:center;flex:none;color:#fff}
+.rrem .grow{min-width:0}.rrem b{font-size:14.5px;font-family:var(--head);display:block}.rrem small{font-size:12px;opacity:.92;display:block;margin-top:2px;line-height:1.35}
+.rrem button{background:#fff;color:var(--blue);font-weight:700;font-size:12.5px;padding:9px 16px;border-radius:999px;border:0;white-space:nowrap;font-family:var(--body);flex:none}
+.rrem .rr-link{background:none;border:0;padding:0;margin-left:4px;color:#fff;text-decoration:underline;font-weight:700;font-size:12px;font-family:var(--body);white-space:nowrap}
+.rrem.ok{background:#ECFDF5;border:1px solid #A7F3D0;color:#065F46}
+.rrem.ok>span{background:#10B981;color:#fff}.rrem.ok b{color:#065F46}.rrem.ok small{color:#047857;opacity:1}.rrem.ok button{background:#10B981;color:#fff}
 .svp{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:inherit;opacity:.9;margin:0 0 6px;text-decoration:underline}
 .pk{display:block;width:100%;text-align:left;padding:13px 12px;border-radius:10px;font-size:15px;font-weight:500;margin-top:4px;background:#F4F7FC}.pk.on{background:#E1EAFD;color:var(--blue);font-weight:700}
 /* Voice notes */
@@ -721,7 +728,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
    receipts:act.length,wds:S.wds.filter(w=>w.status==='pending').length+S.loans.filter(l=>l.status==='pending').length};
  const qa=[['staff','users','Manage Staff'],['accounts','users','Accounts'],['users','users','Manage Users'],['chats','help','Help &amp; Support'],['rules','gear','Edit Rules'],['receipts','file','Receipts'],['wds','dl','Withdrawer Request'],['rates','trend','Edit Rates']];
  return `<section class="scr">${hd('Admin Panel','AzaPlug Executive Control','',`<button class="write" data-go="announce">${I('pen','style="width:15px;height:15px"')}Write</button>`)}
- <div class="bd">${alertCard()}<div class="g2">
+ <div class="bd">${alertCard()}${rateReminder()}<div class="g2">
   <div class="stat"><small>Total Users</small><b>${n0(S.users.length)}</b><i style="color:var(--green)">+${week} this week</i></div>
   <div class="stat"><small>Active Trades</small><b>${act.length}</b><i style="color:var(--blue)">${S.trades.length} all time</i></div>
   <button class="stat" data-go="receipts"><small>Pending</small><b style="color:var(--orange)">${rec} Receipt${rec===1?'':'s'}</b><i>Needs review</i></button>
@@ -1117,6 +1124,12 @@ async function pushDetach(){if(!PUSH_OK)return;const reg=await navigator.service
 const alertCard=()=>PUSH==='off'?`<div class="alertc"><span>${I('bell')}</span><div class="grow"><b>Turn on alerts</b><small>Get a phone alert for new receipts, messages, withdrawals and requests.</small></div><button data-act="alertsOn">Turn on</button></div>`
   :PUSH==='install'?`<div class="alertc"><span>${I('bell')}</span><div class="grow"><b>Get alerts on this iPhone</b><small>Tap Share in Safari, choose "Add to Home Screen", then open this app from your Home Screen and turn alerts on.</small></div></div>`
   :PUSH==='denied'?`<div class="alertc"><span>${I('bell')}</span><div class="grow"><b>Alerts are blocked</b><small>Allow notifications for AZAPLUG in your phone or browser settings to get alerts.</small></div></div>`:'';
+// Daily nudge to update rates. "Done" once any rate is saved today (Lagos time) or the admin taps Checked.
+const lagosDay=ts=>new Date(ts+3600000).toISOString().slice(0,10);
+const rateReminder=()=>{const at=Number((S.settings||{}).ratesCheckedAt)||0,done=at&&lagosDay(at)===lagosDay(Date.now());
+  return done
+   ?`<div class="rrem ok"><span>${I('checkc')}</span><div class="grow"><b>Rates checked today</b><small>Last updated ${ago(new Date(at).toISOString())}. Tap to review again.</small></div><button data-go="gift">Review</button></div>`
+   :`<div class="rrem"><span>${I('clock')}</span><div class="grow"><b>Update today's rates</b><small>Check Cardcosmic, then update your cards &amp; rates. <button class="rr-link" data-act="ratesChecked">Already checked</button></small></div><button data-go="gift">Update</button></div>`;};
 /* Live updates: refresh when an alert arrives or when you come back to the app */
 const LIVE=['dash','staff','receipts','wds','users','chats','accountsAll','rates','console','loans'];
 function liveRefresh(){const r=S.route;if(!LIVE.includes(r)||typing())return;refresh().then(()=>{if(S.route===r&&!typing())render()}).catch(()=>{})}
@@ -1356,6 +1369,7 @@ const ACT={
   async wdAuto(el,id){const w=S.wds.find(x=>x.id===id);if(!await ask('Auto-pay with Flutterwave?',`${naira(w.amount)} will be sent to ${w.userName} (${w.payoutBank}, ${w.payoutAccount}) through Flutterwave now. Make sure your Flutterwave balance can cover it.`,'Send '+naira(w.amount)))return;
     const r=await api('POST',`/api/admin/withdrawals/${id}/autopay`);toast(r.status==='processing'?'Payment sent — waiting for Flutterwave to confirm':'Done');await refresh();go('wd',{id})},
   async wdCheck(el,id){const r=await api('POST',`/api/admin/withdrawals/${id}/autopay/check`);toast(r.status==='paid'?'Paid ✓':r.status==='pending'?'Transfer failed — pay manually':'Still processing');await refresh();go('wd',{id})},
+  async ratesChecked(){try{await api('POST','/api/admin/rates/checked');S.settings=S.settings||{};S.settings.ratesCheckedAt=Date.now();toast('Marked checked for today');render()}catch(e){toast(e.message)}},
   async autoSwitch(el){const on=!(S.settings&&S.settings.autopayOn);
     if(!await ask(on?'Turn on auto-pay?':'Turn off auto-pay?',on?`You'll be able to one-tap pay withdrawals up to ${naira(Number((S.settings||{}).autopayMax)||50000)} through Flutterwave. Flutterwave must be set up and funded.`:'Auto-pay buttons disappear. You pay every withdrawal by hand. Anything already sent is unaffected.',on?'Turn on':'Turn off',!on))return;
     await api('PUT','/api/admin/settings',{autopayOn:on});toast(on?'Auto-pay is on':'Auto-pay is off');await refresh();render()},
