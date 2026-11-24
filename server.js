@@ -406,8 +406,7 @@ app.get('/api/me', async (req, res) => {
       bankName: user.bankName, bankCode: user.bankCode, accountName: user.accountName, payoutVerifiedAt: user.payoutVerifiedAt,
       status: user.status, balance: user.balance,
       email: user.email, needsPin: (await pinReady()) && user.email === null,
-      slipNotice: (await store.getSettings()).slipNotice,
-      wpinOn: await wpinReady(), wpinSet: !!user.wpinHash   // withdrawal PIN: feature live? and has this customer set theirs?
+      slipNotice: (await store.getSettings()).slipNotice
     });
   } catch (err) {
     console.error('Me error:', err);
@@ -446,17 +445,9 @@ async function payoutColsReady() {
 }
 const resolvedName = r => (r && (r.account_name || r.accountName)) || '';
 
-// --- Transaction PINs (4 digits): customer withdrawal PIN + admin payout PIN ---
+// --- Admin payout PIN (4 digits) ---
 const badTxPin = p => /^\d{4}$/.test(String(p || '')) ? '' : 'Your PIN must be exactly 4 digits.';
-let WPIN_COLS = { at: 0, ok: false };
-async function wpinReady() {   // customer withdrawal-PIN feature is live once the users.wpin_hash column exists
-  if (Date.now() - WPIN_COLS.at < 300000) return WPIN_COLS.ok;
-  const ok = await store.wpinColsReady().catch(() => false);
-  WPIN_COLS = { at: Date.now(), ok };
-  return ok;
-}
-const WPIN_SQL = 'Run this in Supabase first: alter table users add column if not exists wpin_hash text;';
-const ADMIN_PIN_SQL = 'Run this in Supabase first: alter table settings add column if not exists admin_payout_pin_hash text;';
+const ADMIN_PIN_SQL = 'Run this in Supabase first: alter table settings add column if not exists admin_payout_pin_hash text; alter table settings add column if not exists admin_payout_pin_off boolean default false;';
 let APIN_COLS = { at: 0, ok: false };
 async function adminPinReady() {   // admin payout-PIN gate is live once the settings.admin_payout_pin_hash column exists
   if (Date.now() - APIN_COLS.at < 300000) return APIN_COLS.ok;
@@ -465,11 +456,12 @@ async function adminPinReady() {   // admin payout-PIN gate is live once the set
   return ok;
 }
 // Gate a payout on the admin PIN. Returns true to proceed; otherwise it has already sent the response.
-// Before the column exists: no enforcement (so the admin is never locked out). After: a PIN must be set and correct.
+// No enforcement before the column exists (never lock the admin out) or while the admin has switched the PIN off.
 async function adminPayoutPinOk(req, res) {
   if (!(await adminPinReady())) return true;
   const s = await store.getSettings();
   if (!s.adminPayoutPinHash) { res.status(400).json({ needAdminPin: true, error: 'Set your payout PIN in Settings first, then release this payment.' }); return false; }
+  if (s.adminPayoutPinOff) return true;   // admin turned the PIN off for now
   if (ipFail('apin', req, 6, 10)) { res.status(429).json({ error: 'Too many PIN tries. Wait a few minutes and try again.' }); return false; }
   if (!(await bcrypt.compare(String((req.body || {}).pin || ''), s.adminPayoutPinHash))) { res.status(403).json({ error: 'Wrong payout PIN.' }); return false; }
   return true;
@@ -609,22 +601,6 @@ app.post('/api/me/pin', requireUser, async (req, res) => {
 app.post('/api/staff/me/pin', requireStaff, async (req, res) => {
   try { await changeOwnPin('staff', await store.findStaffById(req.session.staffId), req.body, res); }
   catch (err) { console.error(err); res.status(500).json({ error: 'Could not change your PIN.' }); }
-});
-// Customer sets or changes their 4-digit withdrawal PIN (separate from the login PIN).
-app.post('/api/me/wpin', requireUser, async (req, res) => {
-  try {
-    if (!(await wpinReady())) return res.status(400).json({ error: 'Withdrawal PIN is not switched on yet.' });
-    const user = await store.findUserById(req.session.userId);
-    const b = req.body || {}, pin = String(b.pin || '');
-    if (badTxPin(pin)) return res.status(400).json({ error: badTxPin(pin) });
-    if (user.wpinHash) {   // changing an existing PIN requires the current one
-      if (ipFail('wpin:' + user.id, req, 5, 10)) return res.status(429).json({ error: 'Too many tries. Wait a few minutes and try again.' });
-      if (!(await bcrypt.compare(String(b.current || ''), user.wpinHash))) return res.status(400).json({ error: 'Your current withdrawal PIN is not right.' });
-    }
-    try { await store.setWithdrawPin(user.id, bcrypt.hashSync(pin, 10)); }
-    catch (e) { if (e.code === 'WPIN_COL') return res.status(500).json({ error: WPIN_SQL }); throw e; }
-    res.json({ ok: true });
-  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not set your withdrawal PIN.' }); }
 });
 // Admin gives a customer or staff member a new temporary PIN (shown once to the admin, who tells them).
 app.post('/api/admin/:kind(users|staff)/:id/reset-pin', requireAdmin, async (req, res) => {
@@ -1068,11 +1044,10 @@ app.post('/api/withdrawals', requireUser, requireApprovedUser, moneyLock(req => 
     if (payoutConfigured() && await payoutColsReady() && !user.payoutVerifiedAt) {
       return res.status(403).json({ needVerify: true, error: 'Confirm your withdrawal account first, so your money goes to the right name.' });
     }
-    // Withdrawal PIN: once the feature is live, the customer must have set one and enter it here.
-    if (await wpinReady()) {
-      if (!user.wpinHash) return res.status(400).json({ needWpin: true, error: 'Set your withdrawal PIN first.' });
-      if (ipFail('wpin:' + user.id, req, 5, 10)) return res.status(429).json({ error: 'Too many wrong PIN tries. Wait a few minutes and try again.' });
-      if (!(await bcrypt.compare(String((req.body || {}).pin || ''), user.wpinHash))) return res.status(400).json({ error: 'Wrong withdrawal PIN.' });
+    // The customer must confirm the withdrawal with their login PIN.
+    if (!(await bcrypt.compare(String((req.body || {}).pin || ''), user.passwordHash || ''))) {
+      if (ipFail('wdpin:' + user.id, req, 6, 15)) return res.status(429).json({ error: 'Too many wrong PIN tries. Wait a few minutes and try again.' });
+      return res.status(400).json({ error: 'Wrong PIN. Enter your login PIN to confirm.' });
     }
     // Hold the funds first; this refuses if the balance is not enough (even with many requests at once).
     const held = await store.addToBalance(user.id, -amount, { noNegative: true });
@@ -2057,6 +2032,7 @@ app.get('/api/admin/settings', requireAdmin, async (req, res) => {
     s.ratesCheckedAt = csGet('rates:checked') || null;
     s.adminPayoutPinOn = await adminPinReady();          // feature ready (column exists)?
     s.adminPayoutPinSet = !!s.adminPayoutPinHash;         // has a PIN been set?
+    // adminPayoutPinOff already present from getSettings (true = switched off for now)
     delete s.adminPayoutPinHash;                          // never expose the hash
     res.json(s);
   }
@@ -2073,10 +2049,26 @@ app.post('/api/admin/payout-pin', requireAdmin, async (req, res) => {
       if (ipFail('apin', req, 6, 10)) return res.status(429).json({ error: 'Too many tries. Wait a few minutes and try again.' });
       if (!(await bcrypt.compare(String(b.current || ''), s.adminPayoutPinHash))) return res.status(400).json({ error: 'Your current payout PIN is not right.' });
     }
-    try { await store.setAdminPayoutPin(bcrypt.hashSync(pin, 10)); }
+    try { await store.setAdminPayoutPin(bcrypt.hashSync(pin, 10)); await store.setAdminPayoutPinOff(false); }
     catch (e) { if (e.code === 'ADMIN_PIN_COL') return res.status(500).json({ error: ADMIN_PIN_SQL }); throw e; }
     res.json({ ok: true });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Could not set the payout PIN.' }); }
+});
+// Admin turns the payout-PIN requirement off (needs the PIN) or back on (free).
+app.post('/api/admin/payout-pin/off', requireAdmin, async (req, res) => {
+  try {
+    if (!(await adminPinReady())) return res.status(500).json({ error: ADMIN_PIN_SQL });
+    const s = await store.getSettings();
+    if (!s.adminPayoutPinHash) return res.status(400).json({ needAdminPin: true, error: 'Set your payout PIN first.' });
+    const off = (req.body || {}).off === true;
+    if (off) {   // switching the protection OFF requires the PIN
+      if (ipFail('apin', req, 6, 10)) return res.status(429).json({ error: 'Too many PIN tries. Wait a few minutes and try again.' });
+      if (!(await bcrypt.compare(String((req.body || {}).pin || ''), s.adminPayoutPinHash))) return res.status(403).json({ error: 'Wrong payout PIN.' });
+    }
+    try { await store.setAdminPayoutPinOff(off); }
+    catch (e) { if (e.code === 'ADMIN_PIN_COL') return res.status(500).json({ error: ADMIN_PIN_SQL }); throw e; }
+    res.json({ ok: true, off });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Could not change the payout PIN setting.' }); }
 });
 // "I've checked today's rates" — stamps the reminder done for the day even when nothing changed.
 app.post('/api/admin/rates/checked', requireAdmin, (req, res) => { stampRates(); res.json({ ok: true, at: csGet('rates:checked') }); });

@@ -32,7 +32,6 @@ function userRow(r) {
     id: r.id, name: r.name, phone: r.phone,
     accountNumber: r.account_number, bankName: r.bank_name,
     bankCode: r.bank_code || null, accountName: r.account_name || null, payoutVerifiedAt: r.payout_verified_at || null,
-    wpinHash: r.wpin_hash || null,   // customer withdrawal PIN (bcrypt), null until set
     passwordHash: r.password_hash, status: r.status, email: r.email == null ? null : r.email,
     balance: Number(r.balance), createdAt: r.created_at
   };
@@ -80,9 +79,6 @@ async function updateUser(id, fields) {
 }
 // True once the verified-payout columns have been added (so the server only enforces verification after the SQL is run).
 async function payoutColsReady() { const { error } = await supabase.from('users').select('payout_verified_at').limit(1); return !error; }
-// Customer withdrawal PIN lives in users.wpin_hash — feature is active only once the column exists.
-async function wpinColsReady() { const { error } = await supabase.from('users').select('wpin_hash').limit(1); return !error; }
-async function setWithdrawPin(id, hash) { const { error } = await supabase.from('users').update({ wpin_hash: hash }).eq('id', id); if (error) { if (/wpin_hash/.test(String(error.message))) { const e = new Error('wpin column missing'); e.code = 'WPIN_COL'; throw e; } throw error; } }
 // Store a payout account whose real name was just confirmed via the bank.
 async function setPayoutVerified(id, f) {
   const { error } = await supabase.from('users').update({
@@ -523,7 +519,8 @@ async function getSettings() {
     autopayMax: Number(data.autopay_max) || 50000,       // biggest withdrawal that can be auto-paid (naira)
     autopayDailyCap: Number(data.autopay_daily_cap) || 500000,  // total auto-paid per day before it pauses to manual
     slipNotice: data.slip_notice || SLIP_DEFAULT,   // customer warning about manual slip confirmation delay (editable by admin)
-    adminPayoutPinHash: data.admin_payout_pin_hash || null   // admin payout PIN (bcrypt); required to release a payout once set
+    adminPayoutPinHash: data.admin_payout_pin_hash || null,  // admin payout PIN (bcrypt); required to release a payout once set
+    adminPayoutPinOff: data.admin_payout_pin_off === true    // admin has temporarily switched the payout PIN off
   };
 }
 async function updateSettings(fields) {
@@ -557,6 +554,11 @@ async function adminPinColsReady() { const { error } = await supabase.from('sett
 async function setAdminPayoutPin(hash) {
   const { error } = await supabase.from('settings').update({ admin_payout_pin_hash: hash }).eq('id', 1);
   if (error) { if (/admin_payout_pin_hash/.test(String(error.message))) { const e = new Error('admin pin column missing'); e.code = 'ADMIN_PIN_COL'; throw e; } throw error; }
+}
+// Turn the payout-PIN requirement off (for a stretch) or back on.
+async function setAdminPayoutPinOff(off) {
+  const { error } = await supabase.from('settings').update({ admin_payout_pin_off: !!off }).eq('id', 1);
+  if (error) { if (/admin_payout_pin_off/.test(String(error.message))) { const e = new Error('admin pin off column missing'); e.code = 'ADMIN_PIN_COL'; throw e; } throw error; }
 }
 
 // ============================================================
@@ -1259,11 +1261,11 @@ module.exports = {
   getPushKeys, savePushKeys, savePushSubscription, deletePushSubscription, listPushSubscriptions,
   addNotification, listNotificationsForUser,
   createEscalation, findEscalationById, listEscalations, resolveEscalation,
-  createUser, findUserByPhone, findUserById, listUsers, setUserStatus, updateUser, setPayoutVerified, payoutColsReady, wpinColsReady, setWithdrawPin, deleteUser, addToBalance,
+  createUser, findUserByPhone, findUserById, listUsers, setUserStatus, updateUser, setPayoutVerified, payoutColsReady, deleteUser, addToBalance,
   createStaff, findStaffByPhone, findStaffById, listStaff, setStaffStatus, deleteStaff,
   listAccountsPublic, listAccountsForAmount, listAllAccounts, listAccountsByStaff, findAccountById, createAccount, updateAccount, deleteAccount,
   listApprovedTradeTotals, createTrade, findTradeById, findTradesByCardCode, listTradesForUser, listTradesForStaff, listAllTrades, updateTradeStatus, setSettlement,
-  getSettings, updateSettings, setAdminPayoutPin, adminPinColsReady,
+  getSettings, updateSettings, setAdminPayoutPin, setAdminPayoutPinOff, adminPinColsReady,
   addMessage, messagesForUser, listConversations, findMessageById, deleteMessage, softDeleteMessage, pinMessage,
   createWithdrawal, findWithdrawalById, findWithdrawalByTransferRef, listWithdrawalsForUser, listAllWithdrawals, updateWithdrawalStatus, setWithdrawalTransfer, sumAutoPayoutsToday
 };
