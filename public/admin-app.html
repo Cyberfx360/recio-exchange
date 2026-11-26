@@ -673,6 +673,7 @@ health:()=>{const h=S.health,col=p=>p==null?'#CBD5E1':p>=95?'#EF4444':p>=80?'#F5
   <div class="hgrp">Controls</div>
   <div class="card" style="padding:14px 16px;margin-bottom:12px">
    <div class="gsw" style="margin:0"><span class="grow" style="min-width:0"><b>Auto-pay</b><small>${S.settings&&S.settings.autopayOn?`On: one-tap pay withdrawals up to ${naira(Number(S.settings.autopayMax)||50000)} (cap ${naira(Number(S.settings.autopayDailyCap)||500000)}/day).`:'Off: you pay every withdrawal by hand.'}</small></span><button class="tgl" role="switch" aria-checked="${!!(S.settings&&S.settings.autopayOn)}" aria-label="Auto-pay on or off" data-act="autoSwitch"></button></div>
+   ${S.settings&&S.settings.autopayOn?`<div class="gsw" style="margin:12px 0 0"><span class="grow" style="min-width:0"><b>Pay automatically</b><small>${S.settings.autopayInstant?'⚡ On — eligible withdrawals pay out the moment a customer asks, no tap needed.':'Off — you tap AUTO-PAY on each request yourself.'}</small></span><button class="tgl" role="switch" aria-checked="${!!S.settings.autopayInstant}" aria-label="Pay automatically on request" data-act="toggleInstant"></button></div>`:''}
    ${S.settings&&S.settings.autopayOn?`<form data-form="autopayCfg" class="g2" style="margin-top:12px"><div><label class="cl" for="ap-max" style="margin-top:0">Max per withdrawal ₦</label><input class="in" id="ap-max" inputmode="numeric" value="${esc(Number(S.settings.autopayMax)||50000)}"></div><div><label class="cl" for="ap-cap" style="margin-top:0">Daily cap ₦</label><input class="in" id="ap-cap" inputmode="numeric" value="${esc(Number(S.settings.autopayDailyCap)||500000)}"></div><button class="b blue" style="grid-column:1/-1;height:42px">Save limits</button></form>`:''}
   </div>
   <div class="card" style="padding:14px 16px;margin-bottom:12px">
@@ -1466,6 +1467,10 @@ const ACT={
   async autoSwitch(el){const on=!(S.settings&&S.settings.autopayOn);
     if(!await ask(on?'Turn on auto-pay?':'Turn off auto-pay?',on?`You'll be able to one-tap pay withdrawals up to ${naira(Number((S.settings||{}).autopayMax)||50000)} through your payout provider. It must be set up and funded.`:'Auto-pay buttons disappear. You pay every withdrawal by hand. Anything already sent is unaffected.',on?'Turn on':'Turn off',!on))return;
     await api('PUT','/api/admin/settings',{autopayOn:on});toast(on?'Auto-pay is on':'Auto-pay is off');await refresh();render()},
+  async toggleInstant(){const on=!(S.settings&&S.settings.autopayInstant);
+    if(on){if(!await ask('Pay withdrawals automatically?',`Every withdrawal up to ${naira(Number((S.settings||{}).autopayMax)||50000)} will be sent the moment a customer asks — no tap, no PIN. Bigger ones, over the daily cap, or accounts changed in the last 24h still wait for you. Keep the max modest.`,'Turn on',1))return}
+    else{if(!await ask('Turn off automatic payout?','You go back to tapping AUTO-PAY on each request yourself.','Turn off'))return}
+    await api('PUT','/api/admin/settings',{autopayInstant:on});toast(on?'Withdrawals now pay automatically':'Automatic payout off');await refresh();render()},
   async wdCancel(el,id){const r=$('#w-reason').value.trim(),w=S.wds.find(x=>x.id===id);if(!r){toast('Enter the reason for cancellation');$('#w-reason').focus();return}
     if(!await ask('Cancel this request?',`${naira(w.amount)} will be returned to ${w.userName}'s balance.`,'Cancel request',1))return;
     await api('POST',`/api/admin/withdrawals/${id}/mark`,{status:'rejected',reason:r});toast('Request cancelled and refunded');await reload('wds')}

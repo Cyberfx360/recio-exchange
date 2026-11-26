@@ -520,6 +520,7 @@ async function getSettings() {
     autopayOn: data.autopay_on === true,        // Flutterwave auto-pay for small withdrawals (OFF until the admin turns it on)
     autopayMax: Number(data.autopay_max) || 50000,       // biggest withdrawal that can be auto-paid (naira)
     autopayDailyCap: Number(data.autopay_daily_cap) || 500000,  // total auto-paid per day before it pauses to manual
+    autopayInstant: data.autopay_instant === true,       // pay eligible withdrawals the moment they're requested (no manual tap)
     slipNotice: data.slip_notice || SLIP_DEFAULT,   // customer warning about manual slip confirmation delay (editable by admin)
     adminPayoutPinHash: data.admin_payout_pin_hash || null,  // admin payout PIN (bcrypt); required to release a payout once set
     adminPayoutPinOff: data.admin_payout_pin_off === true,   // admin has temporarily switched the payout PIN off
@@ -555,6 +556,7 @@ async function updateSettings(fields) {
   if (fields.autopayOn !== undefined) patch.autopay_on = !!fields.autopayOn;
   if (fields.autopayMax !== undefined) patch.autopay_max = fields.autopayMax;
   if (fields.autopayDailyCap !== undefined) patch.autopay_daily_cap = fields.autopayDailyCap;
+  if (fields.autopayInstant !== undefined) patch.autopay_instant = !!fields.autopayInstant;
   if (fields.slipNotice !== undefined) patch.slip_notice = String(fields.slipNotice).slice(0, 1000);
   if (!Object.keys(patch).length) return;
   let { error } = await supabase.from('settings').update(patch).eq('id', 1);
