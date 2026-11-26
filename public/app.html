@@ -448,6 +448,10 @@ img,svg,video{max-width:100%}
 .gaw{display:flex;align-items:center;gap:12px;margin-top:16px;padding:14px;border-radius:16px;color:#fff;background:linear-gradient(135deg,#F59E0B,#EF4444);box-shadow:0 10px 24px -12px rgba(239,68,68,.7)}
 .gaw .gai{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.2);display:grid;place-items:center;flex:none}.gaw b{font-size:15.5px}.gaw p{font-size:13.5px;margin-top:2px;line-height:1.4}.gaw>button{background:#fff;color:#B91C1C;font-weight:800;font-size:13.5px;padding:10px 14px;border-radius:999px;flex:none}
 .cnote{display:inline-flex;vertical-align:-3px;margin-right:6px;color:#10B981}.cnote.miss{color:#EF4444}
+.legal{padding:2px 2px 70px;max-width:640px}
+.legal .lu{color:var(--muted);font-size:13px;margin:0 0 18px}
+.legal h3{font-family:var(--head);font-size:16px;font-weight:600;margin:22px 0 8px;color:var(--slate)}
+.legal p{font-size:14.5px;line-height:1.65;color:#374151;margin:0 0 10px}
 </style>
 </head>
 <body>
@@ -773,6 +777,7 @@ signup:()=>`<section class="screen white auth">
   <label class="lb" for="su-pw">Create a 6-digit PIN</label><div class="field"><input class="pin" id="su-pw" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="new-password"></div>
   <label class="lb" for="su-pw2">Type the PIN again</label><div class="field"><input class="pin" id="su-pw2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="••••••" autocomplete="new-password"></div>
   <button class="btn" style="margin-top:22px">Sign Up</button>
+  <p style="text-align:center;font-size:12px;color:var(--soft);margin:14px 4px 0;line-height:1.55">By signing up, you agree to AZAPLUG's <button type="button" class="link" style="font-size:12px" data-go="terms">Terms &amp; Conditions</button> and <button type="button" class="link" style="font-size:12px" data-go="privacy">Privacy Policy</button>.</p>
   </form>
   <p style="text-align:center;color:#4B5563;margin-top:26px">Already have an account? <button class="link" data-go="login">Login</button></p>
 </section>`,
@@ -1112,8 +1117,72 @@ profile:()=>{const u=S.me,ini=u.name.trim().split(/\s+/).map(x=>x[0]).slice(0,2)
   ${insStandalone()?'':`<button class="menu" data-act="install"><span class="ic">${I('dl')}</span>Install AZAPLUG App<span class="chev">${I('cr')}</span></button>`}
   <button class="menu" data-act="shareApp"><span class="ic">${I('share')}</span>Share AZAPLUG with Friends<span class="chev">${I('cr')}</span></button>
   <button class="menu" data-go="chat"><span class="ic">${I('help')}</span>Help &amp; Customer Support<span class="chev">${I('cr')}</span></button>
+  <button class="menu" data-go="terms"><span class="ic">${I('book')}</span>Terms &amp; Conditions<span class="chev">${I('cr')}</span></button>
+  <button class="menu" data-go="privacy"><span class="ic">${I('shield')}</span>Privacy Policy<span class="chev">${I('cr')}</span></button>
   <button class="menu danger" data-act="logout"><span class="ic">${I('logout')}</span>Log Out of Device<span class="chev">${I('cr')}</span></button>
   ${nav('profile')}</section>`},
+
+terms:()=>`<section class="screen white">
+  <div class="top">${back(S.me?'profile':'signup')}<span class="title">Terms &amp; Conditions</span><span></span></div>
+  <div class="legal">
+   <p class="lu">Last updated: 26 November 2026</p>
+   <p>Welcome to AZAPLUG. These Terms &amp; Conditions ("Terms") govern your use of the AZAPLUG app and services ("AZAPLUG", "we", "us", "our"). By creating an account or using AZAPLUG, you agree to these Terms. If you do not agree, please do not use the service.</p>
+   <h3>1. Who can use AZAPLUG</h3>
+   <p>You must be at least 18 years old and legally able to enter into a contract. You agree to give accurate, current information and to keep it up to date. You are responsible for all activity that happens on your account.</p>
+   <h3>2. Your account and security</h3>
+   <p>Keep your login PIN private and never share it with anyone. You are responsible for keeping your account details safe, and you agree to tell us immediately if you notice any unauthorised use. We may ask you to verify your identity before we process a trade or a payout.</p>
+   <h3>3. Our services</h3>
+   <p>AZAPLUG lets you exchange gift cards and digital currencies for Nigerian Naira, which is credited to your in-app balance. You can then withdraw that balance to the verified bank account on your profile. The services available may change from time to time.</p>
+   <h3>4. Rates, fees and charges</h3>
+   <p>Exchange rates change frequently with the market. The rate and any fees shown at the time you make a trade are the ones that apply to that trade. A withdrawal charge — a percentage set by AZAPLUG — may apply to withdrawals and is shown to you before you confirm. Your bank may also apply its own charges.</p>
+   <h3>5. Gift card and currency trades</h3>
+   <p>Trades are reviewed and confirmed manually after you submit the card, code, or receipt. Some bank slips or transfers may take up to 2–3 business days to confirm, so please consider this before relying on the funds. We may decline a card or trade that is invalid, already used, reported, or that we cannot verify. By trading, you confirm that any gift card, currency, or funds you submit are lawfully and genuinely yours.</p>
+   <h3>6. Withdrawals</h3>
+   <p>Withdrawals are paid to the verified bank account on your profile. We may hold, review, or decline a withdrawal where we reasonably suspect fraud or error, or a breach of these Terms. Where a payout fails, the amount is returned to your AZAPLUG balance.</p>
+   <h3>7. Acceptable use</h3>
+   <p>You must not use AZAPLUG for fraud, money laundering, stolen or illegally obtained gift cards or funds, or any other unlawful purpose. Breaking this rule may lead to your account being closed and the matter reported to the authorities.</p>
+   <h3>8. Suspension and closure</h3>
+   <p>We may suspend, limit, or close an account, or hold funds, where we reasonably suspect fraud or unlawful activity, where you breach these Terms, or where the law requires us to.</p>
+   <h3>9. Availability</h3>
+   <p>We work hard to keep AZAPLUG running, but we cannot promise it will always be available without interruption. We may update, pause, or change features at any time, including for maintenance.</p>
+   <h3>10. Limitation of liability</h3>
+   <p>As far as the law allows, AZAPLUG is not responsible for indirect or consequential losses, or for losses caused by inaccurate details you provide, by delays from banks or payment providers, or by events outside our reasonable control.</p>
+   <h3>11. Changes to these Terms</h3>
+   <p>We may update these Terms from time to time. If you keep using AZAPLUG after an update, that means you accept the revised Terms.</p>
+   <h3>12. Governing law</h3>
+   <p>These Terms are governed by the laws of the Federal Republic of Nigeria.</p>
+   <h3>13. Contact us</h3>
+   <p>If you have any question about these Terms, reach us through Help &amp; Customer Support in the app.</p>
+  </div></section>`,
+
+privacy:()=>`<section class="screen white">
+  <div class="top">${back(S.me?'profile':'signup')}<span class="title">Privacy Policy</span><span></span></div>
+  <div class="legal">
+   <p class="lu">Last updated: 26 November 2026</p>
+   <p>This Privacy Policy explains how AZAPLUG collects, uses, and protects your personal information when you use our app and services. We handle your personal data in line with the Nigeria Data Protection Act.</p>
+   <h3>1. Information we collect</h3>
+   <p>Account details: your name, phone number, and email address (if you provide one). Payout details: your bank name and account number. Transaction data: your trades, balances, and withdrawals, and the gift card codes, images, or receipts you submit. Technical data: basic device and usage information needed to run the app and keep it secure.</p>
+   <h3>2. How we use your information</h3>
+   <p>We use your information to create and manage your account; to process your trades and pay out your withdrawals; to verify your identity and your bank account; to prevent fraud and keep the service secure; to provide customer support; and to meet our legal and regulatory obligations.</p>
+   <h3>3. Our legal basis</h3>
+   <p>We process your data to carry out our agreement with you, to meet legal obligations, for our legitimate interest in running and protecting the service, and with your consent where it is required.</p>
+   <h3>4. Sharing your information</h3>
+   <p>We do not sell your personal data. We share it only where needed: with payment and transfer providers (such as Paystack) to pay out your withdrawals; with trusted providers who host and run the app for us; and with regulators, law enforcement, or courts where the law requires it.</p>
+   <h3>5. How long we keep it</h3>
+   <p>We keep your information for as long as your account is active, and for as long afterwards as we need to meet legal, accounting, and fraud-prevention requirements. After that, it is deleted or anonymised.</p>
+   <h3>6. Keeping your data safe</h3>
+   <p>We protect your data with measures such as encryption while it travels, hashed PINs, access controls, and limits on repeated attempts. No system is perfectly secure, but we work continuously to protect your information.</p>
+   <h3>7. Your rights</h3>
+   <p>You may ask to access, correct, or delete your personal data, or to object to certain uses of it, subject to our legal obligations. To make a request, reach us through the app.</p>
+   <h3>8. Information on your device</h3>
+   <p>AZAPLUG stores a small amount of information on your device to keep you signed in and remember your preferences. We do not use third-party advertising trackers.</p>
+   <h3>9. Children</h3>
+   <p>AZAPLUG is not intended for anyone under 18, and we do not knowingly collect information from them.</p>
+   <h3>10. Changes to this policy</h3>
+   <p>We may update this policy from time to time. When we do, we will post the updated version here with a new date.</p>
+   <h3>11. Contact us</h3>
+   <p>For any privacy question or request, reach us through Help &amp; Customer Support in the app.</p>
+  </div></section>`,
 
 chpin:()=>`<section class="screen">
   <div class="top">${back('profile')}<span class="title">Change PIN</span><span></span></div>
