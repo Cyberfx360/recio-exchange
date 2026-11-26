@@ -2251,6 +2251,30 @@ app.post('/api/admin/sweep', requireAdmin, ADMIN_MONEY, async (req, res) => {
 });
 // "I've checked today's rates" — stamps the reminder done for the day even when nothing changed.
 app.post('/api/admin/rates/checked', requireAdmin, (req, res) => { stampRates(); res.json({ ok: true, at: csGet('rates:checked') }); });
+
+// ADMIN: trace any payment or trade by its ID, transfer reference, or Paystack transfer code.
+app.get('/api/admin/trace', requireAdmin, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 3) return res.status(400).json({ error: 'Enter a reference, ID, or transfer code to trace.' });
+    const withName = async (row, kind) => {
+      if (!row) return null;
+      const u = await store.findUserById(row.userId).catch(() => null);
+      return { kind, ...row, userName: u ? u.name : '—', userPhone: u ? u.phone : '' };
+    };
+    // Each lookup is wrapped so a non-matching id type (e.g. a ref passed where a UUID is expected) just misses.
+    let hit =
+      await withName(await store.findWithdrawalById(q).catch(() => null), 'withdrawal')
+      || await withName(await store.findWithdrawalByTransferRef(q).catch(() => null), 'withdrawal')
+      || await withName(await store.findWithdrawalByTransferId(q).catch(() => null), 'withdrawal')
+      || await withName(await store.findTradeById(q).catch(() => null), 'trade');
+    if (!hit) {
+      const u = await store.findUserById(q).catch(() => null);
+      if (u) hit = { kind: 'user', id: u.id, userName: u.name, userPhone: u.phone, status: u.status, balance: u.balance, bankName: u.bankName, accountNumber: u.accountNumber };
+    }
+    res.json({ found: !!hit, hit: hit || null });
+  } catch (e) { console.error('Trace error:', e); res.status(500).json({ error: 'Could not trace that. Try again.' }); }
+});
 app.put('/api/admin/settings', requireAdmin, async (req, res) => {
   try {
     const b = req.body || {}, patch = {};

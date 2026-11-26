@@ -623,6 +623,34 @@ function gfSync(){const f=S.gform;if(!f||!$('#gf-n'))return f;f.name=$('#gf-n').
   if(f.prefixes&&f.prefixes.length)f.prefixes=f.prefixes.map((p,i)=>{const d=$('#gp-d'+i),c=$('#gp-c'+i);const tiers=(p.tiers&&p.tiers.length?p.tiers:[{from:'',rate:''}]).map((t,j)=>{const tf=$('#pt-f'+i+'-'+j),tr=$('#pt-r'+i+'-'+j);return{from:tf?tf.value:t.from,rate:tr?tr.value:t.rate}});return{digits:d?d.value:p.digits,country:c?c.value:p.country,tiers}});return f}
 const tBadge=t=>t.status==='failed'?['FAILED','b-failed']:t.status==='approved'?(t.creditedAmount==null?['AWAITING CREDIT','b-checking']:['APPROVED','b-approved']):t.status==='confirmed'?['CONFIRMED','b-confirmed']:t.status==='seen'?['SEEN','b-confirmed']:['PENDING','b-checking'];
 const wBadge=w=>w.status==='paid'?['Approved','b-approved']:w.status==='rejected'?['Declined','b-failed']:w.status==='processing'?['Processing','b-confirmed']:['Pending','b-checking'];
+const traceResult=h=>{
+  const mono='font-family:var(--mono);font-size:11px;word-break:break-all';
+  if(h.kind==='user')return `<div class="card" style="margin-top:18px;padding:18px">
+    <div class="between"><b class="h" style="font-size:16px">${esc(h.userName)}</b><span class="badge ${h.status==='approved'?'b-approved':'b-failed'} xs">${h.status==='approved'?'CUSTOMER':'SUSPENDED'}</span></div>
+    <div class="sum plain" style="margin-top:10px"><div><span>Phone</span><b>${esc(h.userPhone)}</b></div><div><span>Balance</span><b>${naira(h.balance)}</b></div><div><span>Bank</span><b>${esc(h.bankName||'—')}</b></div><div><span>Account</span><b>${esc(h.accountNumber||'—')}</b></div></div>
+    <button class="b blue" style="margin-top:14px" data-act="traceOpenUser" data-id="${esc(h.id)}">Open customer</button></div>`;
+  if(h.kind==='trade')return `<div class="card" style="margin-top:18px;padding:18px">
+    <div class="between"><b class="h" style="font-size:16px">Trade</b><span class="badge b-checking xs">${esc(String(h.status||'').toUpperCase())}</span></div>
+    <div class="sum plain" style="margin-top:10px"><div><span>Customer</span><b>${esc(h.userName)} · ${esc(h.userPhone)}</b></div><div><span>Amount</span><b>${naira(h.creditedAmount||h.intendedAmount||h.amount||0)}</b></div><div><span>Created</span><b>${ago(h.createdAt)}, ${ft(h.createdAt)}</b></div><div><span>Trade ID</span><b style="${mono}">${esc(h.id)}</b></div></div>
+    <button class="b blue" style="margin-top:14px" data-act="traceOpenTrade" data-id="${esc(h.id)}">Open trade</button></div>`;
+  const b=wBadge(h),net=Number(h.payoutAmount!=null?h.payoutAmount:h.amount);
+  return `<div class="card" style="margin-top:18px;padding:18px">
+    <div class="between"><b class="h" style="font-size:16px">Withdrawal</b><span class="badge ${b[1]} xs">${b[0]}</span></div>
+    <div class="sum plain" style="margin-top:10px">
+     <div><span>Customer</span><b>${esc(h.userName)} · ${esc(h.userPhone)}</b></div>
+     <div><span>Amount paid</span><b>${naira(net)}</b></div>
+     <div><span>Bank</span><b>${esc(h.payoutBank||'—')}</b></div>
+     <div><span>Account</span><b>${esc(h.payoutAccount||'—')}</b></div>
+     <div><span>Requested</span><b>${ago(h.createdAt)}, ${ft(h.createdAt)}</b></div>
+     <div><span>Paid via</span><b>${esc(h.method||'manual')}${h.transferStatus?' · '+esc(h.transferStatus):''}</b></div>
+     <div><span>Reference</span><b style="${mono}">${esc(h.transferRef||h.id)}</b></div>
+     ${h.transferId?`<div><span>Transfer code</span><b style="${mono}">${esc(h.transferId)}</b></div>`:''}
+    </div>
+    <div class="row" style="gap:8px;margin-top:14px">
+     <button class="b blue" data-act="traceOpenWd" data-id="${esc(h.id)}">Open withdrawal</button>
+     ${h.status==='processing'&&h.transferId?`<button class="b green" data-act="traceCheck" data-id="${esc(h.id)}">Check with provider</button>`:''}
+    </div></div>`;
+};
 const autoPayable=w=>w.status==='pending'&&S.settings&&S.settings.autopayOn&&Number(w.amount)<=(Number(S.settings.autopayMax)||50000);
 const sBadge=s=>s.status==='approved'?['ACTIVE','b-approved']:s.status==='rejected'?['SUSPENDED','b-failed']:['PENDING APPROVAL','b-checking'];
 const staffStats=s=>{const tr=S.trades.filter(t=>t.staffId===s.id),ok=tr.filter(t=>t.status==='approved').length,bad=tr.filter(t=>t.status==='failed').length;
@@ -652,6 +680,13 @@ const acctForm=(edit)=>{const f=S.form,img=safeImg(f.imageData),fl=(id,l,v,ph,im
 /* ---------- Screens ---------- */
 const V={
 loading:()=>`<section class="screen blue"><div class="grow"></div><div class="logo-dot">${I('swap')}</div><div class="wordmark" style="margin-top:22px">AZAPLUG</div><div class="grow"></div></section>`,
+
+trace:()=>{const r=S.trace;return `<section class="scr">${hd('Trace Payment','Find a payout, trade or customer by ID / reference','dash','')}
+ <div class="bd">
+  <form data-form="trace" novalidate><input class="in" id="trace-q" placeholder="Paste a reference, ID or transfer code" value="${esc(S.traceQ||'')}" autocomplete="off" spellcheck="false" style="font-family:var(--mono);font-size:13px"><button class="b blue" style="height:46px;margin-top:10px">Trace</button></form>
+  <p class="muted" style="font-size:12.5px;margin:10px 2px 0">Works with a withdrawal reference from a receipt, a Paystack transfer code, or a trade / customer ID.</p>
+  ${r===undefined?'':r==='loading'?'<p class="empty" style="margin-top:22px">Searching…</p>':r.found?traceResult(r.hit):`<div class="card" style="margin-top:18px;padding:18px;text-align:center;color:var(--muted)">Nothing matched <b style="color:var(--slate);font-family:var(--mono);word-break:break-all">${esc(S.traceQ||'')}</b>. Check it and try again.</div>`}
+ </div></section>`},
 
 health:()=>{const h=S.health,col=p=>p==null?'#CBD5E1':p>=95?'#EF4444':p>=80?'#F59E0B':p>=60?'#EAB308':'#10B981',
   fmt=v=>v==null?'—':v>=100?Math.round(v).toLocaleString():v>=10?v.toFixed(1):v.toFixed(2),
@@ -764,6 +799,7 @@ dash:()=>{const week=S.users.filter(u=>Date.now()-new Date(u.createdAt)<7*864e5)
   <div class="g2">${qa.map(q=>`<button class="qa" data-go="${q[0]}"><span>${I(q[1])}</span>${q[2]}${cnt[q[0]]?`<i class="glow" aria-label="${cnt[q[0]]} waiting">${cnt[q[0]]}</i>`:''}</button>`).join('')}</div>
   <button class="gab" data-go="giveaway"><span class="gai">${I('gift','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Giveaways</b><small>Reward the first customers to say hi</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <button class="gab gfb" data-go="gift"><span class="gai">${I('gift','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Gift Cards</b><small>Card rates, gift codes and the on/off switch</small></span>${I('cr','style="width:18px;height:18px"')}</button>
+  <button class="gab hlab" data-go="trace"><span class="gai">${I('search','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Trace Payment</b><small>Find any payout or trade by its ID or reference</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <button class="gab hlab" data-go="health"><span class="gai">${I('activity','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>System Health</b><small>Supabase, Render, Brevo limits in one place</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <button class="gab chab" data-go="chal"><span class="gai">${I('trophy','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>December Challenge</b><small>Top 3 traders: real names and prizes</small></span>${I('cr','style="width:18px;height:18px"')}</button>
   <button class="gab tfab" data-go="tfa"><span class="gai">${I('shielda','style="width:24px;height:24px"')}</span><span class="grow" style="text-align:left"><b>Two-Step Login</b><small>Google Authenticator code for admin sign-in</small></span>${I('cr','style="width:18px;height:18px"')}</button>
@@ -1331,6 +1367,11 @@ async function reload(r,o){await refresh();go(r||S.route,o)}
 /* ---------- Actions ---------- */
 const ACT={
   soon(){toast('Coming soon')},
+  traceOpenWd(el,id){const w=S.trace&&S.trace.hit;if(w){S.wds=S.wds||[];if(!S.wds.find(x=>x.id===w.id))S.wds.unshift(w)}go('wd',{id})},
+  traceOpenTrade(el,id){const t=S.trace&&S.trace.hit;if(t){S.trades=S.trades||[];if(!S.trades.find(x=>x.id===t.id))S.trades.unshift(t)}go('trade',{id})},
+  traceOpenUser(el,id){const u=S.trace&&S.trace.hit;if(u){S.users=S.users||[];if(!S.users.find(x=>x.id===u.id))S.users.unshift(u)}go('user',{uid:id})},
+  async traceCheck(el,id){try{const r=await api('POST','/api/admin/withdrawals/'+id+'/autopay/check',{});toast(r&&r.status?'Status: '+r.status:'Checked with provider');
+    if(S.traceQ){try{S.trace=await api('GET','/api/admin/trace?q='+encodeURIComponent(S.traceQ))}catch(e){}}render()}catch(e){toast(e.message)}},
   show(el){const i=$('#lg-pw'),sh=i.type==='password';i.type=sh?'text':'password';el.textContent=sh?'HIDE':'SHOW'},
   async logout(){if(!await ask('Log out of admin?','To sign in again you will need your admin password and the code from Google Authenticator.','Log out',1))return;try{await pushDetach()}catch(e){}try{await api('POST','/api/admin/logout')}catch(e){}go(lsGet(BIO.key)?'lock':'login')},
   async staffRole(el,id){if(el.classList.contains('blue'))return;await api('PUT','/api/admin/staff/'+encodeURIComponent(id)+'/role',{role:el.dataset.role});toast('Department changed');await reload()},
@@ -1501,6 +1542,10 @@ document.addEventListener('change',async e=>{const t=e.target;
 });
 const val=id=>$('#'+id).value.trim();
 const FORMS={
+  async trace(){const q=val('trace-q');S.traceQ=q;if(q.length<3)return toast('Enter a reference or ID');
+    S.trace='loading';render();
+    try{S.trace=await api('GET','/api/admin/trace?q='+encodeURIComponent(q))}catch(e){S.trace=undefined;toast(e.message)}
+    render()},
   async announce(){const title=val('an-t'),body=val('an-b');if(!title||!body)throw new Error('Enter a title and a message');
     if(!await ask('Send to every customer?',`"${title}" will go to all ${S.users.length} customers and cannot be taken back.`,'Send announcement'))return;
     await api('POST','/api/admin/announce',{title,body});toast('Announcement sent');go('dash')},

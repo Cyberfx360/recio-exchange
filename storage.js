@@ -718,6 +718,11 @@ async function findWithdrawalByTransferRef(ref) {
   if (error) throw error;
   return data ? withdrawalRow(data) : null;
 }
+async function findWithdrawalByTransferId(id) {
+  const { data, error } = await supabase.from('withdrawals').select('*').eq('transfer_id', id).maybeSingle();
+  if (error) throw error;
+  return data ? withdrawalRow(data) : null;
+}
 // Total naira auto-paid (initiated or already paid) via Flutterwave since midnight UTC — the daily cap check.
 async function sumAutoPayoutsToday() {
   const start = new Date(); start.setUTCHours(0, 0, 0, 0);
@@ -1291,5 +1296,5 @@ module.exports = {
   adminCtlColsReady, setMaintenance, setWithdrawChargePct, setGainTotal, setGainAccount,
   setChargeTotal, setChargeAutoMonthly, setChargeLastSweep,
   addMessage, messagesForUser, listConversations, findMessageById, deleteMessage, softDeleteMessage, pinMessage,
-  createWithdrawal, findWithdrawalById, findWithdrawalByTransferRef, listWithdrawalsForUser, listAllWithdrawals, updateWithdrawalStatus, setWithdrawalTransfer, sumAutoPayoutsToday
+  createWithdrawal, findWithdrawalById, findWithdrawalByTransferRef, findWithdrawalByTransferId, listWithdrawalsForUser, listAllWithdrawals, updateWithdrawalStatus, setWithdrawalTransfer, sumAutoPayoutsToday
 };
