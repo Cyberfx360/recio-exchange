@@ -656,7 +656,7 @@ async function downloadReceipt(w){
   const net=Number(w.payoutAmount!=null?w.payoutAmount:w.amount),charge=Math.max(0,Number(w.amount)-net);
   const d=new Date(w.updatedAt||w.createdAt);
   const stamp=paid?'PAID':rej?'DECLINED':'PENDING',scol=paid?'#10B981':rej?'#EF4444':'#F59E0B';
-  const ref=String(w.transferRef||w.id||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,20)||'—';
+  const ref=String(w.transferRef||w.id||'—');   // exact reference — matches Paystack and the admin Trace tool
   const naN=n=>'₦'+Number(n).toLocaleString('en-NG');
   const W=760,H=1120,s=2,c=document.createElement('canvas');c.width=W*s;c.height=H*s;
   const x=c.getContext('2d');x.scale(s,s);x.textBaseline='alphabetic';
