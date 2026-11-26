@@ -90,7 +90,9 @@
 > ```
 > For **auto-paying small withdrawals through Flutterwave** (Admin → Withdrawals → Auto-pay), run this one line:
 > ```sql
-> alter table settings add column if not exists autopay_on boolean not null default false, add column if not exists autopay_max numeric not null default 50000, add column if not exists autopay_daily_cap numeric not null default 500000; alter table withdrawals add column if not exists method text default 'manual', add column if not exists transfer_id text, add column if not exists transfer_ref text, add column if not exists transfer_status text, add column if not exists auto_note text, add column if not exists autopay_at timestamptz; create index if not exists withdrawals_transfer_ref on withdrawals(transfer_ref);
+> alter table settings add column if not exists autopay_on boolean not null default false, add column if not exists autopay_max numeric not null default 50000, add column if not exists autopay_daily_cap numeric not null default 500000, add column if not exists autopay_instant boolean not null default false; alter table withdrawals add column if not exists method text default 'manual', add column if not exists transfer_id text, add column if not exists transfer_ref text, add column if not exists transfer_status text, add column if not exists auto_note text, add column if not exists autopay_at timestamptz; create index if not exists withdrawals_transfer_ref on withdrawals(transfer_ref);
+>
+> **Instant auto-pay** (`autopay_instant`): when Auto-pay is on and "Pay automatically" is turned on in System Health, a withdrawal that's within your per-withdrawal max and daily cap (and whose account wasn't changed in the last 24h) is paid out the moment the customer requests it — no manual tap and no payout PIN. Anything outside those limits still waits for you to pay by hand. Turning this on is you pre-authorising those payouts, so keep the max modest.
 > ```
 > Then, in **Render → Environment**, add two secrets (never put these in code or GitHub):
 > - `FLW_SECRET_KEY` — your Flutterwave **secret** key (`FLWSECK-...`).

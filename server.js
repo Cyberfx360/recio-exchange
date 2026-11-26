@@ -1124,6 +1124,19 @@ app.post('/api/withdrawals', requireUser, requireApprovedUser, moneyLock(req => 
       catch (e) { if (e.code !== 'ADMINCTL_COL') console.error('charge capture skipped:', e.message || e); }
     }
     alertTeam({ admin: true }, 'Withdrawal request', `${user.name} asked to withdraw ₦${plain(amount)} to ${user.bankName}.`, { admin: 'wds' });
+    // Instant auto-pay: if the admin turned on "pay automatically", release eligible withdrawals right away
+    // (no manual tap, no PIN). Anything outside the limits/guards just stays pending for the admin to handle.
+    try {
+      const s = await store.getSettings();
+      if (s.autopayOn && s.autopayInstant) {
+        const prov = payoutProvider();
+        if (prov) {
+          const r = await runAutopay(withdrawal, s, prov);
+          if (r.ok) { withdrawal = (await store.findWithdrawalById(withdrawal.id).catch(() => null)) || withdrawal; }
+          else console.log('Instant auto-pay held for admin review:', withdrawal.id, '—', r.error);
+        }
+      }
+    } catch (e) { console.error('Instant auto-pay error:', e.message || e); }
     res.json({ ok: true, withdrawal });
   } catch (err) {
     console.error('Create withdrawal error:', err);
@@ -1987,6 +2000,48 @@ app.post('/api/admin/withdrawals/:id/mark', requireAdmin, ADMIN_MONEY, async (re
 // daily cap not exceeded, bank resolvable, account not changed in the last 24h.
 // The money was already held when the customer requested; this only sends it.
 const AUTOPAY_SQL = 'Run the auto-payout SQL from the README in Supabase first.';
+// Shared auto-pay core: guards + resolve + transfer + record. No PIN check, no req/res.
+// Returns { ok:true, status } or { ok:false, code, error }. Used by the manual AUTO-PAY button AND instant auto-pay.
+async function runAutopay(w, s, prov) {
+  if (!w || w.status !== 'pending') return { ok: false, code: 400, error: 'This withdrawal has already been handled.' };
+  const max = Number(s.autopayMax) || 50000;
+  if (w.amount > max) return { ok: false, code: 400, error: `Auto-pay only covers withdrawals up to ₦${plain(max)}. Pay this one manually.` };
+  let paidToday = 0;
+  try { paidToday = await store.sumAutoPayoutsToday(); } catch (e) { if (e.code === 'AUTOPAY_COLS') return { ok: false, code: 500, error: AUTOPAY_SQL }; throw e; }
+  const cap = Number(s.autopayDailyCap) || 500000;
+  if (paidToday + w.amount > cap) return { ok: false, code: 400, error: `Today's auto-pay limit of ₦${plain(cap)} would be passed (₦${plain(paidToday)} already paid). Pay this one manually, or raise the limit in Settings.` };
+  // Account-takeover guard: if the customer changed their payout account very recently, make the admin look.
+  const changedAt = csGet('bank:' + w.userId);
+  if (changedAt && Date.now() - changedAt < 24 * 3600 * 1000) return { ok: false, code: 400, error: 'This customer changed their payout account in the last 24 hours. Check it, then pay manually.' };
+  const user = await store.findUserById(w.userId);
+  const acctNo = (user && user.accountNumber) || w.payoutAccount;
+  if (!acctNo) return { ok: false, code: 400, error: 'This customer has no saved payout account. Pay manually.' };
+  let bank;
+  if (user && user.payoutVerifiedAt && user.bankCode) {
+    bank = { code: user.bankCode, name: user.bankName };   // already confirmed against the bank
+  } else {
+    const bankNm = (user && user.bankName) || w.payoutBank;
+    if (!bankNm) return { ok: false, code: 400, error: 'This customer has no saved payout account. Pay manually.' };
+    try { bank = await prov.bankCode(bankNm); } catch (e) { return { ok: false, code: 502, error: `Could not reach ${prov.name} to check the bank. Try again, or pay manually.` }; }
+    if (!bank) return { ok: false, code: 400, error: `Could not match the bank "${bankNm}" automatically. Pay this one manually.` };
+  }
+  // Surface the provider's actual reason (rate limit, account not found, etc.) instead of a generic message.
+  let resolved;
+  try { resolved = await prov.resolveAccount(acctNo, bank.code); }
+  catch (e) { return { ok: false, code: 400, error: `${prov.name} could not verify that account number (${prov.name} said: ${e.message || 'no reason given'}). Check it, or pay manually.` }; }
+  const acctName = (resolved && (resolved.account_name || resolved.accountName)) || (user && user.accountName) || 'AZAPLUG customer';
+  const ref = 'wd_' + String(w.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20) + '_' + Date.now().toString(36);
+  const net = Number(w.payoutAmount != null ? w.payoutAmount : w.amount);   // what the customer actually receives (after the charge)
+  let t;
+  try { t = await prov.createTransfer({ accountNumber: acctNo, bankCode: bank.code, amount: net, reference: ref, narration: 'AZAPLUG withdrawal', name: acctName }); }
+  catch (e) { console.error(prov.name + ' transfer error:', e.message); return { ok: false, code: 502, error: `${prov.name} did not accept the transfer: ` + (e.message || 'try again') + '. The money is still held — pay manually if you need to.' }; }
+  try {
+    await store.setWithdrawalTransfer(w.id, { status: 'processing', method: methodOf(prov), transferId: t.id, transferRef: ref, transferStatus: 'initiated', autopayAt: new Date().toISOString(), autoNote: `Sent ₦${plain(net)} to ${bank.name} ${acctNo} via ${prov.name}`, payoutAccount: acctNo, payoutBank: bank.name });
+  } catch (e) { if (e.code === 'AUTOPAY_COLS') return { ok: false, code: 500, error: AUTOPAY_SQL }; throw e; }
+  notify(w.userId, 'tx', 'Withdrawal processing', `Your withdrawal of ₦${plain(net)} is being paid to ${bank.name}. You'll get a note when it lands.`);
+  return { ok: true, status: 'processing' };
+}
+
 app.post('/api/admin/withdrawals/:id/autopay', requireAdmin, ADMIN_MONEY, async (req, res) => {
   try {
     if (!(await adminPayoutPinOk(req, res))) return;   // admin must enter the payout PIN to release money
@@ -1996,40 +2051,9 @@ app.post('/api/admin/withdrawals/:id/autopay', requireAdmin, ADMIN_MONEY, async 
     if (!prov) return res.status(400).json({ error: 'No payout provider is set up yet. Add PAYSTACK_SECRET_KEY (or FLW_SECRET_KEY) in Render first.' });
     const w = await store.findWithdrawalById(req.params.id);
     if (!w) return res.status(404).json({ error: 'Withdrawal not found.' });
-    if (w.status !== 'pending') return res.status(400).json({ error: 'This withdrawal has already been handled.' });
-    const max = Number(s.autopayMax) || 50000;
-    if (w.amount > max) return res.status(400).json({ error: `Auto-pay only covers withdrawals up to ₦${plain(max)}. Pay this one manually.` });
-    let paidToday = 0;
-    try { paidToday = await store.sumAutoPayoutsToday(); } catch (e) { if (e.code === 'AUTOPAY_COLS') return res.status(500).json({ error: AUTOPAY_SQL }); throw e; }
-    const cap = Number(s.autopayDailyCap) || 500000;
-    if (paidToday + w.amount > cap) return res.status(400).json({ error: `Today's auto-pay limit of ₦${plain(cap)} would be passed (₦${plain(paidToday)} already paid). Pay this one manually, or raise the limit in Settings.` });
-    // Account-takeover guard: if the customer changed their payout account very recently, make the admin look.
-    const changedAt = csGet('bank:' + w.userId);
-    if (changedAt && Date.now() - changedAt < 24 * 3600 * 1000) return res.status(400).json({ error: 'This customer changed their payout account in the last 24 hours. Check it, then pay manually.' });
-    const user = await store.findUserById(w.userId);
-    const acctNo = (user && user.accountNumber) || w.payoutAccount;
-    if (!acctNo) return res.status(400).json({ error: 'This customer has no saved payout account. Pay manually.' });
-    let bank;
-    if (user && user.payoutVerifiedAt && user.bankCode) {
-      bank = { code: user.bankCode, name: user.bankName };   // already confirmed against the bank
-    } else {
-      const bankNm = (user && user.bankName) || w.payoutBank;
-      if (!bankNm) return res.status(400).json({ error: 'This customer has no saved payout account. Pay manually.' });
-      try { bank = await prov.bankCode(bankNm); } catch (e) { return res.status(502).json({ error: `Could not reach ${prov.name} to check the bank. Try again, or pay manually.` }); }
-      if (!bank) return res.status(400).json({ error: `Could not match the bank "${bankNm}" automatically. Pay this one manually.` });
-    }
-    let resolved; try { resolved = await prov.resolveAccount(acctNo, bank.code); } catch (e) { return res.status(400).json({ error: `${prov.name} could not verify that account number. Check it, or pay manually.` }); }
-    const acctName = (resolved && (resolved.account_name || resolved.accountName)) || (user && user.accountName) || 'AZAPLUG customer';
-    const ref = 'wd_' + String(w.id).replace(/[^a-zA-Z0-9]/g, '').slice(0, 20) + '_' + Date.now().toString(36);
-    const net = Number(w.payoutAmount != null ? w.payoutAmount : w.amount);   // what the customer actually receives (after the charge)
-    let t;
-    try { t = await prov.createTransfer({ accountNumber: acctNo, bankCode: bank.code, amount: net, reference: ref, narration: 'AZAPLUG withdrawal', name: acctName }); }
-    catch (e) { console.error(prov.name + ' transfer error:', e.message); return res.status(502).json({ error: `${prov.name} did not accept the transfer: ` + (e.message || 'try again') + '. The money is still held — pay manually if you need to.' }); }
-    try {
-      await store.setWithdrawalTransfer(w.id, { status: 'processing', method: methodOf(prov), transferId: t.id, transferRef: ref, transferStatus: 'initiated', autopayAt: new Date().toISOString(), autoNote: `Sent ₦${plain(net)} to ${bank.name} ${acctNo} via ${prov.name}`, payoutAccount: acctNo, payoutBank: bank.name });
-    } catch (e) { if (e.code === 'AUTOPAY_COLS') return res.status(500).json({ error: AUTOPAY_SQL }); throw e; }
-    notify(w.userId, 'tx', 'Withdrawal processing', `Your withdrawal of ₦${plain(net)} is being paid to ${bank.name}. You'll get a note when it lands.`);
-    res.json({ ok: true, status: 'processing' });
+    const r = await runAutopay(w, s, prov);
+    if (!r.ok) return res.status(r.code || 400).json({ error: r.error });
+    res.json({ ok: true, status: r.status });
   } catch (err) { console.error('Autopay error:', err); res.status(500).json({ error: 'Could not start the auto-payment.' }); }
 });
 
@@ -2241,6 +2265,7 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
     if (b.giftOn !== undefined) patch.giftOn = b.giftOn === true;
     if (b.challengeOn !== undefined) patch.challengeOn = b.challengeOn === true;
     if (b.autopayOn !== undefined) patch.autopayOn = b.autopayOn === true;
+    if (b.autopayInstant !== undefined) patch.autopayInstant = b.autopayInstant === true;
     for (const k of ['autopayMax', 'autopayDailyCap']) {
       if (b[k] === undefined) continue;
       const n = Math.round(Number(b[k]));
@@ -2255,7 +2280,7 @@ app.put('/api/admin/settings', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error(err);
     const msg = String(err && err.message), cryptoCols = /btc_rate|usdt_rate/.test(msg);
-    res.status(500).json({ error: cryptoCols ? 'Run the BTC/USDT rates SQL from the README in Supabase first.' : /gift_on/.test(msg) ? 'Run the gift card SQL from the README in Supabase first.' : /challenge_on/.test(msg) ? 'Run the tournament switch SQL from the README in Supabase first.' : /autopay_on|autopay_max|autopay_daily/.test(msg) ? 'Run the auto-payout SQL from the README in Supabase first.' : 'Could not update settings.' });
+    res.status(500).json({ error: cryptoCols ? 'Run the BTC/USDT rates SQL from the README in Supabase first.' : /gift_on/.test(msg) ? 'Run the gift card SQL from the README in Supabase first.' : /challenge_on/.test(msg) ? 'Run the tournament switch SQL from the README in Supabase first.' : /autopay_on|autopay_max|autopay_daily|autopay_instant/.test(msg) ? 'Run the auto-payout SQL from the README in Supabase first.' : 'Could not update settings.' });
   }
 });
 
